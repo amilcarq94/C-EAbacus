@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo } from '../types';
 import { generateLoteId } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
@@ -72,6 +72,11 @@ export const LoteForm: React.FC<LoteFormProps> = ({
 
   const [error, setError] = useState('');
 
+  // Filtrar órdenes de proceso para listar únicamente las que están "EN CURSO" (o la ya vinculada si se edita un lote)
+  const ordenesEnCurso = useMemo(() => {
+    return ordenesProceso.filter(op => op.estado === 'EN CURSO' || (loteAEditar && op.id === loteAEditar.ordenProcesoId));
+  }, [ordenesProceso, loteAEditar]);
+
   // Inicializar o cargar lote a editar
   useEffect(() => {
     if (loteAEditar) {
@@ -116,8 +121,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setAla('');
       setSector('');
       setNumeroBolsonOrigen('');
-      if (ordenesProceso.length > 0) {
-        const firstOp = ordenesProceso[0];
+      if (ordenesEnCurso.length > 0) {
+        const firstOp = ordenesEnCurso[0];
         setOrdenProcesoId(firstOp.id);
         if (firstOp.silosOrigen && firstOp.silosOrigen.length > 0) {
           setSilosOrigen(firstOp.silosOrigen);
@@ -125,9 +130,11 @@ export const LoteForm: React.FC<LoteFormProps> = ({
         if (firstOp.tipoOrden === 'MOVIMIENTO') {
           setNumeroOrdenMovimiento(firstOp.numeroOrdenMovimiento || '');
         }
+      } else {
+        setOrdenProcesoId('');
       }
     }
-  }, [loteAEditar, existingLotes, ordenesProceso]);
+  }, [loteAEditar, existingLotes, ordenesEnCurso]);
 
   // Sync orden de proceso selection with order fields (variedad, producto, categoria, etc.)
   const handleOrdenProcesoChange = (opId: string) => {
@@ -423,15 +430,17 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                 required
                 className="w-full px-4 py-2.5 bg-white text-slate-800 text-sm font-semibold rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-2xs"
               >
-                <option value="">-- Seleccionar Orden de Proceso * --</option>
-                {ordenesProceso.map(op => (
+                <option value="">
+                  {ordenesEnCurso.length === 0 ? '-- No hay órdenes de proceso "En Curso" --' : '-- Seleccionar Orden de Proceso (En Curso) * --'}
+                </option>
+                {ordenesEnCurso.map(op => (
                   <option key={op.id} value={op.id}>
                     N° {op.numeroOrden} - {op.variedad} ({op.producto}) [{op.tipoOrden}] {op.tipoMovimiento ? `- ${op.tipoMovimiento}` : ''}
                   </option>
                 ))}
               </select>
               <p className="text-[11px] text-emerald-800/80 mt-1">
-                El lote generado sumará automáticamente al cumplimiento de esta orden.
+                Se muestran únicamente las Órdenes de Proceso con estado "En Curso".
               </p>
             </div>
 
