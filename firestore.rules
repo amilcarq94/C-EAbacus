@@ -105,5 +105,15 @@ service cloud.firestore {
       // RESTRICCIÓN AUTENTICADA (Descomente en producción):
       // allow read, write: if isSignedIn() && isValidId(ordenId);
     }
+
+    // 5. Colección de Movimientos de Silos (movimientos_silo)
+    match /movimientos_silo/{movId} {
+      allow read, write: if true;
+    }
+
+    // 6. Colección de Choferes (choferes)
+    match /choferes/{choferId} {
+      allow read, write: if true;
+    }
   }
 }

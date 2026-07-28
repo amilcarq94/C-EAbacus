@@ -90,17 +90,8 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
     ? `OP-${lote.ordenProcesoId}`
     : 'Sin dato';
 
-  const siloOrigenDisplay = lote.siloOrigen
-    ? String(lote.siloOrigen)
-    : lote.silosOrigen && lote.silosOrigen.length > 0
-    ? lote.silosOrigen.map((s) => s.siloId).join(', ')
-    : linkedOp?.silosOrigen && linkedOp.silosOrigen.length > 0
-    ? linkedOp.silosOrigen.map((s) => s.siloId).join(', ')
-    : 'Sin dato';
-
-  // Buscar registro previo en movimientosSilo si el lote o la OP provienen de silos de ingreso
+  // Buscar registro previo en movimientosSilo si la OP proviene de silos de ingreso
   const targetSilos = new Set<string>();
-  if (lote.siloOrigen) targetSilos.add(String(lote.siloOrigen));
   if (lote.silosOrigen) lote.silosOrigen.forEach((s) => targetSilos.add(s.siloId));
   if (linkedOp?.silosOrigen) linkedOp.silosOrigen.forEach((s) => targetSilos.add(s.siloId));
 
@@ -424,15 +415,11 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
           </div>
         </div>
 
-        {/* Vincular Orden, Silo Origen y Bolsón en Impresión */}
-        <div className="grid grid-cols-3 gap-3 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-200 text-left text-xs">
+        {/* Vincular Orden y Bolsón en Impresión */}
+        <div className="grid grid-cols-2 gap-3 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-200 text-left text-xs">
           <div>
             <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider">N° Orden de Proceso / Mov</span>
             <span className="font-mono font-bold text-[#00603C] text-sm block mt-0.5">{ordenProcesoMovimientoDisplay}</span>
-          </div>
-          <div>
-            <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider">Silo de Origen</span>
-            <span className="font-mono font-bold text-gray-800 text-sm block mt-0.5">{siloOrigenDisplay}</span>
           </div>
           <div>
             <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider">N° Bolsón Origen</span>
@@ -743,26 +730,6 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
                   ) : (
                     <span className="font-semibold text-gray-800 font-mono text-[11px] truncate max-w-[170px]">
                       {ordenProcesoMovimientoDisplay}
-                    </span>
-                  )}
-                </div>
-
-                {/* Silo de origen */}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-gray-500 font-medium shrink-0">Silo de Origen:</span>
-                  {onNavigateToSilos && siloOrigenDisplay !== 'Sin dato' ? (
-                    <button
-                      type="button"
-                      onClick={() => onNavigateToSilos(siloOrigenDisplay)}
-                      className="font-bold text-[#00603C] hover:underline bg-white px-2 py-0.5 rounded border border-[#00603C]/20 flex items-center gap-1 cursor-pointer truncate max-w-[170px]"
-                      title="Navegar al Silo de Origen en la Planta"
-                    >
-                      <Warehouse className="w-3 h-3 text-[#C9922E] shrink-0" />
-                      <span className="truncate">{siloOrigenDisplay}</span>
-                    </button>
-                  ) : (
-                    <span className="font-semibold text-gray-800 font-mono text-[11px] truncate max-w-[170px]">
-                      {siloOrigenDisplay}
                     </span>
                   )}
                 </div>

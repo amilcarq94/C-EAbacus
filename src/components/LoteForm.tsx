@@ -62,7 +62,6 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [ordenProcesoId, setOrdenProcesoId] = useState('');
   const [numeroOrdenMovimiento, setNumeroOrdenMovimiento] = useState('');
   const [silosOrigen, setSilosOrigen] = useState<SiloExtraccion[]>([]);
-  const [siloOrigen, setSiloOrigen] = useState('');
   const [numeroBolsonOrigen, setNumeroBolsonOrigen] = useState('');
 
   const [error, setError] = useState('');
@@ -94,7 +93,6 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setOrdenProcesoId(loteAEditar.ordenProcesoId || '');
       setNumeroOrdenMovimiento(loteAEditar.numeroOrdenMovimiento || '');
       setSilosOrigen(loteAEditar.silosOrigen || []);
-      setSiloOrigen(loteAEditar.siloOrigen ? String(loteAEditar.siloOrigen) : '');
       setNumeroBolsonOrigen(loteAEditar.numeroBolsonOrigen || loteAEditar.bolsonOrigenNro || '');
     } else {
       // Generar nuevo loteNro sugerido
@@ -106,14 +104,12 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setObservaciones('');
       setAla('');
       setSector('');
-      setSiloOrigen('');
       setNumeroBolsonOrigen('');
       if (ordenesProceso.length > 0) {
         const firstOp = ordenesProceso[0];
         setOrdenProcesoId(firstOp.id);
         if (firstOp.silosOrigen && firstOp.silosOrigen.length > 0) {
           setSilosOrigen(firstOp.silosOrigen);
-          setSiloOrigen(firstOp.silosOrigen[0].siloId);
         }
         if (firstOp.tipoOrden === 'MOVIMIENTO') {
           setNumeroOrdenMovimiento(firstOp.numeroOrdenMovimiento || '');
@@ -262,7 +258,6 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       ordenProcesoId: ordenProcesoId,
       numeroOrdenMovimiento: selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined,
       silosOrigen: silosOrigen,
-      siloOrigen: siloOrigen.trim() || (silosOrigen && silosOrigen.length > 0 ? silosOrigen[0].siloId : undefined),
       numeroBolsonOrigen: numeroBolsonOrigen.trim() || undefined,
       bolsonOrigenNro: numeroBolsonOrigen.trim() || undefined,
       historial: loteAEditar ? loteAEditar.historial : [
@@ -365,26 +360,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               return null;
             })()}
 
-            {/* Silo de origen y N° de Bolsón de origen */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Silo de Origen
-              </label>
-              <select
-                value={siloOrigen}
-                onChange={(e) => setSiloOrigen(e.target.value)}
-                className="w-full px-4 py-2 bg-white text-slate-800 text-sm font-semibold rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-2xs"
-              >
-                <option value="">-- Seleccionar Silo (Opcional) --</option>
-                <option value="Silo 1">Silo 1</option>
-                <option value="Silo 2">Silo 2</option>
-                <option value="Silo 3">Silo 3</option>
-                <option value="Silo 4">Silo 4</option>
-                <option value="Silo 5">Silo 5</option>
-                <option value="Silo 6">Silo 6</option>
-              </select>
-            </div>
-
+            {/* N° de Bolsón de origen */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                 N° de Bolsón de Origen

@@ -240,7 +240,7 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
     const kgPorEnvase = getKgPorEnvase(finalEnvaseDestino);
     const targetKg = (Number(bbPedidos) || 0) * kgPorEnvase;
 
-    const silosOrigenSanitized = silosOrigen.map((s) => {
+    const silosOrigenSanitized = tipoOrden === 'PRODUCCION' ? [] : silosOrigen.map((s) => {
       const cantidad = Number(s.kgExtraidos || s.kg || 0);
       return {
         siloId: s.siloId,
@@ -782,15 +782,8 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
 
           </div>
 
-          {/* Origen de los Granos / Extracción de Silos o Lotes */}
-          {tipoOrden === 'PRODUCCION' ? (
-            <SilosSelector
-              silosSeleccionados={silosOrigen}
-              siloStocks={siloStocks}
-              targetKg={(Number(bbPedidos) || 0) * getKgPorEnvase(envaseSelect === 'Otra' ? envaseManual : envaseSelect)}
-              onChange={setSilosOrigen}
-            />
-          ) : (
+          {/* Origen de los Granos (Solo para Orden de Movimiento) */}
+          {tipoOrden === 'MOVIMIENTO' && (
             <LotesOrigenSelector
               lotes={lotes}
               lotesSeleccionados={lotesOrigen}

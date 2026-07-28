@@ -614,7 +614,7 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
                       const isMov = orden.tipoOrden === 'MOVIMIENTO';
                       const totalExtraido = isMov
                         ? (orden.lotesOrigen || []).reduce((acc, item) => acc + (item.kgExtraidos || 0), 0)
-                        : (orden.silosOrigen || []).reduce((acc, item) => acc + (item.kgExtraidos || item.kg || 0), 0);
+                        : 0;
                       const porcentaje = targetKg > 0 ? Math.min(100, Math.round((totalExtraido / targetKg) * 100)) : 0;
 
                       return (
@@ -623,18 +623,22 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
                             <span>Demanda de Kilos:</span>
                             <span className="font-mono text-emerald-800">{targetKg.toLocaleString('es-AR')} kg</span>
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-slate-600">
-                            <span>{isMov ? `Lotes Origen (${orden.lotesOrigen?.length || 0})` : `Silos Origen (${orden.silosOrigen?.length || 0})`}:</span>
-                            <span className={`font-semibold ${porcentaje >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                              {totalExtraido.toLocaleString('es-AR')} kg ({porcentaje}%)
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all ${porcentaje >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                              style={{ width: `${porcentaje}%` }}
-                            />
-                          </div>
+                          {isMov && (
+                            <>
+                              <div className="flex items-center justify-between text-[10px] text-slate-600">
+                                <span>Lotes Origen ({orden.lotesOrigen?.length || 0}):</span>
+                                <span className={`font-semibold ${porcentaje >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                  {totalExtraido.toLocaleString('es-AR')} kg ({porcentaje}%)
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all ${porcentaje >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                  style={{ width: `${porcentaje}%` }}
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
                       );
                     })()}
@@ -698,22 +702,7 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
                         </div>
                       )}
 
-                      {orden.tipoOrden === 'PRODUCCION' && orden.silosOrigen && orden.silosOrigen.length > 0 && (
-                        <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/60 text-[11px]">
-                          <div className="font-bold text-emerald-900 mb-1 flex items-center gap-1">
-                            <Factory className="w-3.5 h-3.5 text-emerald-700" />
-                            Silos de Origen Extraídos ({orden.silosOrigen.length}):
-                          </div>
-                          <div className="space-y-1">
-                            {orden.silosOrigen.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between bg-white px-2 py-1 rounded-lg border border-emerald-100 text-[10px]">
-                                <span className="font-bold text-slate-800">{item.siloId}</span>
-                                <span className="font-bold text-emerald-700">{(item.kgExtraidos || item.kg || 0).toLocaleString('es-AR')} kg</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+
 
                       <div>
                         <div className="text-[11px] font-bold text-slate-700 mb-1">

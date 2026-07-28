@@ -4,15 +4,17 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Lote, SalidaRegistrada, EnvaseType, TipoLoteType, MovimientoStock, EstadoLoteType } from '../types';
+import { Lote, SalidaRegistrada, EnvaseType, TipoLoteType, MovimientoStock, EstadoLoteType, Chofer } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { generateRemitoId, formatNumberArg, formatDateStr } from '../utils/formatters';
 import { LogoSiloLoose, LogoSiloSquare } from './Logo';
+import { ChoferSearchSelector } from './ChoferSearchSelector';
 import { FileText, ArrowRight, Printer, AlertTriangle, UserCheck, Check, Trash2, Plus, Paperclip, Upload, X, Download } from 'lucide-react';
 
 interface RegistrarSalidaProps {
   lotes: Lote[];
   clientes: string[];
+  choferes?: Chofer[];
   preselectedLoteId?: string; // Si viene derivado de la ficha
   onSaveSalida: (salida: SalidaRegistrada, loteId: string, nuevosMovimientos: MovimientoStock[], nuevoStockBolsas: number, nuevoStockKg: number, nuevoEstado: EstadoLoteType) => void;
   onCancel: () => void;
@@ -21,6 +23,7 @@ interface RegistrarSalidaProps {
 export const RegistrarSalida: React.FC<RegistrarSalidaProps> = ({
   lotes,
   clientes,
+  choferes = [],
   preselectedLoteId,
   onSaveSalida,
   onCancel,
@@ -624,17 +627,20 @@ export const RegistrarSalida: React.FC<RegistrarSalidaProps> = ({
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">Nombre y Apellido Conductor *</label>
-                  <input
-                    type="text"
-                    id="input-chofer-nombre"
-                    value={choferNombre}
-                    onChange={(e) => setChoferNombre(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C9922E]"
-                    placeholder="Ej: Marcelo Gómez"
-                    required
+                  <ChoferSearchSelector
+                    choferes={choferes}
+                    selectedChoferNombre={choferNombre}
+                    onSelectChofer={(ch) => {
+                      setChoferNombre(ch.nombre);
+                      setChoferDni(ch.cuit || '');
+                      if (ch.patentes) setPatenteCamion(ch.patentes);
+                    }}
+                    onManualChange={(val) => setChoferNombre(val)}
+                    label="Nombre y Apellido Conductor *"
+                    placeholder="Buscar o ingresar chofer..."
                   />
                 </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">DNI / Documento Conductor *</label>
                   <input
@@ -647,6 +653,7 @@ export const RegistrarSalida: React.FC<RegistrarSalidaProps> = ({
                     required
                   />
                 </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">Patente Camión / Acoplado *</label>
                   <input

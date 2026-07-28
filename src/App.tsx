@@ -13,18 +13,19 @@ import { LoteForm } from './components/LoteForm';
 import { ImportarStock } from './components/ImportarStock';
 import { RegistrarSalida } from './components/RegistrarSalida';
 import { SalidasList } from './components/SalidasList';
-import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO } from './types';
+import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer } from './types';
 import { getLoteAuditoria } from './utils/audit';
-import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES } from './data/mockData';
-import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle } from 'lucide-react';
+import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES } from './data/mockData';
+import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck } from 'lucide-react';
 import { QrCodeScanner } from './components/QrCodeScanner';
 import { DespachosSection } from './components/DespachosSection';
 import { DashboardProduccion } from './components/DashboardProduccion';
 import { OrdenesProcesoView } from './components/OrdenesProcesoView';
 import { IngresoSilosView } from './components/IngresoSilosView';
+import { ChoferesView } from './components/ChoferesView';
 import { CampaniaSelector } from './components/CampaniaSelector';
 import { getActiveCampaniaIdStored, setActiveCampaniaIdStored, getCampaniaIdFromDate } from './utils/campanias';
-import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
+import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 
 export default function App() {
@@ -51,6 +52,7 @@ export default function App() {
   const [ordenesCarga, setOrdenesCarga] = useState<OrdenCarga[]>([]);
   const [ordenesProceso, setOrdenesProceso] = useState<OrdenProceso[]>([]);
   const [movimientosSilo, setMovimientosSilo] = useState<MovimientoSilo[]>([]);
+  const [choferes, setChoferes] = useState<Chofer[]>([]);
   const [clientes, setClientes] = useState<string[]>([]);
   const [especies, setEspecies] = useState<string[]>([]);
   const [stockThresholds, setStockThresholds] = useState<Record<string, number>>({});
@@ -193,8 +195,8 @@ export default function App() {
   const tieneAlertaSilo95 = silosConAlerta95.length > 0;
 
   // 3. Control de Vistas
-  // 'dashboard' | 'dashboard-produccion' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos'
-  const [activeView, setActiveView] = useState<'dashboard' | 'dashboard-produccion' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos'>('dashboard');
+  // 'dashboard' | 'dashboard-produccion' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
+  const [activeView, setActiveView] = useState<'dashboard' | 'dashboard-produccion' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('dashboard');
   const [loteSeleccionado, setLoteSeleccionado] = useState<Lote | null>(null);
   const [loteAEditar, setLoteAEditar] = useState<Lote | null>(null);
   const [preselectedLoteId, setPreselectedLoteId] = useState<string | undefined>(undefined);
@@ -311,6 +313,17 @@ export default function App() {
       setIsFirebaseConnected(false);
     });
 
+    // 7. Suscribirse en tiempo real a 'choferes'
+    seedChoferesIfEmpty(CHOFERES_INICIALES);
+    const unsubChoferes = onSnapshot(collection(db, 'choferes'), (snapshot) => {
+      setIsFirebaseConnected(true);
+      const loadedChoferes = snapshot.docs.map(doc => doc.data() as Chofer);
+      setChoferes(loadedChoferes);
+    }, (error) => {
+      console.error("Error subscribing to 'choferes':", error);
+      setIsFirebaseConnected(false);
+    });
+
     // Listeners para el estado de internet del navegador
     const handleOnline = () => {
       setIsOnline(true);
@@ -352,6 +365,7 @@ export default function App() {
       unsubOrdenes();
       unsubOrdenesProceso();
       unsubMovimientosSilo();
+      unsubChoferes();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -1054,6 +1068,43 @@ export default function App() {
     }
   };
 
+  const handleRegistrarSalidaManualSilo = async (movimiento: MovimientoSilo) => {
+    try {
+      const docRef = doc(db, 'movimientos_silo', movimiento.id);
+      await setDoc(docRef, movimiento);
+      showNotification(`Salida manual de ${movimiento.kg.toLocaleString('es-AR')} kg de ${movimiento.siloId} registrada correctamente.`);
+    } catch (e) {
+      console.error('Error al registrar salida manual de silo:', e);
+      showNotification('Error al registrar la salida manual.');
+    }
+  };
+
+  const handleSaveChofer = async (chofer: Chofer) => {
+    try {
+      const docRef = doc(db, 'choferes', chofer.id);
+      await setDoc(docRef, chofer, { merge: true });
+      showNotification(`Chofer ${chofer.nombre} guardado correctamente.`);
+    } catch (e) {
+      console.error('Error al guardar chofer:', e);
+      showNotification('Error al guardar chofer.');
+    }
+  };
+
+  const handleImportChoferes = async (nuevosChoferes: Chofer[]) => {
+    try {
+      const batch = writeBatch(db);
+      for (const ch of nuevosChoferes) {
+        const docRef = doc(db, 'choferes', ch.id);
+        batch.set(docRef, ch, { merge: true });
+      }
+      await batch.commit();
+      showNotification(`${nuevosChoferes.length} choferes importados correctamente.`);
+    } catch (e) {
+      console.error('Error al importar choferes:', e);
+      showNotification('Error al importar choferes.');
+    }
+  };
+
   const handlePonerSiloEnCero = async (siloId: SiloId, fecha: string, usuario: string, motivo: string, kgAnterior: number) => {
     try {
       const timestamp = new Date().toISOString();
@@ -1627,6 +1678,20 @@ export default function App() {
             Historial Salidas
           </button>
 
+          {/* Tab Base de Datos Choferes */}
+          <button
+            id="nav-tab-choferes"
+            onClick={() => navigateTo('choferes')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+              activeView === 'choferes'
+                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
+                : 'text-white hover:bg-white/10'
+            }`}
+          >
+            <Truck className="w-4 h-4 text-[#C9922E]" />
+            <span>Choferes / Transp.</span>
+          </button>
+
           {/* Tab Importar */}
           <button
             id="nav-tab-importar"
@@ -1733,7 +1798,11 @@ export default function App() {
             clientes={clientes}
             especies={especies}
             currentUser={currentUser}
+            choferes={choferes}
             onRegistrarIngreso={handleRegistrarIngresoSilo}
+            onRegistrarSalidaManual={handleRegistrarSalidaManualSilo}
+            onSaveChofer={handleSaveChofer}
+            onImportChoferes={handleImportChoferes}
             onPonerSiloEnCero={handlePonerSiloEnCero}
             onEliminarMovimientoSilo={handleEliminarMovimientoSilo}
           />
@@ -1794,9 +1863,14 @@ export default function App() {
           <RegistrarSalida
             lotes={lotes}
             clientes={clientes}
+            choferes={choferes}
             preselectedLoteId={preselectedLoteId}
             onSaveSalida={handleSaveSalida}
             onCancel={() => navigateTo('dashboard')}
+          />
+        ) : activeView === 'choferes' ? (
+          <ChoferesView
+            choferes={choferes}
           />
         ) : activeView === 'despachos' ? (
           <DespachosSection

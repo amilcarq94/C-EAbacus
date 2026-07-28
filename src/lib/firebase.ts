@@ -7,7 +7,7 @@ import { initializeApp } from 'firebase/app';
 import { initializeFirestore, collection, doc, writeBatch, getDocs, runTransaction, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { Lote, MovimientoStock, SalidaRegistrada, OrdenCarga, MovimientoSilo } from '../types';
+import { Lote, MovimientoStock, SalidaRegistrada, OrdenCarga, MovimientoSilo, Chofer } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 
 // Configuración de Firebase obtenida de firebase-applet-config.json
@@ -301,6 +301,28 @@ export async function seedMovimientosSiloIfEmpty(initialMovs: MovimientoSilo[]):
     }
   } catch (error) {
     console.warn('Error en seeding de movimientos de silos:', error);
+  }
+}
+
+/**
+ * Seed de Choferes en Firestore si está vacía.
+ */
+export async function seedChoferesIfEmpty(initialChoferes: Chofer[]): Promise<void> {
+  try {
+    const choferesRef = collection(db, 'choferes');
+    const snapshot = await getDocs(choferesRef);
+    if (snapshot.empty) {
+      console.log('Seeding inicial de choferes en Firestore...');
+      const batch = writeBatch(db);
+      for (const ch of initialChoferes) {
+        const docRef = doc(db, 'choferes', ch.id);
+        batch.set(docRef, ch);
+      }
+      await batch.commit();
+      console.log('Seeding de choferes completado con éxito.');
+    }
+  } catch (error) {
+    console.warn('Error en seeding de choferes:', error);
   }
 }
 

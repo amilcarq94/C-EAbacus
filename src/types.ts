@@ -66,6 +66,18 @@ export interface Lote {
   bolsonOrigenNro?: string; // Aliased for consistency
 }
 
+export interface Chofer {
+  id: string;
+  nombre: string;
+  cuit: string;
+  patentes: string;
+  transporte: string;
+  licencia?: string;
+  telefono?: string;
+  patenteCamion?: string;
+  patenteAcoplado?: string;
+}
+
 export type SiloId = 'Silo 1' | 'Silo 2' | 'Silo 3' | 'Silo 4' | 'Silo 5' | 'Silo 6';
 
 export interface SiloExtraccion {
@@ -74,7 +86,9 @@ export interface SiloExtraccion {
   kg?: number;
 }
 
-export type TipoMovimientoSilo = 'INGRESO' | 'EGRESO_OP' | 'AJUSTE_ZERO';
+export type MotivoSalidaManual = 'Consumo a granel' | 'Manipulación' | 'Traslado a silo';
+
+export type TipoMovimientoSilo = 'INGRESO' | 'EGRESO_OP' | 'EGRESO_MANUAL' | 'EGRESO_LOTE' | 'EGRESO' | 'AJUSTE_ZERO';
 
 export interface MovimientoSilo {
   id: string;
@@ -94,14 +108,25 @@ export interface MovimientoSilo {
   depositoOrigen?: string;
   humedad?: number; // Porcentaje de humedad manual (% ej: 13.5)
 
-  // Campos para EGRESO_OP:
+  // Campos de movimiento y transporte (Chofer, Patente, CUIT, Transporte):
+  chofer?: string;
+  cuit?: string;
+  patentes?: string;
+  transporte?: string;
+
+  // Campos para EGRESO_MANUAL:
+  motivoManual?: MotivoSalidaManual | string;
+  descontaminacionVarietal?: boolean;
+  observaciones?: string;
+
+  // Campos para EGRESO_OP / EGRESO_LOTE:
   ordenProcesoId?: string;
   numeroOrdenProceso?: string;
   loteId?: string;
   loteResultanteId?: string;
   loteNro?: string;
 
-  // Campos para AJUSTE_ZERO:
+  // Campos para AJUSTE_ZERO (legacy / compatibilidad):
   usuario?: string;
   usuarioZero?: string;
   motivoAjuste?: string;

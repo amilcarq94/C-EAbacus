@@ -4,9 +4,11 @@
  */
 
 import React, { useState } from 'react';
-import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO } from '../types';
+import * as XLSX from 'xlsx';
+import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
-import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode } from 'lucide-react';
+import { ChoferSearchSelector } from './ChoferSearchSelector';
+import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload } from 'lucide-react';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
 import {
   ResponsiveContainer,
@@ -84,7 +86,11 @@ interface IngresoSilosViewProps {
   clientes: string[];
   especies: string[];
   currentUser: { nombre: string; rol: string };
+  choferes?: Chofer[];
   onRegistrarIngreso: (movimiento: MovimientoSilo) => void;
+  onRegistrarSalidaManual?: (movimiento: MovimientoSilo) => void;
+  onSaveChofer?: (chofer: Chofer) => void;
+  onImportChoferes?: (choferes: Chofer[]) => void;
   onPonerEnCero?: (siloId: SiloId, fecha: string, usuario: string, motivo: string, kgAnterior: number) => void;
   onPonerSiloEnCero?: (siloId: SiloId, fecha: string, usuario: string, motivo: string, kgAnterior: number) => void;
   onEliminarMovimientoSilo?: (movimientoId: string, siloId: SiloId) => void;
@@ -95,7 +101,11 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   clientes,
   especies,
   currentUser,
+  choferes = [],
   onRegistrarIngreso,
+  onRegistrarSalidaManual,
+  onSaveChofer,
+  onImportChoferes,
   onPonerEnCero,
   onPonerSiloEnCero,
   onEliminarMovimientoSilo,
@@ -121,6 +131,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [depositoOrigen, setDepositoOrigen] = useState('Depósito Central');
   const [humedad, setHumedad] = useState<number | ''>(13.5);
 
+  // Estados de datos de chofer en Ingreso
+  const [selectedChoferId, setSelectedChoferId] = useState('');
+  const [choferNombre, setChoferNombre] = useState('');
+  const [choferCuit, setChoferCuit] = useState('');
+  const [choferPatentes, setChoferPatentes] = useState('');
+  const [choferTransporte, setChoferTransporte] = useState('');
+
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [exportNoticeMsg, setExportNoticeMsg] = useState('');
@@ -134,25 +151,63 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     setFichaModalMode(mode);
   };
 
-  // Estado para el Modal de Ajuste a Cero
-  const [showModalAjusteCero, setShowModalAjusteCero] = useState(false);
-  const [targetAjusteSilo, setTargetAjusteSilo] = useState<SiloId>('Silo 1');
-  const [fechaAjuste, setFechaAjuste] = useState(() => new Date().toISOString().split('T')[0]);
-  const [usuarioAjuste, setUsuarioAjuste] = useState('Amilcar Quiroz');
-  const [claveAjuste, setClaveAjuste] = useState('');
-  const [motivoAjuste, setMotivoAjuste] = useState('');
-  const [errorAjuste, setErrorAjuste] = useState('');
+  // Estado para el Modal de Salidas Manuales de Silo
+  const [showModalSalidaManual, setShowModalSalidaManual] = useState(false);
+  const [siloSalidaManual, setSiloSalidaManual] = useState<SiloId>('Silo 1');
+  const [fechaSalidaManual, setFechaSalidaManual] = useState(() => new Date().toISOString().split('T')[0]);
+  const [kgSalidaManual, setKgSalidaManual] = useState<number | ''>('');
+  const [motivoSalidaManual, setMotivoSalidaManual] = useState<MotivoSalidaManual>('Consumo a granel');
+  const [descontaminacionVarietal, setDescontaminacionVarietal] = useState(false);
+  const [observacionesSalidaManual, setObservacionesSalidaManual] = useState('');
+  const [errorSalidaManual, setErrorSalidaManual] = useState('');
 
-  const openModalAjusteCero = (siloId?: SiloId) => {
+  const openModalSalidaManual = (siloId?: SiloId) => {
     const selectedSilo = siloId || activeSilo;
-    setTargetAjusteSilo(selectedSilo);
+    setSiloSalidaManual(selectedSilo);
     setActiveSilo(selectedSilo);
-    setFechaAjuste(new Date().toISOString().split('T')[0]);
-    setUsuarioAjuste('Amilcar Quiroz');
-    setClaveAjuste('');
-    setMotivoAjuste('Barrido final de silo, merma por manipuleo y ventilación');
-    setErrorAjuste('');
-    setShowModalAjusteCero(true);
+    setFechaSalidaManual(new Date().toISOString().split('T')[0]);
+    setKgSalidaManual('');
+    setMotivoSalidaManual('Consumo a granel');
+    setDescontaminacionVarietal(false);
+    setObservacionesSalidaManual('');
+    setErrorSalidaManual('');
+    setShowModalSalidaManual(true);
+  };
+
+  // Modal para importar Choferes desde Excel
+  const [showModalImportChoferes, setShowModalImportChoferes] = useState(false);
+  const [importNoticeChoferes, setImportNoticeChoferes] = useState('');
+
+  // Exportar Excel Completo de Movimientos de Silo
+  const handleExportMovimientosExcel = () => {
+    const dataToExport = (movimientosSilo || []).map((m) => {
+      return {
+        'Silo': m.siloId,
+        'Fecha': m.fecha,
+        'Cliente': m.cliente || '-',
+        'Especie': m.especie || '-',
+        'Variedad': m.variedad || '-',
+        'Kilos': m.kg,
+        'Origen': m.campoOrigen || m.depositoOrigen || '-',
+        'Sector': m.bolsonOrigenSector || m.sector || '-',
+        'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
+        'Chofer': m.chofer || '-',
+        'CUIT': m.cuit || '-',
+        'Patentes': m.patentes || '-',
+        'Transporte': m.transporte || '-',
+        'Tipo Movimiento': m.tipo === 'INGRESO' ? 'Ingreso' : m.tipo === 'EGRESO_MANUAL' ? `Salida Manual (${m.motivoManual || 'Manual'})` : m.tipo === 'EGRESO_LOTE' ? `Salida por Lote (${m.loteNro || ''})` : 'Egreso',
+        'Descontaminación Varietal': m.descontaminacionVarietal ? 'Sí' : 'No',
+        'Observaciones': m.observaciones || m.motivoZero || m.motivoAjuste || '-'
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Ingresos_y_Egresos');
+    XLSX.writeFile(workbook, `Ingresos_y_Egresos_Silos_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    setExportNoticeMsg('¡Reporte completo de Ingresos y Egresos de Silos exportado a Excel!');
+    setTimeout(() => setExportNoticeMsg(''), 4000);
   };
 
   // Estado para el Panel Lateral (Drawer) de Historial de Movimientos del Silo
@@ -539,64 +594,117 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       bolsonOrigenSector: bolsonOrigenSector.trim(),
       depositoOrigen: depositoOrigen.trim(),
       humedad: typeof humedad === 'number' ? humedad : 13.5,
+      chofer: choferNombre.trim(),
+      cuit: choferCuit.trim(),
+      patentes: choferPatentes.trim(),
+      transporte: choferTransporte.trim(),
     };
+
+    if (choferNombre.trim() && onSaveChofer) {
+      onSaveChofer({
+        id: `CHOFER-${choferNombre.trim().toLowerCase().replace(/\s+/g, '-')}`,
+        nombre: choferNombre.trim(),
+        cuit: choferCuit.trim(),
+        patente: choferPatentes.trim(),
+        patentes: choferPatentes.trim(),
+        transporte: choferTransporte.trim(),
+      });
+    }
 
     onRegistrarIngreso(nuevoIngreso);
     setFormSuccess(`¡Ingreso registrado exitosamente en ${activeSilo}! (${kgNuevos.toLocaleString('es-AR')} kg - ${humedad}% Humedad)`);
 
-    // Reset campos formulario
+    // Resetear form parcial
     setTotalKgIngresados('');
     setBolsonOrigenNro('');
-    setBolsonOrigenSector('');
-    setHumedad(13.5);
-
+    setSelectedChoferId('');
+    setChoferNombre('');
+    setChoferCuit('');
+    setChoferPatentes('');
+    setChoferTransporte('');
     setTimeout(() => setFormSuccess(''), 4000);
   };
 
-  // Confirmar Ajuste a Cero
-  const handleConfirmAjusteCero = () => {
-    setErrorAjuste('');
-    const cleanUser = usuarioAjuste.trim();
-    const cleanPass = claveAjuste.trim();
+  // Manejador para Salidas Manuales de Silo
+  const handleSubmitSalidaManual = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorSalidaManual('');
 
-    if (!cleanUser) {
-      setErrorAjuste('Debe especificar el usuario autorizador (Amilcar Quiroz).');
+    if (!kgSalidaManual || Number(kgSalidaManual) <= 0) {
+      setErrorSalidaManual('Debe ingresar una cantidad válida de kilos.');
       return;
     }
 
-    if (!cleanPass) {
-      setErrorAjuste('Debe ingresar la clave de autorización del usuario Amilcar Quiroz.');
+    const currentStock = getStockSilo(siloSalidaManual);
+    if (Number(kgSalidaManual) > currentStock) {
+      setErrorSalidaManual(`El monto a extraer (${Number(kgSalidaManual).toLocaleString('es-AR')} kg) supera el stock actual disponible en ${siloSalidaManual} (${currentStock.toLocaleString('es-AR')} kg).`);
       return;
     }
 
-    if (!motivoAjuste.trim()) {
-      setErrorAjuste('Debe especificar el motivo del ajuste a cero.');
-      return;
+    const idMov = `SALIDA-MANUAL-${siloSalidaManual.replace(/\s+/g, '')}-${Date.now()}`;
+    const movSalida: MovimientoSilo = {
+      id: idMov,
+      siloId: siloSalidaManual,
+      fecha: fechaSalidaManual,
+      tipo: 'EGRESO_MANUAL',
+      kg: Number(kgSalidaManual),
+      motivoManual: motivoSalidaManual,
+      descontaminacionVarietal: descontaminacionVarietal,
+      observaciones: observacionesSalidaManual.trim(),
+      usuario: currentUser.nombre,
+    };
+
+    if (onRegistrarSalidaManual) {
+      onRegistrarSalidaManual(movSalida);
+    } else {
+      onRegistrarIngreso(movSalida);
     }
 
-    // Verificar las credenciales de Amilcar Quiroz
-    const isAuthorized = verifyAutorizadorPassword(cleanUser, cleanPass) ||
-      (cleanUser.toLowerCase().includes('amilcar') && 
-       ['amilcar', 'amilcar2026', 'abacus2026', '1234', 'amilcar123', 'quiroz'].includes(cleanPass.toLowerCase()));
+    setShowModalSalidaManual(false);
+    setExportNoticeMsg(`Salida manual de ${Number(kgSalidaManual).toLocaleString('es-AR')} kg en ${siloSalidaManual} registrada correctamente.`);
+    setTimeout(() => setExportNoticeMsg(''), 4000);
+  };
 
-    if (!isAuthorized) {
-      setErrorAjuste(`Clave de autorización incorrecta para el usuario "${cleanUser}". Acceso denegado.`);
-      return;
-    }
+  // Carga e Importación masiva de Choferes desde Excel
+  const handleFileUploadChoferes = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const siloToReset = targetAjusteSilo || activeSilo;
-    const currentStock = getStockSilo(siloToReset);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json<any>(ws);
 
-    const fnReset = onPonerSiloEnCero || onPonerEnCero;
-    if (fnReset) {
-      fnReset(siloToReset, fechaAjuste, cleanUser, motivoAjuste.trim(), currentStock);
-    }
+        const choferesImportados: Chofer[] = data.map((row: any, idx: number) => {
+          const nombre = row['Chofer'] || row['Nombre'] || row['CHOFER'] || row['NOMBRE'] || `Chofer ${idx + 1}`;
+          const cuit = row['CUIT'] || row['Cuit'] || row['cuit'] || '';
+          const patentes = row['Patentes'] || row['Patente'] || row['PATENTE'] || row['PATENTES'] || '';
+          const transporte = row['Transporte'] || row['Empresa'] || row['TRANSPORTE'] || '';
 
-    setShowModalAjusteCero(false);
-    setClaveAjuste('');
-    setMotivoAjuste('');
-    setFormSuccess(`¡Stock de ${siloToReset} puesto en 0 kg correctamente con la autorización de ${cleanUser}!`);
-    setTimeout(() => setFormSuccess(''), 5000);
+          return {
+            id: `CHOFER-IMP-${Date.now()}-${idx}`,
+            nombre: String(nombre).trim(),
+            cuit: String(cuit).trim(),
+            patente: String(patentes).trim(),
+            patentes: String(patentes).trim(),
+            transporte: String(transporte).trim(),
+          };
+        }).filter(ch => ch.nombre);
+
+        if (choferesImportados.length > 0 && onImportChoferes) {
+          onImportChoferes(choferesImportados);
+          setImportNoticeChoferes(`¡Se importaron ${choferesImportados.length} choferes desde Excel correctamente!`);
+          setTimeout(() => setImportNoticeChoferes(''), 4000);
+        }
+      } catch (err) {
+        console.error('Error al procesar archivo de choferes:', err);
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
   return (
@@ -1074,14 +1182,14 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openModalAjusteCero(siloId);
+                        openModalSalidaManual(siloId);
                       }}
                       className={`flex items-center gap-1 hover:underline ${
                         isSelected ? 'text-amber-200 font-black' : 'text-amber-800 font-extrabold'
                       }`}
-                      title="Dejar Stock en 0 kg (Requiere clave de Amilcar Quiroz)"
+                      title="Registrar Salida Manual de este silo"
                     >
-                      <Lock className="w-3 h-3 text-amber-600" /> Stock a 0
+                      <ArrowUpRight className="w-3 h-3 text-amber-600" /> Salida Manual
                     </button>
                   </div>
                 </div>
@@ -1127,6 +1235,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              onClick={handleExportMovimientosExcel}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
+              title="Exportar todos los Ingresos y Egresos de Silos a Excel"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>Exportar Excel (Ingresos/Egresos)</span>
+            </button>
+
+            <button
               onClick={() => openSiloDrawer(activeSilo)}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
               title="Abrir panel lateral con el historial detallado de ingresos y egresos de este silo"
@@ -1154,21 +1271,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             </button>
 
             <button
-              onClick={() => handleExportFichaCSV(getSiloFichaData(activeSilo))}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
-              title="Exportar Ficha Técnica en Formato CSV / Excel"
-            >
-              <Download className="w-4 h-4 text-slate-600" />
-              <span>Exportar CSV</span>
-            </button>
-
-            <button
-              onClick={() => openModalAjusteCero(activeSilo)}
+              onClick={() => openModalSalidaManual(activeSilo)}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
-              title="Dejar Stock en Cero en este silo (Requiere usuario y clave de Amilcar Quiroz)"
+              title="Registrar una Salida Manual en este silo"
             >
-              <Lock className="w-4 h-4 text-amber-200" />
-              <span>Dejar Stock en 0</span>
+              <ArrowUpRight className="w-4 h-4 text-amber-200" />
+              <span>Salida Manual</span>
             </button>
           </div>
         </div>
@@ -1201,11 +1309,11 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => openModalAjusteCero(activeSilo)}
+                onClick={() => openModalSalidaManual(activeSilo)}
                 className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-lg shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
               >
-                <Lock className="w-3.5 h-3.5 text-amber-200" />
-                <span>Poner Stock en 0</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-amber-200" />
+                <span>Salida Manual</span>
               </button>
             </div>
           );
@@ -1465,6 +1573,98 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               />
             </div>
 
+            {/* Sección Chofer y Transporte (con Autocompletado e Importación desde Excel) */}
+            <div className="sm:col-span-2 lg:col-span-4 p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-emerald-700" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Datos de Movimiento / Chofer y Transporte</span>
+                </div>
+                <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5">
+                  <Upload className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Importar Choferes Excel</span>
+                  <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUploadChoferes} className="hidden" />
+                </label>
+              </div>
+
+              {importNoticeChoferes && (
+                <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-lg">
+                  {importNoticeChoferes}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Chofer Search Selector */}
+                <div>
+                  <ChoferSearchSelector
+                    choferes={choferes}
+                    selectedChoferNombre={choferNombre}
+                    onSelectChofer={(ch) => {
+                      setChoferNombre(ch.nombre);
+                      setChoferCuit(ch.cuit || '');
+                      setChoferPatentes(ch.patentes || '');
+                      setChoferTransporte(ch.transporte || '');
+                    }}
+                    onManualChange={(val) => setChoferNombre(val)}
+                    onSaveNewChofer={(data) => {
+                      if (data.nombre && onSaveChofer) {
+                        onSaveChofer({
+                          id: `CHOFER-${Date.now()}`,
+                          nombre: data.nombre,
+                          cuit: choferCuit.trim() || '—',
+                          patentes: choferPatentes.trim() || '—',
+                          transporte: choferTransporte.trim() || 'Sin Transporte'
+                        });
+                      }
+                    }}
+                    label="Chofer / Conductor"
+                  />
+                </div>
+
+                {/* CUIT Chofer */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                    CUIT / DNI Chofer
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ej: 20-34567890-9"
+                    value={choferCuit}
+                    onChange={(e) => setChoferCuit(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                  />
+                </div>
+
+                {/* Patente(s) */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                    Patente(s) Camión / Acoplado
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ej: AA123BB / AC456DD"
+                    value={choferPatentes}
+                    onChange={(e) => setChoferPatentes(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                  />
+                </div>
+
+                {/* Empresa de Transporte */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                    Empresa / Transporte
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ej: Transportes El Rapido..."
+                    value={choferTransporte}
+                    onChange={(e) => setChoferTransporte(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Botón Submit */}
             <div className="sm:col-span-2 lg:col-span-4 flex justify-end pt-2">
               <button
@@ -1622,127 +1822,167 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
       </div>
 
-      {/* Modal Ajuste Manual a Cero con Autorización */}
-      {showModalAjusteCero && (() => {
-        const siloModalStock = getStockSilo(targetAjusteSilo);
+      {/* Modal Salida Manual de Silo */}
+      {showModalSalidaManual && (() => {
+        const stockActualSilo = getStockSilo(siloSalidaManual);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
               
               {/* Header Modal */}
               <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white px-6 py-4 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 bg-white/10 rounded-xl text-amber-200">
-                    <Lock className="w-5 h-5" />
+                    <ArrowUpRight className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="font-bold text-base font-serif flex items-center gap-2 text-white">
-                      Poner Stock de {targetAjusteSilo} en Cero
+                      Generar Salida Manual de Silo
                     </h3>
                     <p className="text-[11px] text-amber-100 font-medium">
-                      Operación restringida · Autorización requerida
+                      Descontar kilos del stock real ({siloSalidaManual})
                     </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowModalAjusteCero(false)}
+                  type="button"
+                  onClick={() => setShowModalSalidaManual(false)}
                   className="p-1.5 text-amber-100 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4 text-xs">
-                {/* Banner Informativo de Seguridad */}
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex items-start gap-2.5 text-[11px] font-medium leading-relaxed">
-                  <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                  <div>
-                    Se registrará un movimiento de egreso por ajuste que llevará el saldo actual de <strong className="text-amber-950 font-bold">{siloModalStock.toLocaleString('es-AR')} kg</strong> en <strong className="text-amber-950 font-bold">{targetAjusteSilo}</strong> a <strong className="text-red-700 font-bold">0 kg</strong>. Para confirmar, requiere autorización con usuario y contraseña del usuario <strong>Amilcar Quiroz</strong>.
-                  </div>
+              <form onSubmit={handleSubmitSalidaManual} className="p-6 space-y-4 text-xs">
+                {/* Banner Stock Actual */}
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex items-center justify-between text-xs font-bold">
+                  <span>Stock Actual Disponible:</span>
+                  <span className="font-mono text-sm font-black">{stockActualSilo.toLocaleString('es-AR')} kg</span>
                 </div>
 
-                {errorAjuste && (
+                {errorSalidaManual && (
                   <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
                     <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                    <span>{errorAjuste}</span>
+                    <span>{errorSalidaManual}</span>
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-slate-500" />
-                    Usuario Autorizador *
-                  </label>
-                  <input
-                    type="text"
-                    value={usuarioAjuste}
-                    onChange={(e) => setUsuarioAjuste(e.target.value)}
-                    placeholder="Amilcar Quiroz"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
-                    required
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Selector Silo */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      Silo de Origen *
+                    </label>
+                    <select
+                      value={siloSalidaManual}
+                      onChange={(e) => setSiloSalidaManual(e.target.value as SiloId)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
+                    >
+                      {SILOS_DISPONIBLES.map((sId) => (
+                        <option key={sId} value={sId}>{sId} ({getStockSilo(sId).toLocaleString('es-AR')} kg)</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Fecha */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      Fecha de Salida *
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaSalidaManual}
+                      onChange={(e) => setFechaSalidaManual(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center gap-1">
-                    <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                    Contraseña / Clave de Autorización *
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="Ingrese clave del usuario Amilcar Quiroz..."
-                    value={claveAjuste}
-                    onChange={(e) => setClaveAjuste(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none shadow-xs"
-                    required
-                    autoFocus
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Kilos a Descontar */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      Cantidad a Descontar (kg) *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={stockActualSilo}
+                      placeholder="ej: 5000"
+                      value={kgSalidaManual}
+                      onChange={(e) => setKgSalidaManual(e.target.value ? parseFloat(e.target.value) : '')}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Motivo Obligatorio */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      Motivo de Salida *
+                    </label>
+                    <select
+                      value={motivoSalidaManual}
+                      onChange={(e) => setMotivoSalidaManual(e.target.value as MotivoSalidaManual)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
+                      required
+                    >
+                      <option value="Consumo a granel">Consumo a granel</option>
+                      <option value="Manipulación">Manipulación</option>
+                      <option value="Traslado a silo">Traslado a silo</option>
+                    </select>
+                  </div>
                 </div>
 
+                {/* Checkbox Descontaminación Varietal */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="descontaminacionVarietal"
+                    checked={descontaminacionVarietal}
+                    onChange={(e) => setDescontaminacionVarietal(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <label htmlFor="descontaminacionVarietal" className="text-xs font-bold text-slate-800 cursor-pointer select-none">
+                    Descontaminación Varietal
+                    <span className="block text-[10px] font-normal text-slate-500">
+                      Marcar si este movimiento corresponde a una limpieza / purga de variedad.
+                    </span>
+                  </label>
+                </div>
+
+                {/* Observaciones */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    Fecha del Ajuste *
-                  </label>
-                  <input
-                    type="date"
-                    value={fechaAjuste}
-                    onChange={(e) => setFechaAjuste(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    Motivo del Ajuste (Texto Libre) *
+                    Observaciones / Comentarios Adicionales
                   </label>
                   <textarea
                     rows={2}
-                    placeholder="ej: Barrido final de silo, merma por manipuleo, vaciado autorizado..."
-                    value={motivoAjuste}
-                    onChange={(e) => setMotivoAjuste(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
-                    required
+                    placeholder="Detalles sobre el destino, operador, motivo..."
+                    value={observacionesSalidaManual}
+                    onChange={(e) => setObservacionesSalidaManual(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
                   />
                 </div>
-              </div>
 
-              <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModalAjusteCero(false)}
-                  className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-100 transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmAjusteCero}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-200" />
-                  <span>Autorizar y Dejar en 0</span>
-                </button>
-              </div>
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowModalSalidaManual(false)}
+                    className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <ArrowUpRight className="w-4 h-4 text-amber-200" />
+                    <span>Registrar Salida Manual</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         );
@@ -2877,13 +3117,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (drawerSilo) openModalAjusteCero(drawerSilo);
+                    if (drawerSilo) openModalSalidaManual(drawerSilo);
                   }}
                   className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
-                  title="Poner stock en cero con autorización de Amilcar Quiroz"
+                  title="Generar Salida Manual de Silo"
                 >
-                  <Lock className="w-3.5 h-3.5 text-amber-200" />
-                  <span>Stock a 0</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Salida Manual</span>
                 </button>
 
                 <button

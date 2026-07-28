@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Lote, SalidaRegistrada, OrdenCarga, OrdenProceso, MovimientoSilo } from '../types';
+import { Lote, SalidaRegistrada, OrdenCarga, OrdenProceso, MovimientoSilo, Chofer } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 
 export const CLIENTES_PRECARGADOS = [
@@ -473,6 +473,37 @@ export const MOVIMIENTOS_SILO_INICIALES: MovimientoSilo[] = [
     bolsonOrigenSector: "Sector D1",
     depositoOrigen: "Depósito Este",
     humedad: 13.8
+  }
+];
+
+export const CHOFERES_INICIALES: Chofer[] = [
+  {
+    id: 'CHOFER-001',
+    nombre: 'Carlos Gómez',
+    cuit: '20-28491039-4',
+    patentes: 'AA123BB / CC456DD',
+    transporte: 'Transporte Expreso Pampa'
+  },
+  {
+    id: 'CHOFER-002',
+    nombre: 'Juan Manuel Pérez',
+    cuit: '20-31849201-8',
+    patentes: 'AB987CD / EF321GH',
+    transporte: 'TransAgro SRL'
+  },
+  {
+    id: 'CHOFER-003',
+    nombre: 'Roberto Fernández',
+    cuit: '20-25948302-3',
+    patentes: 'AC456EF',
+    transporte: 'Logística del Campo'
+  },
+  {
+    id: 'CHOFER-004',
+    nombre: 'Marcelo Rodríguez',
+    cuit: '20-34928104-5',
+    patentes: 'AD789GH / JK123LM',
+    transporte: 'Transporte El Sur'
   }
 ];
 
