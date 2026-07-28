@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo } from '../types';
+import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo } from '../types';
 import { generateLoteId } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { SilosSelector } from './SilosSelector';
-import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck } from 'lucide-react';
+import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info } from 'lucide-react';
 
 interface LoteFormProps {
   existingLotes: Lote[];
@@ -54,6 +54,12 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [stockKg, setStockKg] = useState<number>(4000);
   const [fechaIngreso, setFechaIngreso] = useState(() => new Date().toISOString().split('T')[0]);
   const [estado, setEstado] = useState<EstadoLoteType>('Disponible');
+  const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('REALIZADO');
+  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
   const [observaciones, setObservaciones] = useState('');
   const [ala, setAla] = useState('');
   const [sector, setSector] = useState('');
@@ -87,6 +93,11 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setStockKg(loteAEditar.stockKg);
       setFechaIngreso(loteAEditar.fechaIngreso);
       setEstado(loteAEditar.estado);
+      setEstadoRegistro(loteAEditar.estadoRegistro || 'REALIZADO');
+      setFechaHoraProduccion(
+        loteAEditar.fechaHoraProduccion ||
+        (loteAEditar.fechaIngreso ? `${loteAEditar.fechaIngreso}T09:00` : new Date().toISOString().slice(0, 16))
+      );
       setObservaciones(loteAEditar.observaciones || '');
       setAla(loteAEditar.ala || '');
       setSector(loteAEditar.sector || '');
@@ -252,6 +263,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       fechaIngreso,
       campaniaId: calculatedCampania,
       estado: estado,
+      estadoRegistro: estadoRegistro,
+      fechaHoraProduccion: estadoRegistro === 'REALIZADO' ? (fechaHoraProduccion || `${fechaIngreso}T09:00`) : undefined,
       observaciones: observaciones.trim(),
       ala: ala,
       sector: sector,
@@ -295,6 +308,92 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       )}
 
       <form onSubmit={handleGuardar} className="space-y-6">
+
+        {/* SECCIÓN MODO DE REGISTRO (PRE-CARGA / REALIZADO) CON FECHA Y HORA DE PRODUCCIÓN */}
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white p-5 rounded-2xl border border-slate-700/80 shadow-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">
+                  Estado de Registro del Lote *
+                </span>
+                <span className="text-[11px] text-slate-300">
+                  Defina si es una planificación (Pre-Carga) o una producción efectivamente realizada
+                </span>
+              </div>
+            </div>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Vínculo a Dashboard de Producción
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
+            {/* Botones de Opciones Cerradas */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
+                Seleccionar Modo *
+              </label>
+              <div className="inline-flex p-1 bg-slate-950 rounded-xl border border-slate-700 w-full shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setEstadoRegistro('PRE-CARGA')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    estadoRegistro === 'PRE-CARGA'
+                      ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  PRE-CARGA
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEstadoRegistro('REALIZADO')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                    estadoRegistro === 'REALIZADO'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md font-extrabold'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  REALIZADO
+                </button>
+              </div>
+            </div>
+
+            {/* Fecha y Hora de Producción (Activa con REALIZADO) */}
+            {estadoRegistro === 'REALIZADO' ? (
+              <div className="bg-slate-800/90 p-3.5 rounded-xl border border-emerald-500/50 space-y-1 animate-in fade-in duration-200">
+                <label className="block text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                  <CalendarDays className="w-4 h-4 text-emerald-400" />
+                  Fecha y Hora de Producción *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={fechaHoraProduccion}
+                  onChange={(e) => setFechaHoraProduccion(e.target.value)}
+                  required={estadoRegistro === 'REALIZADO'}
+                  className="w-full px-3 py-2 bg-slate-950 text-white font-mono text-xs font-bold rounded-lg border border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  Esta fecha y hora alimentará los análisis de rendimiento y trazabilidad en el Dashboard de Producción.
+                </span>
+              </div>
+            ) : (
+              <div className="bg-slate-800/80 p-3.5 rounded-xl border border-amber-500/40 text-xs text-slate-300 flex items-start gap-2.5 shadow-sm">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-300 block">Lote en Pre-Carga (Sin afectación de silos)</span>
+                  <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                    Con la opción <strong className="text-amber-400">PRE-CARGA</strong> activa <strong>NO se descuenta ni afecta el stock/salida de silos</strong>. La Salida de Silo se activará únicamente cuando presione el botón <strong className="text-emerald-400">REALIZADO</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Sección de Orden de Proceso y Trazabilidad */}
         <div className="bg-gradient-to-r from-emerald-50 to-slate-50 border border-emerald-200/80 p-5 rounded-2xl shadow-xs space-y-4">

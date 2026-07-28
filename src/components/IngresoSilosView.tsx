@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
+import { findExistingChofer, mergeChoferData } from '../utils/choferes';
 import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload } from 'lucide-react';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
 import {
@@ -601,14 +602,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     };
 
     if (choferNombre.trim() && onSaveChofer) {
-      onSaveChofer({
-        id: `CHOFER-${choferNombre.trim().toLowerCase().replace(/\s+/g, '-')}`,
+      const candidateData = {
         nombre: choferNombre.trim(),
         cuit: choferCuit.trim(),
-        patente: choferPatentes.trim(),
         patentes: choferPatentes.trim(),
         transporte: choferTransporte.trim(),
-      });
+      };
+      const existing = findExistingChofer(candidateData, choferes);
+      const choferToSave = mergeChoferData(existing, candidateData);
+      onSaveChofer(choferToSave);
     }
 
     onRegistrarIngreso(nuevoIngreso);
@@ -685,14 +687,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
           const patentes = row['Patentes'] || row['Patente'] || row['PATENTE'] || row['PATENTES'] || '';
           const transporte = row['Transporte'] || row['Empresa'] || row['TRANSPORTE'] || '';
 
-          return {
-            id: `CHOFER-IMP-${Date.now()}-${idx}`,
+          const candidateData = {
             nombre: String(nombre).trim(),
             cuit: String(cuit).trim(),
-            patente: String(patentes).trim(),
             patentes: String(patentes).trim(),
             transporte: String(transporte).trim(),
           };
+
+          const existing = findExistingChofer(candidateData, choferes);
+          return mergeChoferData(existing, candidateData);
         }).filter(ch => ch.nombre);
 
         if (choferesImportados.length > 0 && onImportChoferes) {

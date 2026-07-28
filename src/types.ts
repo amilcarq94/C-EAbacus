@@ -16,6 +16,8 @@ export const UMBRAL_ALERTA_SILO = 150000; // Alerta desde 150.000 kg (83.3%)
 
 export type EstadoLoteType = 'Disponible' | 'Reservado' | 'Agotado' | 'A Consumo';
 
+export type EstadoRegistroLote = 'PRE-CARGA' | 'REALIZADO';
+
 export interface AuditLogEntry {
   id: string;
   fechaHora: string; // Formato ISO 8601
@@ -51,6 +53,8 @@ export interface Lote {
   fechaIngreso: string; // YYYY-MM-DD
   campaniaId?: string; // ID de campaña ej: '2026-2027'
   estado: EstadoLoteType;
+  estadoRegistro?: EstadoRegistroLote; // 'PRE-CARGA' | 'REALIZADO'
+  fechaHoraProduccion?: string; // Formato YYYY-MM-DDTHH:mm o similar
   observaciones?: string; // Cuadro de observaciones opcional
   historial: MovimientoStock[];
   auditoria?: AuditLogEntry[];
@@ -218,6 +222,9 @@ export interface OrdenProceso {
   campaniaId?: string; // ej: '2026-2027'
   silosOrigen?: SiloExtraccion[]; // Silos de origen y kg extraídos de cada uno
   lotesOrigen?: LoteOrigenItem[]; // Lotes de origen seleccionados para Orden de Movimiento (hasta 5)
+  operarios?: number; // Personal asignado al proceso (ej. 2 o 3 operarios)
+  horasTrabajadas?: number; // Horas efectivas de operación en planta (ej. 6.5 hs)
+  horasHombre?: number; // Total Horas-Hombre calculadas (operarios * horasTrabajadas)
 }
 
 

@@ -24,6 +24,7 @@ import {
 import * as XLSX from 'xlsx';
 import { db } from '../lib/firebase';
 import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { findExistingChofer, mergeChoferData } from '../utils/choferes';
 
 interface ChoferesViewProps {
   choferes: Chofer[];
@@ -119,12 +120,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       patentesComb = cam ? `${cam} / ${acop}` : acop;
     }
 
-    const choferId = choferAEditar
-      ? choferAEditar.id
-      : `CHOFER-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-    const newChofer: Chofer = {
-      id: choferId,
+    const candidateData = {
+      id: choferAEditar ? choferAEditar.id : undefined,
       nombre: formNombre.trim(),
       cuit: formCuit.trim(),
       transporte: formTransporte.trim(),
@@ -135,11 +132,15 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       telefono: formTelefono.trim() || undefined,
     };
 
+    // Buscar si ya existe un chofer registrado con este nombre o CUIT
+    const existing = choferAEditar || findExistingChofer(candidateData, choferes);
+    const newChofer = mergeChoferData(existing, candidateData);
+
     try {
       // Guardar en Firestore
-      await setDoc(doc(db, 'choferes', choferId), newChofer);
+      await setDoc(doc(db, 'choferes', newChofer.id), newChofer, { merge: true });
       setShowModalAddEdit(false);
-      setNotificacion(choferAEditar ? 'Chofer actualizado con éxito.' : 'Nuevo chofer registrado en la base de datos.');
+      setNotificacion(existing && choferAEditar ? 'Chofer actualizado con éxito.' : existing ? `Se actualizaron los datos del chofer registrado "${newChofer.nombre}".` : 'Nuevo chofer registrado en la base de datos.');
       setTimeout(() => setNotificacion(''), 4000);
     } catch (err: any) {
       console.error('Error al guardar chofer en Firestore:', err);
@@ -338,10 +339,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
 
       for (const item of importPreview) {
         if (!item.nombre) continue;
-        const id = `CHOFER-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-        const docRef = doc(db, 'choferes', id);
-        const fullChofer: Chofer = {
-          id,
+
+        const candidateData = {
           nombre: item.nombre.trim(),
           cuit: (item.cuit || '—').trim(),
           transporte: (item.transporte || 'Sin Transporte').trim(),
@@ -351,7 +350,12 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
           patentes: (item.patentes || '—').trim(),
           telefono: item.telefono ? item.telefono.trim() : undefined
         };
-        batch.set(docRef, fullChofer);
+
+        const existing = findExistingChofer(candidateData, choferes);
+        const fullChofer = mergeChoferData(existing, candidateData);
+
+        const docRef = doc(db, 'choferes', fullChofer.id);
+        batch.set(docRef, fullChofer, { merge: true });
         importedCount++;
       }
 
@@ -360,7 +364,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       setShowModalImport(false);
       setImportPreview([]);
       setImportFile(null);
-      setNotificacion(`¡Se importaron ${importedCount} choferes exitosamente a la base de datos!`);
+      setNotificacion(`¡Se procesaron ${importedCount} choferes exitosamente en la base de datos!`);
       setTimeout(() => setNotificacion(''), 5000);
     } catch (err: any) {
       console.error('Error al guardar lote en Firestore:', err);

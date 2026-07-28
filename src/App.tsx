@@ -25,6 +25,7 @@ import { IngresoSilosView } from './components/IngresoSilosView';
 import { ChoferesView } from './components/ChoferesView';
 import { CampaniaSelector } from './components/CampaniaSelector';
 import { getActiveCampaniaIdStored, setActiveCampaniaIdStored, getCampaniaIdFromDate } from './utils/campanias';
+import { findExistingChofer, mergeChoferData } from './utils/choferes';
 import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 
@@ -896,31 +897,60 @@ export default function App() {
         }
       }
 
-      // Si el lote tiene silos de origen especificados, registrar EGRESO_OP en movimientos_silo
-      if (loteGuardar.silosOrigen && loteGuardar.silosOrigen.length > 0) {
+      // Eliminar movimientos de silo anteriores generados por este lote (si existían)
+      const movsAnterioresLote = movimientosSilo.filter(m => m.loteResultanteId === docId);
+      for (const mAnt of movsAnterioresLote) {
+        const delRef = doc(db, 'movimientos_silo', mAnt.id);
+        batch.delete(delRef);
+      }
+
+      // Con opción ACTIVA "PRE-CARGA" no afectar salida de silo.
+      // Activar salida de silo únicamente con botón "REALIZADO" activo.
+      const esRealizado = loteGuardar.estadoRegistro !== 'PRE-CARGA';
+      const nuevosMovsSiloLote: MovimientoSilo[] = [];
+
+      if (esRealizado && loteGuardar.silosOrigen && loteGuardar.silosOrigen.length > 0) {
         const fechaIng = loteGuardar.fechaIngreso || new Date().toISOString().split('T')[0];
+        let idx = 0;
         for (const item of loteGuardar.silosOrigen) {
-          const movId = `EGRESO-LOTE-${docId}-${item.siloId.replace(/\s+/g, '')}-${Date.now()}`;
-          const movEgreso: MovimientoSilo = {
-            id: movId,
-            siloId: item.siloId,
-            fecha: fechaIng,
-            tipo: 'EGRESO_OP',
-            kg: item.kgExtraidos,
-            loteResultanteId: docId,
-            ordenProcesoId: loteGuardar.ordenProcesoId,
-            cliente: loteGuardar.cliente,
-            especie: loteGuardar.especie,
-            variedad: loteGuardar.variedad,
-            categoria: loteGuardar.categoria
-          };
-          const movDocRef = doc(db, 'movimientos_silo', movId);
-          batch.set(movDocRef, movEgreso);
+          const kgCant = Number(item.kgExtraidos || item.kg || 0);
+          if (kgCant > 0) {
+            idx++;
+            const movId = `EGRESO-LOTE-${docId}-${item.siloId.replace(/\s+/g, '')}-${Date.now()}-${idx}`;
+            const movEgreso: MovimientoSilo = {
+              id: movId,
+              siloId: item.siloId,
+              fecha: fechaIng,
+              tipo: 'EGRESO_OP',
+              kg: kgCant,
+              loteResultanteId: docId,
+              ordenProcesoId: loteGuardar.ordenProcesoId,
+              cliente: loteGuardar.cliente,
+              especie: loteGuardar.especie,
+              variedad: loteGuardar.variedad,
+              categoria: loteGuardar.categoria
+            };
+            const movDocRef = doc(db, 'movimientos_silo', movId);
+            batch.set(movDocRef, movEgreso);
+            nuevosMovsSiloLote.push(movEgreso);
+          }
         }
       }
 
       await batch.commit();
-      showNotification(`Lote ${docId} guardado correctamente.`);
+
+      // Actualizar estado local
+      setLotes(prev => {
+        const exists = prev.some(l => l.id === docId);
+        return exists ? prev.map(l => l.id === docId ? loteGuardar : l) : [loteGuardar, ...prev];
+      });
+
+      setMovimientosSilo(prev => {
+        const sinAnteriores = prev.filter(m => m.loteResultanteId !== docId);
+        return [...sinAnteriores, ...nuevosMovsSiloLote];
+      });
+
+      showNotification(`Lote ${docId} guardado correctamente. ${esRealizado ? '(Salida de silo activada)' : '(Pre-carga registrada sin descontar silos)'}`);
       setLoteAEditar(null);
       setActiveView('lotes');
     } catch (e) {
@@ -1081,9 +1111,11 @@ export default function App() {
 
   const handleSaveChofer = async (chofer: Chofer) => {
     try {
-      const docRef = doc(db, 'choferes', chofer.id);
-      await setDoc(docRef, chofer, { merge: true });
-      showNotification(`Chofer ${chofer.nombre} guardado correctamente.`);
+      const existing = findExistingChofer(chofer, choferes);
+      const mergedChofer = mergeChoferData(existing, chofer);
+      const docRef = doc(db, 'choferes', mergedChofer.id);
+      await setDoc(docRef, mergedChofer, { merge: true });
+      showNotification(`Chofer ${mergedChofer.nombre} guardado correctamente.`);
     } catch (e) {
       console.error('Error al guardar chofer:', e);
       showNotification('Error al guardar chofer.');
@@ -1093,12 +1125,17 @@ export default function App() {
   const handleImportChoferes = async (nuevosChoferes: Chofer[]) => {
     try {
       const batch = writeBatch(db);
+      let count = 0;
       for (const ch of nuevosChoferes) {
-        const docRef = doc(db, 'choferes', ch.id);
-        batch.set(docRef, ch, { merge: true });
+        if (!ch.nombre || !ch.nombre.trim()) continue;
+        const existing = findExistingChofer(ch, choferes);
+        const mergedChofer = mergeChoferData(existing, ch);
+        const docRef = doc(db, 'choferes', mergedChofer.id);
+        batch.set(docRef, mergedChofer, { merge: true });
+        count++;
       }
       await batch.commit();
-      showNotification(`${nuevosChoferes.length} choferes importados correctamente.`);
+      showNotification(`${count} choferes procesados en la base de datos.`);
     } catch (e) {
       console.error('Error al importar choferes:', e);
       showNotification('Error al importar choferes.');
@@ -1837,6 +1874,7 @@ export default function App() {
               onDeleteMultipleLotes={handleDeleteMultipleLotes}
               currentUser={currentUser}
               onWipeStocks={handleWipeStocks}
+              onSaveLote={handleSaveLote}
             />
           )
         ) : activeView === 'alta-lote' ? (

@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Lote, OrdenProceso, SiloId, MovimientoSilo, CAPACIDAD_MAX_SILO } from '../types';
 import { formatNumberArg } from '../utils/formatters';
+import { getKgPorEnvase } from './OrdenProcesoModal';
 import {
   Factory,
   Filter,
@@ -36,7 +37,12 @@ import {
   ExternalLink,
   ArrowRight,
   Hourglass,
-  Warehouse
+  Warehouse,
+  Users,
+  Zap,
+  Gauge,
+  Calculator,
+  Target
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -51,7 +57,8 @@ import {
   Pie,
   Legend,
   AreaChart,
-  Area
+  Area,
+  ReferenceLine
 } from 'recharts';
 
 interface DashboardProduccionProps {
@@ -67,6 +74,8 @@ interface ProductionRecord {
   id: string;
   loteNro: string;
   fechaProduccion: string; // YYYY-MM-DD
+  fechaHoraProduccion?: string; // YYYY-MM-DDTHH:mm
+  estadoRegistro: 'PRE-CARGA' | 'REALIZADO';
   cliente: string;
   especie: string;
   variedad: string;
@@ -77,6 +86,7 @@ interface ProductionRecord {
   bolsasProducidas: number;
   kgProducidos: number;
   kgPorBolsa: number;
+  loteOriginal: Lote;
 }
 
 // Colores institucionales
@@ -307,6 +317,138 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
   const [vencCurrentPage, setVencCurrentPage] = useState<number>(1);
   const vencItemsPerPage = 8;
 
+  // Estados para la Sección de Índice de Eficiencia Operativa (KG / Horas Hombre)
+  const [effEspecieFilter, setEffEspecieFilter] = useState<string>('TODAS');
+  const [effClienteFilter, setEffClienteFilter] = useState<string>('TODOS');
+  const [effTipoFilter, setEffTipoFilter] = useState<string>('TODOS');
+  const [effBenchmarkTarget, setEffBenchmarkTarget] = useState<number>(2000); // Target de benchmark en kg/hh
+  const [effTableSearch, setEffTableSearch] = useState<string>('');
+  const [effTablePage, setEffTablePage] = useState<number>(1);
+  const effTableItemsPerPage = 6;
+
+  // Estados para el Simulador de Eficiencia Operativa
+  const [simKg, setSimKg] = useState<number>(40000);
+  const [simOperarios, setSimOperarios] = useState<number>(3);
+  const [simHoras, setSimHoras] = useState<number>(6.5);
+
+  // Cálculo e Indicadores del Índice de Eficiencia Operativa
+  const efficiencyAnalysis = useMemo(() => {
+    if (!ordenesProceso || ordenesProceso.length === 0) {
+      return {
+        finishedOps: [],
+        filteredOps: [],
+        totalKg: 0,
+        totalHH: 0,
+        totalHorasPlanta: 0,
+        globalIndice: 0,
+        avgTnPorHora: 0,
+        maxOpRecord: null,
+        opsByEspecieChart: [],
+        opsChartData: [],
+        clientesList: [],
+        especiesList: []
+      };
+    }
+
+    // Filtrar Órdenes de Proceso con estado TERMINADO
+    const finishedList = ordenesProceso
+      .filter(op => op.estado === 'TERMINADO')
+      .map(op => {
+        const envase = op.envaseDestino || '';
+        const kgPorEnvase = getKgPorEnvase(envase);
+        const bultos = op.hechos || op.bbPedidos || 0;
+        const kgProcesados = bultos * kgPorEnvase;
+        const operarios = op.operarios || 2;
+        const horasTrabajadas = op.horasTrabajadas || (op.horasHombre ? op.horasHombre / operarios : 6);
+        const horasHombre = op.horasHombre || (operarios * horasTrabajadas);
+        const indiceEficiencia = horasHombre > 0 ? Math.round(kgProcesados / horasHombre) : 0;
+        const tnPorHora = horasTrabajadas > 0 ? Number(((kgProcesados / 1000) / horasTrabajadas).toFixed(2)) : 0;
+
+        return {
+          ...op,
+          kgProcesados,
+          operarios,
+          horasTrabajadas,
+          horasHombre,
+          indiceEficiencia,
+          tnPorHora,
+          bultos
+        };
+      });
+
+    // Listas únicas de clientes y especies para filtros
+    const clientesList = Array.from(new Set(finishedList.map(o => o.cliente).filter(Boolean) as string[])).sort();
+    const especiesList = Array.from(new Set(finishedList.map(o => o.especie).filter(Boolean) as string[])).sort();
+
+    // Global Totals
+    const totalKg = finishedList.reduce((acc, o) => acc + o.kgProcesados, 0);
+    const totalHH = finishedList.reduce((acc, o) => acc + o.horasHombre, 0);
+    const totalHorasPlanta = finishedList.reduce((acc, o) => acc + o.horasTrabajadas, 0);
+    const globalIndice = totalHH > 0 ? Math.round(totalKg / totalHH) : 0;
+    const avgTnPorHora = totalHorasPlanta > 0 ? Number(((totalKg / 1000) / totalHorasPlanta).toFixed(2)) : 0;
+
+    // Record máximo
+    const maxOpRecord = finishedList.length > 0 
+      ? [...finishedList].sort((a, b) => b.indiceEficiencia - a.indiceEficiencia)[0]
+      : null;
+
+    // Filtros aplicados
+    const filteredOps = finishedList.filter(o => {
+      if (effEspecieFilter !== 'TODAS' && o.especie !== effEspecieFilter) return false;
+      if (effClienteFilter !== 'TODOS' && o.cliente !== effClienteFilter) return false;
+      if (effTipoFilter !== 'TODOS' && o.tipoOrden !== effTipoFilter) return false;
+      if (effTableSearch.trim()) {
+        const q = effTableSearch.toLowerCase().trim();
+        const matchNum = o.numeroOrden.toLowerCase().includes(q);
+        const matchCli = (o.cliente || '').toLowerCase().includes(q);
+        const matchEsp = (o.especie || '').toLowerCase().includes(q);
+        const matchVar = (o.variedad || '').toLowerCase().includes(q);
+        if (!matchNum && !matchCli && !matchEsp && !matchVar) return false;
+      }
+      return true;
+    });
+
+    // Chart de Eficiencia por Especie
+    const especieMap: Record<string, { especie: string; totalKg: number; totalHH: number }> = {};
+    finishedList.forEach(o => {
+      const esp = o.especie || 'Sin Especie';
+      if (!especieMap[esp]) especieMap[esp] = { especie: esp, totalKg: 0, totalHH: 0 };
+      especieMap[esp].totalKg += o.kgProcesados;
+      especieMap[esp].totalHH += o.horasHombre;
+    });
+    const opsByEspecieChart = Object.values(especieMap).map(e => ({
+      name: e.especie,
+      indice: e.totalHH > 0 ? Math.round(e.totalKg / e.totalHH) : 0,
+      totalKg: e.totalKg,
+      totalHH: e.totalHH
+    }));
+
+    // Chart de OPs filtradas
+    const opsChartData = filteredOps.map(o => ({
+      name: `OP ${o.numeroOrden}`,
+      indice: o.indiceEficiencia,
+      kg: o.kgProcesados,
+      hh: o.horasHombre,
+      cliente: o.cliente,
+      especie: o.especie
+    }));
+
+    return {
+      finishedOps: finishedList,
+      filteredOps,
+      totalKg,
+      totalHH,
+      totalHorasPlanta,
+      globalIndice,
+      avgTnPorHora,
+      maxOpRecord,
+      opsByEspecieChart,
+      opsChartData,
+      clientesList,
+      especiesList
+    };
+  }, [ordenesProceso, effEspecieFilter, effClienteFilter, effTipoFilter, effTableSearch]);
+
   // Lógica de Vencimientos de Tratamiento
   const TODAY_STR = '2026-07-23';
 
@@ -529,10 +671,16 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
       // Fecha de producción (fechaIngreso)
       const fechaProduccion = lote.fechaIngreso || (entradas[0]?.fecha) || '2026-07-13';
 
+      // Estado de Registro (PRE-CARGA / REALIZADO)
+      const estadoRegistro = lote.estadoRegistro || 'REALIZADO';
+      const fechaHoraProduccion = lote.fechaHoraProduccion || (lote.fechaIngreso ? `${lote.fechaIngreso}T09:00` : undefined);
+
       return {
         id: lote.id,
         loteNro: lote.loteNro || lote.id,
         fechaProduccion,
+        fechaHoraProduccion,
+        estadoRegistro,
         cliente: clientName,
         especie: lote.especie || 'Sin especificar',
         variedad: lote.variedad || 'Desconocida',
@@ -542,7 +690,8 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
         tratamientoStr,
         bolsasProducidas,
         kgProducidos,
-        kgPorBolsa: lote.kgPorBolsa || 40
+        kgPorBolsa: lote.kgPorBolsa || 40,
+        loteOriginal: lote
       };
     });
   }, [lotes]);
@@ -595,6 +744,7 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
   const [selectedTratamientos, setSelectedTratamientos] = useState<string[]>([]);
   const [fechaDesde, setFechaDesde] = useState<string>('');
   const [fechaHasta, setFechaHasta] = useState<string>('');
+  const [selectedEstadoRegistro, setSelectedEstadoRegistro] = useState<string>('TODOS'); // 'TODOS' | 'PRE-CARGA' | 'REALIZADO'
 
   // Estado de Agrupación para Gráfico Principal
   const [groupByField, setGroupByField] = useState<'cliente' | 'especie' | 'variedad' | 'categoria' | 'tipo' | 'tratamientoStr'>('cliente');
@@ -608,6 +758,10 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
   // 4. Lógica de Filtrado Combinado (AND entre dimensiones, OR dentro de cada dimensión)
   const filteredRecords = useMemo(() => {
     return productionRecords.filter((record) => {
+      // Estado de Registro (PRE-CARGA / REALIZADO)
+      if (selectedEstadoRegistro !== 'TODOS' && record.estadoRegistro !== selectedEstadoRegistro) {
+        return false;
+      }
       // Especie
       if (selectedEspecies.length > 0 && !selectedEspecies.includes(record.especie)) {
         return false;
@@ -647,6 +801,7 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
     });
   }, [
     productionRecords,
+    selectedEstadoRegistro,
     selectedEspecies,
     selectedClientes,
     selectedVariedades,
@@ -665,6 +820,7 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
     setSelectedCategorias([]);
     setSelectedTipos([]);
     setSelectedTratamientos([]);
+    setSelectedEstadoRegistro('TODOS');
     setFechaDesde('');
     setFechaHasta('');
     setTableSearch('');
@@ -678,6 +834,7 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
     selectedCategorias.length > 0 ||
     selectedTipos.length > 0 ||
     selectedTratamientos.length > 0 ||
+    selectedEstadoRegistro !== 'TODOS' ||
     Boolean(fechaDesde) ||
     Boolean(fechaHasta);
 
@@ -687,6 +844,12 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
   const totalLotes = filteredRecords.length;
   const promedioKgLote = totalLotes > 0 ? Math.round(totalKg / totalLotes) : 0;
   const totalToneladas = (totalKg / 1000).toFixed(1);
+
+  // Totales por Estado de Registro (Pre-Carga vs Realizado)
+  const countRealizados = useMemo(() => filteredRecords.filter(r => r.estadoRegistro === 'REALIZADO').length, [filteredRecords]);
+  const countPreCarga = useMemo(() => filteredRecords.filter(r => r.estadoRegistro === 'PRE-CARGA').length, [filteredRecords]);
+  const kgRealizados = useMemo(() => filteredRecords.filter(r => r.estadoRegistro === 'REALIZADO').reduce((acc, r) => acc + r.kgProducidos, 0), [filteredRecords]);
+  const kgPreCarga = useMemo(() => filteredRecords.filter(r => r.estadoRegistro === 'PRE-CARGA').reduce((acc, r) => acc + r.kgProducidos, 0), [filteredRecords]);
 
   // Proporción de Producción Tratada
   const totalKgTratado = useMemo(() => {
@@ -891,8 +1054,25 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
           )}
         </div>
 
-        {/* Grid de Selectores Múltiples */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Grid de Selectores Múltiples y Estado de Registro */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          {/* Selector Estado de Registro */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-amber-600" />
+              Estado Registro
+            </span>
+            <select
+              value={selectedEstadoRegistro}
+              onChange={(e) => setSelectedEstadoRegistro(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-slate-900 text-white font-bold text-xs rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+            >
+              <option value="TODOS">⚡ TODOS LOS REGISTROS</option>
+              <option value="REALIZADO">✅ REALIZADO</option>
+              <option value="PRE-CARGA">⏳ PRE-CARGA</option>
+            </select>
+          </div>
+
           <MultiSelectDropdown
             label="Especie"
             icon={<Boxes className="w-3.5 h-3.5" />}
@@ -975,6 +1155,17 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
         {hasActiveFilters && (
           <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Filtros Activos:</span>
+            
+            {selectedEstadoRegistro !== 'TODOS' && (
+              <span className={`inline-flex items-center gap-1 px-2.5 py-1 font-bold rounded-lg text-[11px] ${
+                selectedEstadoRegistro === 'PRE-CARGA' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+              }`}>
+                Modo: {selectedEstadoRegistro}
+                <button onClick={() => setSelectedEstadoRegistro('TODOS')} className="hover:text-red-700">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
             
             {selectedEspecies.map(val => (
               <span key={`esp-${val}`} className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#E3EFE7] text-[#00603C] font-bold rounded-lg text-[11px]">
@@ -1114,7 +1305,7 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
       })()}
 
       {/* KPI CARDS RESUMEN DE PRODUCCIÓN */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         
         {/* Total Kilogramos */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm relative overflow-hidden">
@@ -1135,6 +1326,45 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
           </p>
         </div>
 
+        {/* Realizado vs Pre-Carga Breakdown */}
+        <div className="bg-slate-900 text-white rounded-2xl p-5 border border-slate-700 shadow-sm relative overflow-hidden col-span-1 sm:col-span-2 lg:col-span-2">
+          <div className="flex items-center justify-between mb-2 border-b border-slate-800 pb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              Estado de Registro de Lotes
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {countRealizados + countPreCarga} lotes tot.
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="bg-emerald-950/80 p-2.5 rounded-xl border border-emerald-500/30">
+              <span className="text-[10px] uppercase font-bold text-emerald-300 block">
+                ✅ Realizado
+              </span>
+              <span className="font-serif text-xl font-bold text-white block mt-0.5">
+                {formatNumberArg(kgRealizados, 0)} <span className="text-xs font-sans font-normal text-slate-300">kg</span>
+              </span>
+              <span className="text-[10px] text-emerald-400/90 font-mono font-semibold">
+                {countRealizados} {countRealizados === 1 ? 'lote' : 'lotes'}
+              </span>
+            </div>
+
+            <div className="bg-amber-950/80 p-2.5 rounded-xl border border-amber-500/30">
+              <span className="text-[10px] uppercase font-bold text-amber-300 block">
+                ⏳ Pre-Carga
+              </span>
+              <span className="font-serif text-xl font-bold text-amber-200 block mt-0.5">
+                {formatNumberArg(kgPreCarga, 0)} <span className="text-xs font-sans font-normal text-slate-300">kg</span>
+              </span>
+              <span className="text-[10px] text-amber-400/90 font-mono font-semibold">
+                {countPreCarga} {countPreCarga === 1 ? 'lote planificado' : 'lotes planificados'}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Total Bolsas */}
         <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
@@ -1151,25 +1381,6 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
           </div>
           <p className="text-[11px] text-gray-500 mt-1">
             En lotes filtrados activos
-          </p>
-        </div>
-
-        {/* Eventos de Producción / Lotes */}
-        <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Lotes Producidos</span>
-            <div className="p-2 bg-blue-50 rounded-xl text-blue-700">
-              <Factory className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-serif text-2xl md:text-3xl font-bold text-gray-900">
-              {totalLotes}
-            </span>
-            <span className="text-xs font-sans font-medium text-gray-500">lotes</span>
-          </div>
-          <p className="text-[11px] text-gray-500 mt-1">
-            Eventos de alta de producción
           </p>
         </div>
 
@@ -1370,7 +1581,473 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
 
       </div>
 
+      {/* SECCIÓN ÍNDICE DE EFICIENCIA OPERATIVA (KG PROCESADOS / HORAS HOMBRE) */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-3xl p-6 md:p-8 shadow-xl space-y-6 border border-slate-700/60">
+        
+        {/* Header de la Sección */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/60 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                <Gauge className="w-3 h-3 text-emerald-400" />
+                Métrica OEE / Rendimiento de Planta
+              </span>
+              <span className="text-xs text-slate-400">• Órdenes de Proceso Finalizadas</span>
+            </div>
+            <h2 className="text-xl md:text-2xl font-serif font-bold text-white flex items-center gap-2.5">
+              <Zap className="w-6 h-6 text-amber-400 shrink-0" />
+              Índice de Eficiencia Operativa (KG / Horas Hombre)
+            </h2>
+            <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+              Calcula y analiza la relación entre el volumen total de semilla procesada y las horas-hombre efectivas invertidas en planta por el equipo técnico durante la ejecución de las Órdenes de Proceso finalizadas (<code className="bg-slate-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-[11px]">TERMINADO</code>).
+            </p>
+          </div>
 
+          {/* Quick Target Benchmark Control */}
+          <div className="flex items-center gap-3 bg-slate-800/80 p-3 rounded-2xl border border-slate-700 shrink-0">
+            <Target className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Meta Target Planta</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <input
+                  type="number"
+                  step="100"
+                  min="500"
+                  max="10000"
+                  value={effBenchmarkTarget}
+                  onChange={(e) => setEffBenchmarkTarget(Number(e.target.value) || 2000)}
+                  className="w-20 px-2 py-0.5 text-xs font-bold font-mono bg-slate-900 border border-slate-600 rounded text-emerald-400 focus:outline-none focus:border-emerald-400"
+                />
+                <span className="text-xs font-semibold text-slate-300">kg/hh</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Top KPI Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* Card 1: Índice Global Promedio */}
+          <div className="bg-slate-800/90 rounded-2xl p-5 border border-emerald-500/30 relative overflow-hidden group hover:border-emerald-400 transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Índice Global Eficiencia</span>
+              <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
+                <Gauge className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-3xl font-bold text-emerald-400">
+                {formatNumberArg(efficiencyAnalysis.globalIndice, 0)}
+              </span>
+              <span className="text-xs font-mono font-medium text-slate-300">kg / hs-hombre</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Vs Target:</span>
+              <span className={`font-bold px-2 py-0.5 rounded ${
+                efficiencyAnalysis.globalIndice >= effBenchmarkTarget
+                  ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-amber-900/60 text-amber-300 border border-amber-500/40'
+              }`}>
+                {efficiencyAnalysis.globalIndice >= effBenchmarkTarget ? '▲ Supera Meta' : '▼ Bajo Meta'}
+              </span>
+            </div>
+          </div>
+
+          {/* Card 2: Total KG Procesados */}
+          <div className="bg-slate-800/90 rounded-2xl p-5 border border-slate-700/80 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Volumen Procesado OP Finales</span>
+              <div className="p-2 bg-blue-500/20 rounded-xl text-blue-400">
+                <Scale className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-3xl font-bold text-white">
+                {formatNumberArg(efficiencyAnalysis.totalKg, 0)}
+              </span>
+              <span className="text-xs font-mono font-medium text-slate-400">kg</span>
+            </div>
+            <p className="text-[11px] text-blue-400 font-semibold mt-2">
+              ≈ {(efficiencyAnalysis.totalKg / 1000).toFixed(1)} Tn métricas en {efficiencyAnalysis.finishedOps.length} OPs
+            </p>
+          </div>
+
+          {/* Card 3: Total Horas Hombre */}
+          <div className="bg-slate-800/90 rounded-2xl p-5 border border-slate-700/80 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Horas Hombre (HH)</span>
+              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-3xl font-bold text-amber-300">
+                {efficiencyAnalysis.totalHH.toFixed(1)}
+              </span>
+              <span className="text-xs font-mono font-medium text-slate-400">hs-hombre</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 font-medium">
+              {efficiencyAnalysis.totalHorasPlanta.toFixed(1)} hs efectivas de trabajo de planta
+            </p>
+          </div>
+
+          {/* Card 4: Mejor Performance alcanzada */}
+          <div className="bg-slate-800/90 rounded-2xl p-5 border border-slate-700/80 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Máximo Rendimiento Registrado</span>
+              <div className="p-2 bg-purple-500/20 rounded-xl text-purple-400">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+            {efficiencyAnalysis.maxOpRecord ? (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-serif text-3xl font-bold text-purple-300">
+                    {formatNumberArg(efficiencyAnalysis.maxOpRecord.indiceEficiencia, 0)}
+                  </span>
+                  <span className="text-xs font-mono font-medium text-slate-400">kg/hh</span>
+                </div>
+                <p className="text-[11px] text-slate-300 truncate mt-2">
+                  OP N° {efficiencyAnalysis.maxOpRecord.numeroOrden} ({efficiencyAnalysis.maxOpRecord.especie} - {efficiencyAnalysis.maxOpRecord.cliente})
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-slate-400 italic mt-2">Sin OPs finalizadas</p>
+            )}
+          </div>
+
+        </div>
+
+        {/* Filtros de la Sección Eficiencia & Gráficos */}
+        <div className="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+              <Filter className="w-4 h-4 text-emerald-400" />
+              <span>Filtros Específicos para Análisis de Eficiencia</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Filtro Especie */}
+              <select
+                value={effEspecieFilter}
+                onChange={(e) => setEffEspecieFilter(e.target.value)}
+                className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="TODAS">Especie: Todas</option>
+                {efficiencyAnalysis.especiesList.map(esp => (
+                  <option key={esp} value={esp}>{esp}</option>
+                ))}
+              </select>
+
+              {/* Filtro Cliente */}
+              <select
+                value={effClienteFilter}
+                onChange={(e) => setEffClienteFilter(e.target.value)}
+                className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="TODOS">Cliente: Todos</option>
+                {efficiencyAnalysis.clientesList.map(cli => (
+                  <option key={cli} value={cli}>{cli}</option>
+                ))}
+              </select>
+
+              {/* Reset Button */}
+              {(effEspecieFilter !== 'TODAS' || effClienteFilter !== 'TODOS' || effTipoFilter !== 'TODOS') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEffEspecieFilter('TODAS');
+                    setEffClienteFilter('TODOS');
+                    setEffTipoFilter('TODOS');
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-lg transition flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Gráfico de Eficiencia Comparativo */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+            
+            {/* Gráfico Barras por OP (2 Cols) */}
+            <div className="lg:col-span-2 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span>Índice de Eficiencia por Orden de Proceso (kg / Horas-Hombre)</span>
+                <span className="text-[10px] text-amber-400 font-mono">--- Línea roja: Meta Target ({effBenchmarkTarget} kg/hh)</span>
+              </div>
+              <div className="h-64 w-full bg-slate-900/60 rounded-xl p-3 border border-slate-700/60">
+                {efficiencyAnalysis.opsChartData.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                    No hay OPs finalizadas matching con los filtros
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={efficiencyAnalysis.opsChartData} margin={{ top: 15, right: 15, left: 10, bottom: 25 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickFormatter={(val) => `${val} kg/hh`} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <ReferenceLine y={effBenchmarkTarget} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: 'Target', fill: '#F59E0B', fontSize: 10 }} />
+                      <Bar dataKey="indice" radius={[6, 6, 0, 0]} name="Índice (kg/hh)">
+                        {efficiencyAnalysis.opsChartData.map((entry, index) => (
+                          <Cell
+                            key={`cell-eff-${index}`}
+                            fill={entry.indice >= effBenchmarkTarget ? '#10B981' : '#F59E0B'}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* Gráfico Eficiencia por Especie (1 Col) */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-300">
+                <span>Eficiencia Promedio por Especie (kg/hh)</span>
+              </div>
+              <div className="h-64 w-full bg-slate-900/60 rounded-xl p-3 border border-slate-700/60">
+                {efficiencyAnalysis.opsByEspecieChart.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                    Sin datos
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={efficiencyAnalysis.opsByEspecieChart} margin={{ top: 15, right: 15, left: 0, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="indice" fill="#3B82F6" radius={[6, 6, 0, 0]} name="Kg/HH Promedio" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* SIMULADOR DE EFICIENCIA INTERACTIVO */}
+        <div className="bg-slate-800/90 rounded-2xl p-5 border border-slate-700/80 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-700/60 pb-3">
+            <Calculator className="w-5 h-5 text-emerald-400" />
+            <div>
+              <h3 className="text-sm font-bold text-white">Simulador / Calculadora de Eficiencia de Planta</h3>
+              <p className="text-[11px] text-slate-400">Estimate el índice de productividad para próximos lotes de producción</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+            
+            {/* Input Kg */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Volumen a Procesar (kg)</label>
+              <input
+                type="number"
+                step="5000"
+                min="1000"
+                value={simKg}
+                onChange={(e) => setSimKg(Math.max(1000, Number(e.target.value) || 0))}
+                className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white font-mono font-bold focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* Input Operarios */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Operarios Asignados</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={simOperarios}
+                onChange={(e) => setSimOperarios(Math.max(1, Number(e.target.value) || 1))}
+                className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white font-mono font-bold focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* Input Horas Planta */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Horas Efectivas Planta</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0.5"
+                value={simHoras}
+                onChange={(e) => setSimHoras(Math.max(0.5, Number(e.target.value) || 0.5))}
+                className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white font-mono font-bold focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* Resultado Estimado */}
+            {(() => {
+              const simHH = simOperarios * simHoras;
+              const simIndice = simHH > 0 ? Math.round(simKg / simHH) : 0;
+              const diffPct = efficiencyAnalysis.globalIndice > 0
+                ? (((simIndice - efficiencyAnalysis.globalIndice) / efficiencyAnalysis.globalIndice) * 100).toFixed(1)
+                : '0';
+
+              return (
+                <div className="bg-slate-900 p-3 rounded-xl border border-emerald-500/40 text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Índice Estimado Simulación</span>
+                  <div className="flex items-baseline justify-center gap-1 mt-0.5">
+                    <span className="font-serif text-2xl font-bold text-emerald-400">{formatNumberArg(simIndice, 0)}</span>
+                    <span className="text-[10px] text-slate-300 font-mono">kg/hh</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">
+                    ({simHH.toFixed(1)} Horas Hombre tot. • {Number(diffPct) >= 0 ? '+' : ''}{diffPct}% vs Promedio)
+                  </span>
+                </div>
+              );
+            })()}
+
+          </div>
+        </div>
+
+        {/* TABLA DETALLE DE EFICIENCIA POR ÓRDENES FINALIZADAS */}
+        <div className="bg-slate-800/90 rounded-2xl p-5 border border-slate-700/80 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-emerald-400" />
+                Tabla Detalle de Eficiencia por Orden de Proceso Finalizada
+              </h3>
+              <p className="text-[11px] text-slate-400">Listado consolidado de OPs finalizadas y su rendimiento de Horas-Hombre</p>
+            </div>
+
+            {/* Search Box */}
+            <div className="relative w-full sm:w-60">
+              <input
+                type="text"
+                placeholder="Buscar N° OP, cliente..."
+                value={effTableSearch}
+                onChange={(e) => {
+                  setEffTableSearch(e.target.value);
+                  setEffTablePage(1);
+                }}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto rounded-xl border border-slate-700/60">
+            <table className="w-full text-left text-xs text-slate-200">
+              <thead className="bg-slate-900/80 text-emerald-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-3">N° OP</th>
+                  <th className="py-2.5 px-3">Tipo</th>
+                  <th className="py-2.5 px-3">Cliente</th>
+                  <th className="py-2.5 px-3">Especie / Variedad</th>
+                  <th className="py-2.5 px-3">Envase Destino</th>
+                  <th className="py-2.5 px-3 text-right">Volumen (kg)</th>
+                  <th className="py-2.5 px-3 text-center">Operarios</th>
+                  <th className="py-2.5 px-3 text-center">Horas Planta</th>
+                  <th className="py-2.5 px-3 text-center">Total HH</th>
+                  <th className="py-2.5 px-3 text-right">Índice (kg/hh)</th>
+                  <th className="py-2.5 px-3 text-center">Desempeño</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/60 text-slate-300">
+                {efficiencyAnalysis.filteredOps.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="py-6 text-center text-slate-400 italic">
+                      No se encontraron Órdenes de Proceso finalizadas para los criterios seleccionados.
+                    </td>
+                  </tr>
+                ) : (
+                  efficiencyAnalysis.filteredOps
+                    .slice((effTablePage - 1) * effTableItemsPerPage, effTablePage * effTableItemsPerPage)
+                    .map((op, idx) => {
+                      const isOptimal = op.indiceEficiencia >= effBenchmarkTarget;
+                      const isWarning = op.indiceEficiencia < effBenchmarkTarget && op.indiceEficiencia >= 1200;
+
+                      return (
+                        <tr key={op.id || idx} className="hover:bg-slate-700/40 transition">
+                          <td className="py-2.5 px-3 font-mono font-bold text-white">
+                            OP {op.numeroOrden}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-slate-200">
+                              {op.tipoOrden}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-semibold text-emerald-300">
+                            {op.cliente}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {op.especie} <span className="text-slate-400 text-[11px]">({op.variedad})</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300">
+                            {op.envaseDestino}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                            {formatNumberArg(op.kgProcesados, 0)} kg
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono">
+                            {op.operarios} op.
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono">
+                            {op.horasTrabajadas.toFixed(1)} hs
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-amber-300">
+                            {op.horasHombre.toFixed(1)} hh
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-extrabold text-emerald-400 text-sm">
+                            {formatNumberArg(op.indiceEficiencia, 0)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                              isOptimal
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                : isWarning
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : 'bg-red-500/20 text-red-300 border border-red-500/40'
+                            }`}>
+                              {isOptimal ? 'Óptimo' : isWarning ? 'Aceptable' : 'Atención'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Table Pagination */}
+          {efficiencyAnalysis.filteredOps.length > effTableItemsPerPage && (
+            <div className="flex items-center justify-between pt-2 text-xs text-slate-400">
+              <span>
+                Página <strong className="text-white">{effTablePage}</strong> de <strong className="text-white">{Math.ceil(efficiencyAnalysis.filteredOps.length / effTableItemsPerPage)}</strong>
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={effTablePage === 1}
+                  onClick={() => setEffTablePage(p => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white rounded font-semibold transition"
+                >
+                  Anterior
+                </button>
+                <button
+                  disabled={effTablePage >= Math.ceil(efficiencyAnalysis.filteredOps.length / effTableItemsPerPage)}
+                  onClick={() => setEffTablePage(p => Math.min(Math.ceil(efficiencyAnalysis.filteredOps.length / effTableItemsPerPage), p + 1))}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded font-semibold transition"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+
+      </div>
 
       {/* TABLA DETALLE DE LOTES DE PRODUCCIÓN */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
@@ -1406,7 +2083,8 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-[#E3EFE7] text-[#00603C] uppercase text-[10px] font-bold tracking-wider">
               <tr>
-                <th className="py-3 px-4">Fecha Prod.</th>
+                <th className="py-3 px-4">Modo Registro</th>
+                <th className="py-3 px-4">Fecha/Hora Prod.</th>
                 <th className="py-3 px-4">N° Lote</th>
                 <th className="py-3 px-4">Cliente</th>
                 <th className="py-3 px-4">Especie</th>
@@ -1421,15 +2099,28 @@ export const DashboardProduccion: React.FC<DashboardProduccionProps> = ({
             <tbody className="divide-y divide-gray-100 text-gray-700">
               {paginatedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-gray-400 italic">
+                  <td colSpan={11} className="py-8 text-center text-gray-400 italic">
                     No se encontraron registros de producción para la búsqueda realizada.
                   </td>
                 </tr>
               ) : (
                 paginatedRecords.map((r, idx) => (
                   <tr key={`${r.id}-${idx}`} className="hover:bg-gray-50 transition">
-                    <td className="py-3 px-4 font-mono font-medium text-gray-600 whitespace-nowrap">
-                      {r.fechaProduccion}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {r.estadoRegistro === 'PRE-CARGA' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] rounded-full">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          PRE-CARGA
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-[10px] rounded-full">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          REALIZADO
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 font-mono font-medium text-gray-700 whitespace-nowrap">
+                      {r.fechaHoraProduccion ? r.fechaHoraProduccion.replace('T', ' ') : r.fechaProduccion}
                     </td>
                     <td className="py-3 px-4 font-bold text-gray-900 whitespace-nowrap">
                       {r.loteNro}

@@ -7,7 +7,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Lote, EstadoLoteType, TipoLoteType, OrdenProceso, MovimientoSilo } from '../types';
 import { formatNumberArg, formatKg, formatDateStr } from '../utils/formatters';
-import { Search, Grid, List, Plus, Filter, Eye, Edit2, ArrowDownRight, Trash2, QrCode, Download, Lock, ShieldAlert, KeyRound, X, Flame, Warehouse, Layers, Info, SlidersHorizontal, Check, Pin, RotateCcw, ChevronDown, Package, Sprout } from 'lucide-react';
+import { Search, Grid, List, Plus, Filter, Eye, Edit2, ArrowDownRight, Trash2, QrCode, Download, Lock, ShieldAlert, KeyRound, X, Flame, Warehouse, Layers, Info, SlidersHorizontal, Check, Pin, RotateCcw, ChevronDown, Package, Sprout, Clock, CheckCircle2 } from 'lucide-react';
 import { QrCodeModal } from './QrCodeModal';
 
 interface MultiSelectDropdownProps {
@@ -176,6 +176,7 @@ interface LotesViewProps {
   onDeleteMultipleLotes: (ids: string[]) => void;
   currentUser: { nombre: string; rol: string };
   onWipeStocks: () => Promise<void>;
+  onSaveLote?: (lote: Lote) => Promise<void>;
 }
 
 export const LotesView: React.FC<LotesViewProps> = ({
@@ -190,6 +191,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
   onDeleteMultipleLotes,
   currentUser,
   onWipeStocks,
+  onSaveLote,
 }) => {
   // Constante para almacenamiento persistente del filtro fijado
   const PIN_STORAGE_KEY = 'agroabacus_pinned_lotes_filters_v2';
@@ -2046,8 +2048,21 @@ export const LotesView: React.FC<LotesViewProps> = ({
                     </td>
                     {visibleColumns.loteId && (
                       <td className="py-3 px-4">
-                        <div className="font-mono font-black text-[#C9922E] text-base leading-none mb-1">LOTE: {l.loteNro}</div>
-                        <div className="font-mono text-[9px] text-gray-500 font-semibold">ID: {l.id}</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-black text-[#C9922E] text-base leading-none">LOTE: {l.loteNro}</span>
+                          {l.estadoRegistro === 'PRE-CARGA' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[9px] rounded-full" title="Pre-Carga: Lote planificado. NO descuenta stock de silos.">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              PRE-CARGA
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-[9px] rounded-full" title="Realizado: Producción ejecutada con Salida de Silo activa.">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              REALIZADO
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[9px] text-gray-500 font-semibold mt-1">ID: {l.id}</div>
                         {l.ala && l.sector && (
                           <div className="text-[10px] text-[#00603C] font-semibold mt-1">
                             Ala {l.ala} · Sector {l.sector}
@@ -2104,6 +2119,27 @@ export const LotesView: React.FC<LotesViewProps> = ({
                     )}
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        {l.estadoRegistro === 'PRE-CARGA' && (
+                          <button
+                            onClick={async () => {
+                              if (window.confirm(`¿Confirmar producción del Lote ${l.loteNro}?\n\nAl cambiar a modo REALIZADO se activará la Salida de Silo correspondientes a la materia prima.`)) {
+                                const loteRealizado: Lote = {
+                                  ...l,
+                                  estadoRegistro: 'REALIZADO',
+                                  fechaHoraProduccion: l.fechaHoraProduccion || `${l.fechaIngreso || new Date().toISOString().split('T')[0]}T09:00`
+                                };
+                                if (onSaveLote) {
+                                  await onSaveLote(loteRealizado);
+                                }
+                              }
+                            }}
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
+                            title="Cambiar a REALIZADO y Activar Salida de Silos"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Realizar</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => onSelectLote(l)}
                           className="p-1 text-gray-500 hover:text-[#00603C] hover:bg-gray-100 rounded"

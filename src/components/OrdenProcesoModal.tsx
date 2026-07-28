@@ -73,6 +73,8 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
   const [bbPedidos, setBbPedidos] = useState<number>(50);
   const [hechos, setHechos] = useState<number>(0);
   const [estado, setEstado] = useState<EstadoOrdenProceso>('SIN INICIAR');
+  const [operarios, setOperarios] = useState<number>(2);
+  const [horasTrabajadas, setHorasTrabajadas] = useState<number>(6);
   const [observaciones, setObservaciones] = useState('');
   const [fechaCreacion, setFechaCreacion] = useState(() => new Date().toISOString().split('T')[0]);
   const [silosOrigen, setSilosOrigen] = useState<SiloExtraccion[]>([]);
@@ -132,6 +134,8 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
       setBbPedidos(ordenAEditar.bbPedidos || 0);
       setHechos(ordenAEditar.hechos || 0);
       setEstado(ordenAEditar.estado || 'SIN INICIAR');
+      setOperarios(ordenAEditar.operarios || 2);
+      setHorasTrabajadas(ordenAEditar.horasTrabajadas || (ordenAEditar.estado === 'TERMINADO' ? 6 : 0));
       setObservaciones(ordenAEditar.observaciones || '');
       setFechaCreacion(ordenAEditar.fechaCreacion || new Date().toISOString().split('T')[0]);
     } else {
@@ -249,6 +253,10 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
       };
     });
 
+    const calcOps = Math.max(1, Number(operarios) || 1);
+    const calcHs = Math.max(0, Number(horasTrabajadas) || 0);
+    const calcHH = Number((calcOps * calcHs).toFixed(1));
+
     const ordenGuardar: OrdenProceso = {
       id: ordenAEditar ? ordenAEditar.id : `OP-${Date.now()}`,
       numeroOrden: numeroOrden.trim(),
@@ -264,6 +272,9 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
       bbPedidos: Number(bbPedidos),
       hechos: Number(hechos),
       estado,
+      operarios: calcOps,
+      horasTrabajadas: calcHs,
+      horasHombre: calcHH,
       observaciones: observaciones.trim(),
       fechaCreacion,
       campaniaId,
@@ -778,6 +789,49 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
                 <option value="EN CURSO">🟡 EN CURSO</option>
                 <option value="TERMINADO">🟢 TERMINADO</option>
               </select>
+            </div>
+
+            {/* Datos de Eficiencia Operativa (Horas Hombre) */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Factory className="w-3.5 h-3.5 text-emerald-700" />
+                  Métricas Operativas (Horas Hombre)
+                </span>
+                <span className="text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                  Total: {(operarios * horasTrabajadas).toFixed(1)} hs-hombre
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Operarios Asignados
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={operarios}
+                    onChange={(e) => setOperarios(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Horas Efectivas de Operación
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={horasTrabajadas}
+                    onChange={(e) => setHorasTrabajadas(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold"
+                  />
+                </div>
+              </div>
             </div>
 
           </div>

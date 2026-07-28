@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, UserCheck, Truck, CreditCard, ChevronDown, Plus, Check, X } from 'lucide-react';
 import { Chofer } from '../types';
+import { normalizeStr } from '../utils/choferes';
 
 interface ChoferSearchSelectorProps {
   choferes: Chofer[];
@@ -69,7 +70,7 @@ export const ChoferSearchSelector: React.FC<ChoferSearchSelectorProps> = ({
   };
 
   const exactMatch = choferes.some(
-    (c) => c.nombre.toLowerCase().trim() === searchTerm.toLowerCase().trim()
+    (c) => normalizeStr(c.nombre) === normalizeStr(searchTerm)
   );
 
   return (

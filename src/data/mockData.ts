@@ -146,6 +146,8 @@ function parseInitialLots(): Lote[] {
       ordenProcesoId: linkedOpId,
       campaniaId: getCampaniaIdFromDate(fechaIng),
       estado: (stockBolsas > 0 ? "Disponible" : "Agotado") as any,
+      estadoRegistro: (lots.length % 5 === 0 ? "PRE-CARGA" : "REALIZADO"),
+      fechaHoraProduccion: (lots.length % 5 === 0 ? undefined : `2026-07-13T${(8 + (lots.length % 10)).toString().padStart(2, '0')}:30`),
       historial: [
         {
           id: `MOV-${id}-001`,
@@ -333,7 +335,10 @@ export const ORDENES_PROCESO_INICIALES: OrdenProceso[] = [
     estado: "EN CURSO",
     observaciones: "Procesamiento de semilla con curado estándar Rizoderma.",
     fechaCreacion: "2026-07-15",
-    campaniaId: getCampaniaIdFromDate("2026-07-15")
+    campaniaId: getCampaniaIdFromDate("2026-07-15"),
+    operarios: 3,
+    horasTrabajadas: 6.0,
+    horasHombre: 18.0
   },
   {
     id: "OP-2026-1002",
@@ -353,7 +358,10 @@ export const ORDENES_PROCESO_INICIALES: OrdenProceso[] = [
     estado: "TERMINADO",
     observaciones: "Movimiento de bolsa de intermedio a final en depósito.",
     fechaCreacion: "2026-07-18",
-    campaniaId: getCampaniaIdFromDate("2026-07-18")
+    campaniaId: getCampaniaIdFromDate("2026-07-18"),
+    operarios: 2,
+    horasTrabajadas: 5.0,
+    horasHombre: 10.0
   },
   {
     id: "OP-2026-1003",
@@ -374,6 +382,69 @@ export const ORDENES_PROCESO_INICIALES: OrdenProceso[] = [
     observaciones: "Envasado y tratamiento químico listo para ejecución.",
     fechaCreacion: "2026-07-20",
     campaniaId: getCampaniaIdFromDate("2026-07-20")
+  },
+  {
+    id: "OP-2026-0095",
+    numeroOrden: "0095",
+    tipoOrden: "PRODUCCION",
+    cliente: "San Diego Semilla",
+    especie: "Soja",
+    envaseDestino: "Big Bag x 800 Kg",
+    tratamiento: "Acelerador + Inoculante",
+    variedad: "P46A03",
+    producto: "FINAL",
+    categoria: "Fundadora",
+    bbPedidos: 60,
+    hechos: 60,
+    estado: "TERMINADO",
+    observaciones: "Clasificación y empaque en Big Bags finalizado con alta eficiencia.",
+    fechaCreacion: "2026-07-10",
+    campaniaId: getCampaniaIdFromDate("2026-07-10"),
+    operarios: 3,
+    horasTrabajadas: 6.5,
+    horasHombre: 19.5
+  },
+  {
+    id: "OP-2026-0096",
+    numeroOrden: "0096",
+    tipoOrden: "PRODUCCION",
+    cliente: "Stine",
+    especie: "Trigo",
+    envaseDestino: "Bolsa x 40 Kg",
+    tratamiento: "Curasemilla Fungicida",
+    variedad: "CATALPA",
+    producto: "FINAL",
+    categoria: "Primera",
+    bbPedidos: 1000,
+    hechos: 1000,
+    estado: "TERMINADO",
+    observaciones: "Proceso completo de embolsado y curado.",
+    fechaCreacion: "2026-07-12",
+    campaniaId: getCampaniaIdFromDate("2026-07-12"),
+    operarios: 2,
+    horasTrabajadas: 8.0,
+    horasHombre: 16.0
+  },
+  {
+    id: "OP-2026-0097",
+    numeroOrden: "0097",
+    tipoOrden: "PRODUCCION",
+    cliente: "Elementa Foods",
+    especie: "Arveja",
+    envaseDestino: "Big Bag x 800 Kg",
+    tratamiento: "Sin Tratamiento",
+    variedad: "GREENFIELD",
+    producto: "FINAL",
+    categoria: "Original",
+    bbPedidos: 40,
+    hechos: 40,
+    estado: "TERMINADO",
+    observaciones: "Limpieza y calibrado de grano de arveja.",
+    fechaCreacion: "2026-07-14",
+    campaniaId: getCampaniaIdFromDate("2026-07-14"),
+    operarios: 3,
+    horasTrabajadas: 4.5,
+    horasHombre: 13.5
   }
 ];
 
