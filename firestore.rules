@@ -115,5 +115,10 @@ service cloud.firestore {
     match /choferes/{choferId} {
       allow read, write: if true;
     }
+
+    // 7. Colección de Bolsones de Campo (bolsones_campo)
+    match /bolsones_campo/{bolsonId} {
+      allow read, write: if true;
+    }
   }
 }

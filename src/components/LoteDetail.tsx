@@ -388,7 +388,11 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
               <span className="text-xs font-bold text-gray-800 block mt-0.5">{lote.variedad}</span>
             </div>
             <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Tipo / Categoría</span>
+              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Categoría</span>
+              <span className="text-xs font-bold text-[#00603C] block mt-0.5 uppercase">{lote.categoria || 'Sin especificar'}</span>
+            </div>
+            <div>
+              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Tipo de Lote</span>
               <span className="text-xs font-semibold text-gray-700 block mt-0.5">{lote.tipo}</span>
             </div>
           </div>
@@ -645,15 +649,25 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
                 {lote.loteNro}
               </h2>
             </div>
-            <h3 className="font-serif text-xl font-bold">
-              {lote.especie} · <span className="font-sans font-normal text-sm text-gray-200">{lote.variedad}</span>
+            <h3 className="font-serif text-xl font-bold flex items-center gap-2 flex-wrap">
+              <span>{lote.especie} · <span className="font-sans font-normal text-sm text-gray-200">{lote.variedad}</span></span>
+              {lote.categoria && (
+                <span className="px-2 py-0.5 bg-[#C9922E] text-white text-[10px] font-sans font-extrabold uppercase rounded border border-amber-300/40">
+                  Cat: {lote.categoria}
+                </span>
+              )}
             </h3>
             <p className="text-xs text-gray-300 mt-1">{lote.cliente}</p>
           </div>
 
           <div className="p-5 space-y-4 text-xs">
             <div>
-              <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">Tipo / Categoría</span>
+              <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">Categoría</span>
+              <span className="font-extrabold text-[#00603C] text-sm block mt-0.5 uppercase">{lote.categoria || 'Sin especificar'}</span>
+            </div>
+
+            <div>
+              <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">Tipo de Lote</span>
               <span className="font-semibold text-gray-800 text-sm block mt-0.5">{lote.tipo}</span>
             </div>
 

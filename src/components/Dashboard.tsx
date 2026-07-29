@@ -31,7 +31,9 @@ import {
   ArrowUpRight,
   ArrowRight,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  DollarSign,
+  Coins
 } from 'lucide-react';
 import {
   ResponsiveContainer,

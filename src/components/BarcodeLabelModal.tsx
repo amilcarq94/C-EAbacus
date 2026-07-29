@@ -84,8 +84,8 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({ lote, onCl
               <span class="val">${lote.especie}</span>
             </div>
             <div class="info-group">
-              <span class="label">VARIEDAD</span>
-              <span class="val">${lote.variedad}</span>
+              <span class="label">VARIEDAD / CAT.</span>
+              <span class="val">${lote.variedad} (${lote.categoria || 'S/C'})</span>
             </div>
           </div>
 
@@ -172,7 +172,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({ lote, onCl
           <div class="thermal-body">
             <div class="thermal-info">
               <div><strong>ESP:</strong> ${lote.especie}</div>
-              <div><strong>VAR:</strong> ${lote.variedad}</div>
+              <div><strong>VAR/CAT:</strong> ${lote.variedad} (${lote.categoria || 'S/C'})</div>
               <div><strong>TRAT:</strong> ${lote.producto}</div>
               <div><strong>BOLSAS:</strong> ${lote.stockBolsas} u.</div>
             </div>

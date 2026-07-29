@@ -100,7 +100,7 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({ lote, onClose }) => {
             <h2>Estancia La Barrancosa</h2>
             <img src="${canvasRef.current?.toDataURL('image/png')}" width="250" height="250" />
             <div class="info">LOTE: ${lote.id}</div>
-            <div class="desc">${lote.especie} - ${lote.variedad}</div>
+            <div class="desc">${lote.especie} - ${lote.variedad} (${lote.categoria || 'Fundadora'})</div>
           </div>
           <script>
             window.onload = function() {
