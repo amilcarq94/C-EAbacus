@@ -41,10 +41,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
   const [formNombre, setFormNombre] = useState('');
   const [formCuit, setFormCuit] = useState('');
   const [formTransporte, setFormTransporte] = useState('');
-  const [formLicencia, setFormLicencia] = useState('');
   const [formPatenteCamion, setFormPatenteCamion] = useState('');
   const [formPatenteAcoplado, setFormPatenteAcoplado] = useState('');
-  const [formTelefono, setFormTelefono] = useState('');
   const [formError, setFormError] = useState('');
 
   // Import State
@@ -66,10 +64,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
     setFormNombre('');
     setFormCuit('');
     setFormTransporte('');
-    setFormLicencia('');
     setFormPatenteCamion('');
     setFormPatenteAcoplado('');
-    setFormTelefono('');
     setFormError('');
     setShowModalAddEdit(true);
   };
@@ -80,8 +76,6 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
     setFormNombre(ch.nombre || '');
     setFormCuit(ch.cuit || '');
     setFormTransporte(ch.transporte || '');
-    setFormLicencia(ch.licencia || '');
-    setFormTelefono(ch.telefono || '');
     
     // Separar patentes si vienen separadas por barra
     const patentesArr = (ch.patentes || '').split('/');
@@ -125,11 +119,9 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       nombre: formNombre.trim(),
       cuit: formCuit.trim(),
       transporte: formTransporte.trim(),
-      licencia: formLicencia.trim() || undefined,
       patenteCamion: cam || undefined,
       patenteAcoplado: acop || undefined,
       patentes: patentesComb || '—',
-      telefono: formTelefono.trim() || undefined,
     };
 
     // Buscar si ya existe un chofer registrado con este nombre o CUIT
@@ -169,28 +161,22 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
         'Nombre y Apellido *': 'Carlos Eduardo Gómez',
         'DNI / CUIT *': '20-28491039-4',
         'Empresa de Transporte *': 'Transporte Expreso Pampa SRL',
-        'Licencia / Carnet': 'B2-294021',
         'Patente Camión': 'AA 123 BB',
-        'Patente Acoplado': 'CC 456 DD',
-        'Teléfono Contacto': '2954-15492019'
+        'Patente Acoplado': 'CC 456 DD'
       },
       {
         'Nombre y Apellido *': 'Juan Manuel Pérez',
         'DNI / CUIT *': '20-31849201-8',
         'Empresa de Transporte *': 'TransAgro SRL',
-        'Licencia / Carnet': 'C3-382910',
         'Patente Camión': 'AB 987 CD',
-        'Patente Acoplado': 'EF 321 GH',
-        'Teléfono Contacto': '2302-15948302'
+        'Patente Acoplado': 'EF 321 GH'
       },
       {
         'Nombre y Apellido *': 'Roberto Fernández',
         'DNI / CUIT *': '20-25948302-3',
         'Empresa de Transporte *': 'Logística del Campo SA',
-        'Licencia / Carnet': 'B1-182940',
         'Patente Camión': 'AC 456 EF',
-        'Patente Acoplado': '',
-        'Teléfono Contacto': '2954-15839201'
+        'Patente Acoplado': ''
       }
     ];
 
@@ -199,10 +185,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       { wch: 30 }, // Nombre
       { wch: 18 }, // DNI/CUIT
       { wch: 32 }, // Transporte
-      { wch: 18 }, // Licencia
       { wch: 16 }, // Camion
-      { wch: 16 }, // Acoplado
-      { wch: 20 }  // Telefono
+      { wch: 16 }  // Acoplado
     ];
 
     const wb = XLSX.utils.book_new();
@@ -222,11 +206,9 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       'Nombre y Apellido': c.nombre,
       'DNI / CUIT': c.cuit || '—',
       'Empresa de Transporte': c.transporte || '—',
-      'Licencia / Carnet': c.licencia || '—',
       'Patente Camión': c.patenteCamion || (c.patentes ? c.patentes.split('/')[0]?.trim() : '—'),
       'Patente Acoplado': c.patenteAcoplado || (c.patentes && c.patentes.includes('/') ? c.patentes.split('/')[1]?.trim() : '—'),
-      'Patentes Combinadas': c.patentes || '—',
-      'Teléfono / Contacto': c.telefono || '—'
+      'Patentes Combinadas': c.patentes || '—'
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -235,11 +217,9 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       { wch: 30 },
       { wch: 18 },
       { wch: 32 },
-      { wch: 18 },
       { wch: 16 },
       { wch: 16 },
-      { wch: 24 },
-      { wch: 20 }
+      { wch: 24 }
     ];
 
     const wb = XLSX.utils.book_new();
@@ -555,8 +535,6 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                 <th className="py-3 px-4">DNI / CUIT</th>
                 <th className="py-3 px-4">Empresa / Transporte</th>
                 <th className="py-3 px-4">Patentes (Camión/Acoplado)</th>
-                <th className="py-3 px-4">Licencia / Carnet</th>
-                <th className="py-3 px-4">Teléfono</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
@@ -597,27 +575,6 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                         </span>
                       ) : (
                         <span className="text-slate-400 italic">Sin patente</span>
-                      )}
-                    </td>
-
-                    <td className="py-3 px-4 font-mono text-slate-700">
-                      {c.licencia ? (
-                        <span className="bg-blue-50 text-blue-900 px-2 py-0.5 rounded border border-blue-200 font-semibold">
-                          {c.licencia}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic">—</span>
-                      )}
-                    </td>
-
-                    <td className="py-3 px-4 text-slate-700 font-mono">
-                      {c.telefono ? (
-                        <div className="flex items-center gap-1 text-slate-800 font-semibold">
-                          <Phone className="w-3 h-3 text-emerald-600" />
-                          <span>{c.telefono}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">—</span>
                       )}
                     </td>
 
@@ -707,33 +664,18 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    DNI / CUIT *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej: 20-28491039-4"
-                    value={formCuit}
-                    onChange={(e) => setFormCuit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    Licencia / Carnet
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej: Cat. B2 / C3"
-                    value={formLicencia}
-                    onChange={(e) => setFormLicencia(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                  DNI / CUIT *
+                </label>
+                <input
+                  type="text"
+                  placeholder="ej: 20-28491039-4"
+                  value={formCuit}
+                  onChange={(e) => setFormCuit(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  required
+                />
               </div>
 
               <div>
@@ -776,19 +718,6 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                  Teléfono de Contacto
-                </label>
-                <input
-                  type="text"
-                  placeholder="ej: 2954-15492019"
-                  value={formTelefono}
-                  onChange={(e) => setFormTelefono(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
               </div>
 
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-2">

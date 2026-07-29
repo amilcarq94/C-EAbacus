@@ -5,9 +5,10 @@
 
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual } from '../types';
+import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual, BolsonCampo } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
+import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { findExistingChofer, mergeChoferData } from '../utils/choferes';
 import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload } from 'lucide-react';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
@@ -88,6 +89,7 @@ interface IngresoSilosViewProps {
   especies: string[];
   currentUser: { nombre: string; rol: string };
   choferes?: Chofer[];
+  bolsones?: BolsonCampo[];
   onRegistrarIngreso: (movimiento: MovimientoSilo) => void;
   onRegistrarSalidaManual?: (movimiento: MovimientoSilo) => void;
   onSaveChofer?: (chofer: Chofer) => void;
@@ -103,6 +105,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   especies,
   currentUser,
   choferes = [],
+  bolsones = [],
   onRegistrarIngreso,
   onRegistrarSalidaManual,
   onSaveChofer,
@@ -126,6 +129,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [campoOrigenSelect, setCampoOrigenSelect] = useState('La Barrancosa');
   const [campoOrigenManual, setCampoOrigenManual] = useState('');
 
+  const [bolsonOrigenId, setBolsonOrigenId] = useState('');
   const [bolsonOrigenNro, setBolsonOrigenNro] = useState('');
   const [bolsonOrigenSector, setBolsonOrigenSector] = useState('');
   const [totalKgIngresados, setTotalKgIngresados] = useState<number | ''>('');
@@ -189,6 +193,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         'Especie': m.especie || '-',
         'Variedad': m.variedad || '-',
         'Kilos': m.kg,
+        'N° Bolsón Origen': m.bolsonOrigenNro || '-',
         'Origen': m.campoOrigen || m.depositoOrigen || '-',
         'Sector': m.bolsonOrigenSector || m.sector || '-',
         'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
@@ -591,6 +596,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       variedad: variedad.trim(),
       categoria,
       campoOrigen: campoOrigenFinal,
+      bolsonOrigenId: bolsonOrigenId || undefined,
       bolsonOrigenNro: bolsonOrigenNro.trim(),
       bolsonOrigenSector: bolsonOrigenSector.trim(),
       depositoOrigen: depositoOrigen.trim(),
@@ -618,6 +624,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
     // Resetear form parcial
     setTotalKgIngresados('');
+    setBolsonOrigenId('');
     setBolsonOrigenNro('');
     setSelectedChoferId('');
     setChoferNombre('');
@@ -1494,17 +1501,32 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               )}
             </div>
 
-            {/* Bolsón Origen Número */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                N° Bolsón Origen
-              </label>
-              <input
-                type="text"
-                placeholder="ej: 12B, 401..."
-                value={bolsonOrigenNro}
-                onChange={(e) => setBolsonOrigenNro(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-900"
+            {/* Bolsón Origen Selector */}
+            <div className="col-span-1 md:col-span-2">
+              <BolsonSearchSelector
+                bolsones={bolsones}
+                selectedBolsonId={bolsonOrigenId}
+                selectedBolsonNro={bolsonOrigenNro}
+                onSelectBolson={(bolson) => {
+                  if (bolson) {
+                    setBolsonOrigenId(bolson.id);
+                    setBolsonOrigenNro(bolson.numeroBolson);
+                    if (bolson.zona) setBolsonOrigenSector(bolson.zona);
+                    if (bolson.campo) {
+                      setCampoOrigenSelect('Otro');
+                      setCampoOrigenManual(bolson.campo);
+                    }
+                    if (bolson.cliente) setCliente(bolson.cliente);
+                    if (bolson.cultivo) setEspecie(bolson.cultivo);
+                    if (bolson.variedad) setVariedad(bolson.variedad);
+                    if (bolson.deposito) setDepositoOrigen(bolson.deposito);
+                  } else {
+                    setBolsonOrigenId('');
+                    setBolsonOrigenNro('');
+                  }
+                }}
+                label="Bolsón Origen (Base de Datos / Trazabilidad)"
+                placeholder="Buscar por N° Bolsón, cliente, campo, cultivo..."
               />
             </div>
 

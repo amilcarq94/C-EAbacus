@@ -52,7 +52,7 @@ interface DespachosSectionProps {
 }
 
 const LISTA_CLIENTES = ["San Diego Semilla", "Eco Rural", "Pampa", "Stine", "Elementa Foods"];
-const LISTA_CATEGORIAS = ["Preba", "Original", "Primu"];
+const LISTA_CATEGORIAS = ["Fundadora", "Preba", "Original", "Primu"];
 const LISTA_TIPOS = ["Intermedio", "Final"];
 const LISTA_TRATAMIENTOS = ["Tratado", "Sin Tratar"];
 

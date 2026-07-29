@@ -7,7 +7,7 @@ import { initializeApp } from 'firebase/app';
 import { initializeFirestore, collection, doc, writeBatch, getDocs, runTransaction, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { Lote, MovimientoStock, SalidaRegistrada, OrdenCarga, MovimientoSilo, Chofer } from '../types';
+import { Lote, MovimientoStock, SalidaRegistrada, OrdenCarga, MovimientoSilo, Chofer, BolsonCampo } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 
 // Configuración de Firebase obtenida de firebase-applet-config.json
@@ -323,6 +323,28 @@ export async function seedChoferesIfEmpty(initialChoferes: Chofer[]): Promise<vo
     }
   } catch (error) {
     console.warn('Error en seeding de choferes:', error);
+  }
+}
+
+/**
+ * Seed de Bolsones en Campo en Firestore si está vacía.
+ */
+export async function seedBolsonesIfEmpty(initialBolsones: BolsonCampo[]): Promise<void> {
+  try {
+    const bolsonesRef = collection(db, 'bolsones_campo');
+    const snapshot = await getDocs(bolsonesRef);
+    if (snapshot.empty) {
+      console.log('Seeding inicial de bolsones en campo en Firestore...');
+      const batch = writeBatch(db);
+      for (const b of initialBolsones) {
+        const docRef = doc(db, 'bolsones_campo', b.id);
+        batch.set(docRef, b);
+      }
+      await batch.commit();
+      console.log('Seeding de bolsones completado con éxito.');
+    }
+  } catch (error) {
+    console.warn('Error en seeding de bolsones:', error);
   }
 }
 

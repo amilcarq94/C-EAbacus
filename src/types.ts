@@ -66,8 +66,25 @@ export interface Lote {
   fechaVencimientoTratamiento?: string; // YYYY-MM-DD
   silosOrigen?: SiloExtraccion[]; // Silos de origen y kg extraídos de cada uno
   siloOrigen?: SiloId | string; // Silo de origen principal
+  bolsonOrigenId?: string; // ID único del bolsón de origen
   numeroBolsonOrigen?: string; // N° de Bolsón de origen
   bolsonOrigenNro?: string; // Aliased for consistency
+}
+
+export interface BolsonCampo {
+  id: string; // ID único del bolsón
+  campania: string; // ej: "2024/2025", "2025/2026"
+  cliente: string; // ej: "San Diego Semilla"
+  numeroBolson: string; // N° de Bolsón (ej: "Bolsón 01", "B-101")
+  zona?: string; // Zona
+  campo?: string; // Campo
+  cultivo: string; // Cultivo / Especie (ej: "Soja", "Trigo", "Arveja")
+  variedad: string; // Variedad (ej: "DM 46i20")
+  categoria: CategoriaType | string; // Categoría ("Fundadora", "Preba", "Original", "Prima", "Primu", etc.)
+  deposito?: string; // Depósito
+  entradasKg: number; // Entradas (kg)
+  salidasKg: number; // Salida (kg)
+  stockKg: number; // Stock (kg) -> entradasKg - salidasKg
 }
 
 export interface Chofer {
@@ -107,6 +124,7 @@ export interface MovimientoSilo {
   variedad?: string;
   categoria?: string;
   campoOrigen?: string;
+  bolsonOrigenId?: string;
   bolsonOrigenNro?: string;
   bolsonOrigenSector?: string;
   depositoOrigen?: string;

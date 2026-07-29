@@ -557,7 +557,7 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
                 <option value="Fundadora">Fundadora</option>
                 <option value="Preba">Preba</option>
                 <option value="Original">Original</option>
-                <option value="Primera">Primera</option>
+                <option value="Primu">Primu</option>
                 <option value="Otra">Otra...</option>
               </select>
 

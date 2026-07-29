@@ -207,6 +207,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
           search: typeof parsed.search === 'string' ? parsed.search : '',
           filterClientes: Array.isArray(parsed.filterClientes) ? parsed.filterClientes : [],
           filterEspecies: Array.isArray(parsed.filterEspecies) ? parsed.filterEspecies : [],
+          filterVariedades: Array.isArray(parsed.filterVariedades) ? parsed.filterVariedades : [],
           filterTipos: Array.isArray(parsed.filterTipos) ? parsed.filterTipos : [],
           filterCategorias: Array.isArray(parsed.filterCategorias) ? parsed.filterCategorias : [],
           filterTratamientos: Array.isArray(parsed.filterTratamientos) ? parsed.filterTratamientos : [],
@@ -223,6 +224,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
       search: '',
       filterClientes: [],
       filterEspecies: [],
+      filterVariedades: [],
       filterTipos: [],
       filterCategorias: [],
       filterTratamientos: [],
@@ -238,6 +240,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
   const [search, setSearch] = useState<string>(initialFilters.search);
   const [filterClientes, setFilterClientes] = useState<string[]>(initialFilters.filterClientes);
   const [filterEspecies, setFilterEspecies] = useState<string[]>(initialFilters.filterEspecies);
+  const [filterVariedades, setFilterVariedades] = useState<string[]>(initialFilters.filterVariedades);
   const [filterTipos, setFilterTipos] = useState<string[]>(initialFilters.filterTipos);
   const [filterCategorias, setFilterCategorias] = useState<string[]>(initialFilters.filterCategorias);
   const [filterTratamientos, setFilterTratamientos] = useState<string[]>(initialFilters.filterTratamientos);
@@ -286,6 +289,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
         search,
         filterClientes,
         filterEspecies,
+        filterVariedades,
         filterTipos,
         filterCategorias,
         filterTratamientos,
@@ -302,6 +306,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
     search,
     filterClientes,
     filterEspecies,
+    filterVariedades,
     filterTipos,
     filterCategorias,
     filterTratamientos,
@@ -318,6 +323,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
     setSearch('');
     setFilterClientes([]);
     setFilterEspecies([]);
+    setFilterVariedades([]);
     setFilterTipos([]);
     setFilterCategorias([]);
     setFilterTratamientos([]);
@@ -330,6 +336,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
     (search ? 1 : 0) +
     filterClientes.length +
     filterEspecies.length +
+    filterVariedades.length +
     filterTipos.length +
     filterCategorias.length +
     filterTratamientos.length +
@@ -374,6 +381,11 @@ export const LotesView: React.FC<LotesViewProps> = ({
 
   const especiesDisponibles = useMemo(() => {
     const fromLotes = lotes.map(l => l.especie).filter(Boolean) as string[];
+    return Array.from(new Set(fromLotes)).sort();
+  }, [lotes]);
+
+  const variedadesDisponibles = useMemo(() => {
+    const fromLotes = lotes.map(l => l.variedad).filter(Boolean) as string[];
     return Array.from(new Set(fromLotes)).sort();
   }, [lotes]);
 
@@ -431,6 +443,12 @@ export const LotesView: React.FC<LotesViewProps> = ({
         return false;
       }
 
+      // 3.5. Variedad (Selección Múltiple)
+      const varName = l.variedad || 'Sin especificar';
+      if (filterVariedades.length > 0 && !filterVariedades.includes(varName)) {
+        return false;
+      }
+
       // 4. Tipo de Lote (Selección Múltiple)
       if (filterTipos.length > 0 && !filterTipos.includes(l.tipo)) {
         return false;
@@ -477,7 +495,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
 
       return true;
     });
-  }, [lotes, search, filterClientes, filterEspecies, filterTipos, filterCategorias, filterTratamientos, filterEstados, filterAlas, filterSectores]);
+  }, [lotes, search, filterClientes, filterEspecies, filterVariedades, filterTipos, filterCategorias, filterTratamientos, filterEstados, filterAlas, filterSectores]);
 
   // Resumen dinámico de totales de stock agrupado por tipo de envase (kg por bolsa)
   const stockSummaryByEnvase = useMemo(() => {
@@ -989,6 +1007,16 @@ export const LotesView: React.FC<LotesViewProps> = ({
             getOptionCount={(esp) => lotes.filter(l => (l.especie || 'Sin especificar') === esp).length}
           />
 
+          {/* Filtro Variedad (Multi) */}
+          <MultiSelectDropdown
+            id="select-filtro-variedad"
+            label="Variedad"
+            options={variedadesDisponibles}
+            selectedValues={filterVariedades}
+            onChange={setFilterVariedades}
+            getOptionCount={(v) => lotes.filter(l => (l.variedad || 'Sin especificar') === v).length}
+          />
+
           {/* Filtro Tipo (Multi) */}
           <MultiSelectDropdown
             id="select-filtro-tipo"
@@ -1077,6 +1105,15 @@ export const LotesView: React.FC<LotesViewProps> = ({
               <span key={`pill-esp-${esp}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E3EFE7] text-[#00603C] font-semibold">
                 Especie: {esp}
                 <button type="button" onClick={() => setFilterEspecies(filterEspecies.filter(v => v !== esp))} className="hover:text-red-600 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {filterVariedades.map(varName => (
+              <span key={`pill-var-${varName}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E3EFE7] text-[#00603C] font-semibold">
+                Variedad: {varName}
+                <button type="button" onClick={() => setFilterVariedades(filterVariedades.filter(v => v !== varName))} className="hover:text-red-600 cursor-pointer">
                   <X className="w-3 h-3" />
                 </button>
               </span>

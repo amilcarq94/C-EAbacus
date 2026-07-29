@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Lote, SalidaRegistrada, OrdenCarga, OrdenProceso, MovimientoSilo, Chofer } from '../types';
+import { Lote, SalidaRegistrada, OrdenCarga, OrdenProceso, MovimientoSilo, Chofer, BolsonCampo } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 
 export const CLIENTES_PRECARGADOS = [
@@ -575,6 +575,69 @@ export const CHOFERES_INICIALES: Chofer[] = [
     cuit: '20-34928104-5',
     patentes: 'AD789GH / JK123LM',
     transporte: 'Transporte El Sur'
+  }
+];
+
+export const BOLSONES_INICIALES: BolsonCampo[] = [
+  {
+    id: 'BOLSON-001',
+    campania: '2025/2026',
+    cliente: 'San Diego Semilla',
+    numeroBolson: 'Bolsón 12A',
+    zona: 'Norte',
+    campo: 'La Barrancosa',
+    cultivo: 'Trigo',
+    variedad: 'CASUARINA',
+    categoria: 'Fundadora',
+    deposito: 'Depósito Central',
+    entradasKg: 45000,
+    salidasKg: 15000,
+    stockKg: 30000
+  },
+  {
+    id: 'BOLSON-002',
+    campania: '2025/2026',
+    cliente: 'Stine',
+    numeroBolson: 'Bolsón 19A',
+    zona: 'Sur',
+    campo: 'La Barrancosa',
+    cultivo: 'Trigo',
+    variedad: 'CATALPA',
+    categoria: 'Preba',
+    deposito: 'Depósito Central',
+    entradasKg: 60000,
+    salidasKg: 22000,
+    stockKg: 38000
+  },
+  {
+    id: 'BOLSON-003',
+    campania: '2025/2026',
+    cliente: 'Eco Rural',
+    numeroBolson: 'Bolsón 05F',
+    zona: 'Este',
+    campo: 'El Potrero',
+    cultivo: 'Soja',
+    variedad: 'PEHUEN',
+    categoria: 'Original',
+    deposito: 'Depósito Este',
+    entradasKg: 50000,
+    salidasKg: 12000,
+    stockKg: 38000
+  },
+  {
+    id: 'BOLSON-004',
+    campania: '2025/2026',
+    cliente: 'Elementa Foods',
+    numeroBolson: 'Bolsón 08C',
+    zona: 'Oeste',
+    campo: 'Don Pedro',
+    cultivo: 'Arveja',
+    variedad: 'BALLTRAP',
+    categoria: 'Prima',
+    deposito: 'Depósito Oeste',
+    entradasKg: 40000,
+    salidasKg: 0,
+    stockKg: 40000
   }
 ];
 

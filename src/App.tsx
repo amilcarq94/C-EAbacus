@@ -13,20 +13,21 @@ import { LoteForm } from './components/LoteForm';
 import { ImportarStock } from './components/ImportarStock';
 import { RegistrarSalida } from './components/RegistrarSalida';
 import { SalidasList } from './components/SalidasList';
-import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer } from './types';
+import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer, BolsonCampo } from './types';
 import { getLoteAuditoria } from './utils/audit';
-import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES } from './data/mockData';
-import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck } from 'lucide-react';
+import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES, BOLSONES_INICIALES } from './data/mockData';
+import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database } from 'lucide-react';
 import { QrCodeScanner } from './components/QrCodeScanner';
 import { DespachosSection } from './components/DespachosSection';
 import { DashboardProduccion } from './components/DashboardProduccion';
 import { OrdenesProcesoView } from './components/OrdenesProcesoView';
 import { IngresoSilosView } from './components/IngresoSilosView';
 import { ChoferesView } from './components/ChoferesView';
+import { DataBasesView } from './components/DataBasesView';
 import { CampaniaSelector } from './components/CampaniaSelector';
 import { getActiveCampaniaIdStored, setActiveCampaniaIdStored, getCampaniaIdFromDate } from './utils/campanias';
 import { findExistingChofer, mergeChoferData } from './utils/choferes';
-import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
+import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, seedBolsonesIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 
 export default function App() {
@@ -54,6 +55,7 @@ export default function App() {
   const [ordenesProceso, setOrdenesProceso] = useState<OrdenProceso[]>([]);
   const [movimientosSilo, setMovimientosSilo] = useState<MovimientoSilo[]>([]);
   const [choferes, setChoferes] = useState<Chofer[]>([]);
+  const [bolsones, setBolsones] = useState<BolsonCampo[]>([]);
   const [clientes, setClientes] = useState<string[]>([]);
   const [especies, setEspecies] = useState<string[]>([]);
   const [stockThresholds, setStockThresholds] = useState<Record<string, number>>({});
@@ -325,6 +327,17 @@ export default function App() {
       setIsFirebaseConnected(false);
     });
 
+    // 8. Suscribirse en tiempo real a 'bolsones_campo'
+    seedBolsonesIfEmpty(BOLSONES_INICIALES);
+    const unsubBolsones = onSnapshot(collection(db, 'bolsones_campo'), (snapshot) => {
+      setIsFirebaseConnected(true);
+      const loadedBolsones = snapshot.docs.map(doc => doc.data() as BolsonCampo);
+      setBolsones(loadedBolsones);
+    }, (error) => {
+      console.error("Error subscribing to 'bolsones_campo':", error);
+      setIsFirebaseConnected(false);
+    });
+
     // Listeners para el estado de internet del navegador
     const handleOnline = () => {
       setIsOnline(true);
@@ -367,6 +380,7 @@ export default function App() {
       unsubOrdenesProceso();
       unsubMovimientosSilo();
       unsubChoferes();
+      unsubBolsones();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -1091,6 +1105,21 @@ export default function App() {
     try {
       const docRef = doc(db, 'movimientos_silo', movimiento.id);
       await setDoc(docRef, movimiento);
+
+      // Si viene vinculado a un bolsón de campo, descontar el stock del bolsón en Firestore
+      if (movimiento.bolsonOrigenId) {
+        const targetBolson = bolsones.find(b => b.id === movimiento.bolsonOrigenId);
+        if (targetBolson) {
+          const nuevasSalidas = (targetBolson.salidasKg || 0) + movimiento.kg;
+          const nuevoStock = Math.max(0, (targetBolson.entradasKg || 0) - nuevasSalidas);
+          const bolsonRef = doc(db, 'bolsones_campo', targetBolson.id);
+          await updateDoc(bolsonRef, {
+            salidasKg: nuevasSalidas,
+            stockKg: nuevoStock
+          });
+        }
+      }
+
       showNotification(`Ingreso de ${movimiento.kg.toLocaleString('es-AR')} kg a ${movimiento.siloId} registrado correctamente.`);
     } catch (e) {
       console.error('Error al registrar ingreso a silo:', e);
@@ -1715,7 +1744,7 @@ export default function App() {
             Historial Salidas
           </button>
 
-          {/* Tab Base de Datos Choferes */}
+          {/* Tab Data Bases (Choferes y Bolsones) */}
           <button
             id="nav-tab-choferes"
             onClick={() => navigateTo('choferes')}
@@ -1725,8 +1754,8 @@ export default function App() {
                 : 'text-white hover:bg-white/10'
             }`}
           >
-            <Truck className="w-4 h-4 text-[#C9922E]" />
-            <span>Choferes / Transp.</span>
+            <Database className="w-4 h-4 text-[#C9922E]" />
+            <span>Data Bases</span>
           </button>
 
           {/* Tab Importar */}
@@ -1836,6 +1865,7 @@ export default function App() {
             especies={especies}
             currentUser={currentUser}
             choferes={choferes}
+            bolsones={bolsones}
             onRegistrarIngreso={handleRegistrarIngresoSilo}
             onRegistrarSalidaManual={handleRegistrarSalidaManualSilo}
             onSaveChofer={handleSaveChofer}
@@ -1849,6 +1879,7 @@ export default function App() {
               existingLotes={lotes}
               ordenesProceso={ordenesProcesoConHechos}
               movimientosSilo={movimientosSilo}
+              bolsones={bolsones}
               clientes={clientes}
               especies={especies}
               loteAEditar={loteAEditar}
@@ -1882,6 +1913,7 @@ export default function App() {
             existingLotes={lotes}
             ordenesProceso={ordenesProcesoConHechos}
             movimientosSilo={movimientosSilo}
+            bolsones={bolsones}
             clientes={clientes}
             especies={especies}
             loteAEditar={null}
@@ -1907,8 +1939,13 @@ export default function App() {
             onCancel={() => navigateTo('dashboard')}
           />
         ) : activeView === 'choferes' ? (
-          <ChoferesView
+          <DataBasesView
             choferes={choferes}
+            bolsones={bolsones}
+            clientes={clientes}
+            especies={especies}
+            onSaveChofer={handleSaveChofer}
+            onImportChoferes={handleImportChoferes}
           />
         ) : activeView === 'despachos' ? (
           <DespachosSection

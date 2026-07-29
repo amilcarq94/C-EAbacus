@@ -4,16 +4,18 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo } from '../types';
+import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo } from '../types';
 import { generateLoteId } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { SilosSelector } from './SilosSelector';
+import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info } from 'lucide-react';
 
 interface LoteFormProps {
   existingLotes: Lote[];
   ordenesProceso?: OrdenProceso[];
   movimientosSilo?: MovimientoSilo[];
+  bolsones?: BolsonCampo[];
   clientes: string[];
   especies: string[];
   loteAEditar?: Lote | null;
@@ -28,6 +30,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   existingLotes,
   ordenesProceso = [],
   movimientosSilo = [],
+  bolsones = [],
   clientes,
   especies,
   loteAEditar,
@@ -68,6 +71,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [ordenProcesoId, setOrdenProcesoId] = useState('');
   const [numeroOrdenMovimiento, setNumeroOrdenMovimiento] = useState('');
   const [silosOrigen, setSilosOrigen] = useState<SiloExtraccion[]>([]);
+  const [bolsonOrigenId, setBolsonOrigenId] = useState('');
   const [numeroBolsonOrigen, setNumeroBolsonOrigen] = useState('');
 
   const [error, setError] = useState('');
@@ -109,6 +113,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setOrdenProcesoId(loteAEditar.ordenProcesoId || '');
       setNumeroOrdenMovimiento(loteAEditar.numeroOrdenMovimiento || '');
       setSilosOrigen(loteAEditar.silosOrigen || []);
+      setBolsonOrigenId(loteAEditar.bolsonOrigenId || '');
       setNumeroBolsonOrigen(loteAEditar.numeroBolsonOrigen || loteAEditar.bolsonOrigenNro || '');
     } else {
       // Generar nuevo loteNro sugerido
@@ -278,6 +283,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       ordenProcesoId: ordenProcesoId,
       numeroOrdenMovimiento: selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined,
       silosOrigen: silosOrigen,
+      bolsonOrigenId: bolsonOrigenId || undefined,
       numeroBolsonOrigen: numeroBolsonOrigen.trim() || undefined,
       bolsonOrigenNro: numeroBolsonOrigen.trim() || undefined,
       historial: loteAEditar ? loteAEditar.historial : [
@@ -468,17 +474,23 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               return null;
             })()}
 
-            {/* N° de Bolsón de origen */}
+            {/* Bolsón de origen con Selector / Buscador */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                N° de Bolsón de Origen
-              </label>
-              <input
-                type="text"
-                value={numeroBolsonOrigen}
-                onChange={(e) => setNumeroBolsonOrigen(e.target.value)}
-                placeholder="Ej. B-04 / Bol-12"
-                className="w-full px-4 py-2 bg-white text-slate-800 font-mono text-sm font-bold rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
+              <BolsonSearchSelector
+                bolsones={bolsones}
+                selectedBolsonId={bolsonOrigenId}
+                selectedBolsonNro={numeroBolsonOrigen}
+                onSelectBolson={(bolson) => {
+                  if (bolson) {
+                    setBolsonOrigenId(bolson.id);
+                    setNumeroBolsonOrigen(bolson.numeroBolson);
+                  } else {
+                    setBolsonOrigenId('');
+                    setNumeroBolsonOrigen('');
+                  }
+                }}
+                label="Bolsón de Origen (Trazabilidad)"
+                placeholder="Buscar bolsón por N°, cliente, cultivo, variedad..."
               />
             </div>
           </div>
@@ -594,7 +606,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               <option value="Fundadora">Fundadora</option>
               <option value="Preba">Preba</option>
               <option value="Original">Original</option>
-              <option value="Primera">Primera</option>
+              <option value="Primu">Primu</option>
             </select>
           </div>
 
