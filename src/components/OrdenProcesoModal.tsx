@@ -765,17 +765,20 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
             {/* Estado */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Estado de la Orden *
+                Estado de la Orden (Modificación Manual) *
               </label>
               <select
                 value={estado}
                 onChange={(e) => setEstado(e.target.value as EstadoOrdenProceso)}
-                className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-semibold"
+                className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-semibold bg-white"
               >
                 <option value="SIN INICIAR">🔴 SIN INICIAR</option>
                 <option value="EN CURSO">🟡 EN CURSO</option>
                 <option value="TERMINADO">🟢 TERMINADO</option>
               </select>
+              <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                * El estado solo se modifica manualmente. Cumplir el objetivo deseado no cierra la orden de forma automática (el objetivo es aproximado y no vinculante).
+              </p>
             </div>
 
             {/* Datos de Eficiencia Operativa (Horas Hombre) */}

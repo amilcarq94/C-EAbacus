@@ -87,18 +87,11 @@ export default function App() {
         sumHechos = linkedLotes.reduce((acc, l) => acc + (l.stockBolsas || 0), 0);
       }
 
-      // Sugerencia/actualización automática de estado
-      let estadoCalc = ord.estado;
-      if (sumHechos >= ord.bbPedidos && ord.bbPedidos > 0 && ord.estado !== 'TERMINADO') {
-        estadoCalc = 'TERMINADO';
-      } else if (sumHechos > 0 && ord.estado === 'SIN INICIAR') {
-        estadoCalc = 'EN CURSO';
-      }
-
       return {
         ...ord,
         hechos: sumHechos,
-        estado: estadoCalc
+        // El estado únicamente se modifica manualmente; el objetivo es solo aproximado y no vinculante
+        estado: ord.estado
       };
     });
   }, [ordenesProceso, lotes]);
