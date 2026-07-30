@@ -107,7 +107,7 @@ export interface SiloExtraccion {
   kg?: number;
 }
 
-export type MotivoSalidaManual = 'Consumo a granel' | 'Manipulación' | 'Traslado a silo';
+export type MotivoSalidaManual = 'Consumo a granel' | 'Manipulación' | 'Traslado a silo' | 'Descontaminación varietal';
 
 export type TipoMovimientoSilo = 'INGRESO' | 'EGRESO_OP' | 'EGRESO_MANUAL' | 'EGRESO_LOTE' | 'EGRESO' | 'AJUSTE_ZERO';
 

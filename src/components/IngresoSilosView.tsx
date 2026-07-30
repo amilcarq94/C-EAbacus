@@ -166,14 +166,22 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [observacionesSalidaManual, setObservacionesSalidaManual] = useState('');
   const [errorSalidaManual, setErrorSalidaManual] = useState('');
 
-  const openModalSalidaManual = (siloId?: SiloId) => {
+  const openModalSalidaManual = (siloId?: SiloId, isDescontaminacion: boolean = false) => {
     const selectedSilo = siloId || activeSilo;
     setSiloSalidaManual(selectedSilo);
     setActiveSilo(selectedSilo);
     setFechaSalidaManual(new Date().toISOString().split('T')[0]);
-    setKgSalidaManual('');
-    setMotivoSalidaManual('Consumo a granel');
-    setDescontaminacionVarietal(false);
+    
+    const stockActual = getStockSilo(selectedSilo);
+    if (isDescontaminacion) {
+      setMotivoSalidaManual('Descontaminación varietal');
+      setDescontaminacionVarietal(true);
+      setKgSalidaManual(stockActual > 0 ? stockActual : '');
+    } else {
+      setMotivoSalidaManual('Consumo a granel');
+      setDescontaminacionVarietal(false);
+      setKgSalidaManual('');
+    }
     setObservacionesSalidaManual('');
     setErrorSalidaManual('');
     setShowModalSalidaManual(true);
@@ -316,7 +324,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     movsAsc.forEach((m, idx) => {
       if (m.tipo === 'INGRESO') {
         currentBalance += m.kg;
-      } else if (m.tipo === 'EGRESO_OP') {
+      } else if (m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')) {
         currentBalance = Math.max(0, currentBalance - m.kg);
       } else if (m.tipo === 'AJUSTE_ZERO') {
         currentBalance = 0;
@@ -538,7 +546,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     .map((m) => {
       if (m.tipo === 'INGRESO') {
         runningStock += m.kg;
-      } else if (m.tipo === 'EGRESO_OP') {
+      } else if (m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')) {
         runningStock = Math.max(0, runningStock - m.kg);
       } else if (m.tipo === 'AJUSTE_ZERO') {
         runningStock = 0;
@@ -651,6 +659,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     }
 
     const idMov = `SALIDA-MANUAL-${siloSalidaManual.replace(/\s+/g, '')}-${Date.now()}`;
+    const fichaActual = getSiloFichaData(siloSalidaManual);
+    const isDescontam = descontaminacionVarietal || motivoSalidaManual === 'Descontaminación varietal';
+
     const movSalida: MovimientoSilo = {
       id: idMov,
       siloId: siloSalidaManual,
@@ -658,7 +669,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       tipo: 'EGRESO_MANUAL',
       kg: Number(kgSalidaManual),
       motivoManual: motivoSalidaManual,
-      descontaminacionVarietal: descontaminacionVarietal,
+      descontaminacionVarietal: isDescontam,
+      cliente: fichaActual.cliente !== 'Sin asignación' && fichaActual.cliente !== 'Sin Asignar' ? fichaActual.cliente : undefined,
+      especie: fichaActual.especie !== 'Sin Cereal / Vacío' ? fichaActual.especie : undefined,
+      variedad: fichaActual.variedad !== '-' ? fichaActual.variedad : undefined,
+      categoria: fichaActual.categoria !== '-' ? fichaActual.categoria : undefined,
+      humedad: fichaActual.humedad !== '0.0' ? parseFloat(fichaActual.humedad) : undefined,
       observaciones: observacionesSalidaManual.trim(),
       usuario: currentUser.nombre,
     };
@@ -670,7 +686,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     }
 
     setShowModalSalidaManual(false);
-    setExportNoticeMsg(`Salida manual de ${Number(kgSalidaManual).toLocaleString('es-AR')} kg en ${siloSalidaManual} registrada correctamente.`);
+    setExportNoticeMsg(`Salida manual de ${Number(kgSalidaManual).toLocaleString('es-AR')} kg en ${siloSalidaManual} (${isDescontam ? 'Descontaminación Varietal' : motivoSalidaManual}) registrada correctamente.`);
     setTimeout(() => setExportNoticeMsg(''), 4000);
   };
 
@@ -1755,6 +1771,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                               Egreso por OP
                             </span>
                           )}
+                          {m.tipo === 'EGRESO_MANUAL' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-950 font-extrabold text-[10px] rounded border border-amber-300">
+                              <ArrowDownRight className="w-3 h-3 text-amber-600" />
+                              Salida Manual
+                            </span>
+                          )}
                           {m.tipo === 'AJUSTE_ZERO' && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-950 font-extrabold text-[10px] rounded border border-amber-300">
                               <RotateCcw className="w-3 h-3 text-amber-600" />
@@ -1783,6 +1805,31 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                               <div className="text-[10px] text-slate-500 mt-0.5">
                                 Campo: <strong className="text-slate-700 font-semibold">{m.campoOrigen || 'La Barrancosa'}</strong> · Bolsón N°: {m.bolsonOrigenNro || '-'} · Sector: {m.bolsonOrigenSector || '-'} · Depósito: {m.depositoOrigen || '-'}
                               </div>
+                            </div>
+                          )}
+
+                          {m.tipo === 'EGRESO_MANUAL' && (
+                            <div>
+                              <div className="font-bold text-amber-950 flex items-center gap-1.5 flex-wrap">
+                                <span>Salida Manual: {m.motivoManual || 'Manual'}</span>
+                                {m.descontaminacionVarietal && (
+                                  <span className="px-1.5 py-0.5 bg-purple-100 text-purple-900 border border-purple-300 text-[9px] font-extrabold rounded">
+                                    Descontaminación Varietal
+                                  </span>
+                                )}
+                              </div>
+                              {(m.cliente || m.especie || m.variedad) && (
+                                <div className="text-[10px] text-slate-700 font-medium mt-0.5">
+                                  Cereal descontado: <strong className="text-slate-900">{m.cliente || 'Sin cliente'}</strong> — {m.especie || 'Sin especie'} ({m.variedad || '-'})
+                                  {m.categoria && ` · Cat: ${m.categoria}`}
+                                  {m.humedad !== undefined && ` · Hum: ${m.humedad}%`}
+                                </div>
+                              )}
+                              {m.observaciones && (
+                                <div className="text-[10px] text-slate-500 italic mt-0.5">
+                                  Obs: {m.observaciones}
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1850,6 +1897,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       {/* Modal Salida Manual de Silo */}
       {showModalSalidaManual && (() => {
         const stockActualSilo = getStockSilo(siloSalidaManual);
+        const fichaSilo = getSiloFichaData(siloSalidaManual);
+        const isDescontamActive = descontaminacionVarietal || motivoSalidaManual === 'Descontaminación varietal';
+
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
             <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
@@ -1879,10 +1929,41 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               </div>
 
               <form onSubmit={handleSubmitSalidaManual} className="p-6 space-y-4 text-xs">
-                {/* Banner Stock Actual */}
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl flex items-center justify-between text-xs font-bold">
-                  <span>Stock Actual Disponible:</span>
-                  <span className="font-mono text-sm font-black">{stockActualSilo.toLocaleString('es-AR')} kg</span>
+                {/* Banner e Info de Cereal Almacenado */}
+                <div className="p-3.5 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 text-amber-950 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold border-b border-amber-200/80 pb-2">
+                    <span className="flex items-center gap-1.5 text-amber-900">
+                      <Warehouse className="w-4 h-4 text-amber-700" />
+                      Silo Seleccionado: <strong className="text-amber-950 font-serif">{siloSalidaManual}</strong>
+                    </span>
+                    <span className="font-mono text-sm font-black text-amber-900 bg-white px-2.5 py-0.5 rounded-lg border border-amber-300 shadow-2xs">
+                      {stockActualSilo.toLocaleString('es-AR')} kg
+                    </span>
+                  </div>
+
+                  {/* Datos del Cereal y Cliente actual */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700 pt-0.5">
+                    <div>
+                      <span className="text-slate-500 block font-semibold text-[10px]">Cliente:</span>
+                      <strong className="text-slate-900 font-bold">{fichaSilo.cliente}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block font-semibold text-[10px]">Especie / Variedad:</span>
+                      <strong className="text-slate-900 font-bold">{fichaSilo.especie} {fichaSilo.variedad !== '-' ? `(${fichaSilo.variedad})` : ''}</strong>
+                    </div>
+                    {fichaSilo.categoria !== '-' && (
+                      <div>
+                        <span className="text-slate-500 block font-semibold text-[10px]">Categoría:</span>
+                        <strong className="text-slate-800 font-bold">{fichaSilo.categoria}</strong>
+                      </div>
+                    )}
+                    {fichaSilo.humedad !== '0.0' && (
+                      <div>
+                        <span className="text-slate-500 block font-semibold text-[10px]">Humedad Promedio:</span>
+                        <strong className="text-blue-900 font-bold">{fichaSilo.humedad}%</strong>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {errorSalidaManual && (
@@ -1900,7 +1981,14 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                     </label>
                     <select
                       value={siloSalidaManual}
-                      onChange={(e) => setSiloSalidaManual(e.target.value as SiloId)}
+                      onChange={(e) => {
+                        const newSilo = e.target.value as SiloId;
+                        setSiloSalidaManual(newSilo);
+                        const newStock = getStockSilo(newSilo);
+                        if (descontaminacionVarietal || motivoSalidaManual === 'Descontaminación varietal') {
+                          setKgSalidaManual(newStock > 0 ? newStock : '');
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
                     >
                       {SILOS_DISPONIBLES.map((sId) => (
@@ -1927,9 +2015,21 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Kilos a Descontar */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                      Cantidad a Descontar (kg) *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold uppercase text-slate-700">
+                        Cantidad a Descontar (kg) *
+                      </label>
+                      {stockActualSilo > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setKgSalidaManual(stockActualSilo)}
+                          className="text-[10px] font-extrabold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 transition cursor-pointer"
+                          title="Cargar stock remanente total"
+                        >
+                          Remanente ({stockActualSilo.toLocaleString('es-AR')} kg)
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="number"
                       min={1}
@@ -1949,32 +2049,57 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                     </label>
                     <select
                       value={motivoSalidaManual}
-                      onChange={(e) => setMotivoSalidaManual(e.target.value as MotivoSalidaManual)}
+                      onChange={(e) => {
+                        const newMotivo = e.target.value as MotivoSalidaManual;
+                        setMotivoSalidaManual(newMotivo);
+                        if (newMotivo === 'Descontaminación varietal') {
+                          setDescontaminacionVarietal(true);
+                          if (stockActualSilo > 0) setKgSalidaManual(stockActualSilo);
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 outline-none"
                       required
                     >
                       <option value="Consumo a granel">Consumo a granel</option>
                       <option value="Manipulación">Manipulación</option>
                       <option value="Traslado a silo">Traslado a silo</option>
+                      <option value="Descontaminación varietal">Descontaminación varietal</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Checkbox Descontaminación Varietal */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="descontaminacionVarietal"
-                    checked={descontaminacionVarietal}
-                    onChange={(e) => setDescontaminacionVarietal(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
-                  />
-                  <label htmlFor="descontaminacionVarietal" className="text-xs font-bold text-slate-800 cursor-pointer select-none">
-                    Descontaminación Varietal
-                    <span className="block text-[10px] font-normal text-slate-500">
-                      Marcar si este movimiento corresponde a una limpieza / purga de variedad.
-                    </span>
-                  </label>
+                <div className={`p-3.5 rounded-xl border transition ${
+                  isDescontamActive
+                    ? 'bg-purple-50/90 border-purple-300 shadow-2xs'
+                    : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="descontaminacionVarietal"
+                      checked={isDescontamActive}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setDescontaminacionVarietal(checked);
+                        if (checked) {
+                          setMotivoSalidaManual('Descontaminación varietal');
+                          if (stockActualSilo > 0) setKgSalidaManual(stockActualSilo);
+                        } else {
+                          if (motivoSalidaManual === 'Descontaminación varietal') {
+                            setMotivoSalidaManual('Consumo a granel');
+                          }
+                        }
+                      }}
+                      className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer mt-0.5"
+                    />
+                    <label htmlFor="descontaminacionVarietal" className="text-xs font-bold text-slate-900 cursor-pointer select-none">
+                      Descontaminación Varietal / Limpieza de Silo
+                      <span className="block text-[11px] font-normal text-slate-600 mt-0.5">
+                        Registra la salida del stock remanente ({stockActualSilo.toLocaleString('es-AR')} kg) asociado a <strong className="text-slate-900 font-semibold">{fichaSilo.cliente}</strong> — <strong className="text-slate-900 font-semibold">{fichaSilo.especie} ({fichaSilo.variedad})</strong>.
+                      </span>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Observaciones */}
@@ -2118,672 +2243,161 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       {/* Modal Ficha Técnica del Silo */}
       {fichaModalSilo && (() => {
         const ficha = getSiloFichaData(fichaModalSilo);
+
+        // Formatear título del Header "SILO (N°)"
+        const siloTitle = ficha.siloId.trim().toUpperCase().startsWith('SILO')
+          ? ficha.siloId.trim().toUpperCase()
+          : `SILO ${ficha.siloId.trim().toUpperCase()}`;
+
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-4 overflow-hidden">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-4 overflow-auto">
             
-            {/* Estilo CSS especial para impresión garantizada en 1 sola hoja A4 */}
+            {/* Estilos CSS para Impresión Oficial A4 a escala 70% */}
             <style>{`
               @media print {
+                @page {
+                  size: A4 portrait;
+                  margin: 10mm;
+                }
                 html, body {
                   -webkit-print-color-adjust: exact !important;
                   print-color-adjust: exact !important;
                   background: #ffffff !important;
                   margin: 0 !important;
                   padding: 0 !important;
-                  height: 100% !important;
                 }
                 body * {
                   visibility: hidden !important;
                 }
-                #ficha-print-a4, #ficha-print-a4 * {
+                #ficha-silo-printable, #ficha-silo-printable * {
                   visibility: visible !important;
                 }
-                #ficha-print-a4 {
+                #ficha-silo-printable {
                   position: absolute !important;
                   left: 0 !important;
                   top: 0 !important;
                   width: 100% !important;
-                  max-width: 190mm !important;
-                  max-height: 275mm !important;
-                  margin: 0 auto !important;
+                  max-width: 180mm !important;
+                  transform: scale(0.70);
+                  transform-origin: top left;
+                  margin: 0 !important;
                   padding: 0 !important;
                   box-sizing: border-box !important;
                   background: #ffffff !important;
                   page-break-before: avoid !important;
                   page-break-after: avoid !important;
                   page-break-inside: avoid !important;
-                  overflow: hidden !important;
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
-                @page {
-                  size: A4 portrait;
-                  margin: 8mm;
+                  box-shadow: none !important;
+                  border: 1px solid #cbd5e1 !important;
                 }
               }
             `}</style>
 
-            {/* VISTA SOLO PARA IMPRESIÓN OFICIAL (1 HOJA TAMAÑO A4) */}
-            <div id="ficha-print-a4" className="hidden print:block text-slate-900 border-2 border-slate-300 rounded-2xl overflow-hidden bg-white shadow-none">
+            {/* Contenedor Modal de Pantalla */}
+            <div className="flex flex-col items-center gap-4 max-h-[95vh]">
               
-              {/* Header impreso */}
-              <div className="bg-slate-900 text-white p-4 flex justify-between items-center border-b border-slate-800">
-                <div>
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[8pt] font-black uppercase tracking-wider">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                    <span>AGROABACUS · PLANTA DE ACOPIO Y CLASIFICACIÓN</span>
-                  </div>
-                  <h2 className="text-lg font-black font-serif text-white flex items-center gap-2 mt-0.5">
-                    <span>FICHA TÉCNICA DE SILO · {ficha.siloId}</span>
-                    <span className="text-[7.5pt] px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-sans font-bold rounded-full">
-                      ACOPIO OFICIAL
-                    </span>
-                  </h2>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-1.5 bg-white rounded-xl flex flex-col items-center border border-slate-300 shrink-0">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-                        `AGROABACUS - SILO: ${ficha.siloId}\nCLIENTE: ${ficha.cliente}\nESPECIE: ${ficha.especie}\nVARIEDAD: ${ficha.variedad}\nSTOCK: ${ficha.stockKg} KG\nHUMEDAD: ${ficha.humedad}%\nFECHA: ${ficha.ultimoMovimiento}`
-                      )}`}
-                      alt={`QR ${ficha.siloId}`}
-                      className="w-20 h-20 object-contain"
-                    />
-                    <span className="text-[6.5pt] font-mono font-black text-slate-800 mt-1 uppercase tracking-wider">QR SILO {ficha.siloId}</span>
-                  </div>
-
-                  <div className="text-right text-[7.5pt] font-mono leading-tight text-slate-300">
-                    <div className="font-bold text-white">CONTROL DE STOCK Y CALIDAD</div>
-                    <div>FECHA DE EMISIÓN: {new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR').slice(0, 5)} HS</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Contenido impreso */}
-              <div className="p-4 bg-slate-50/50 space-y-3">
-                
-                {/* GRID 6 TARJETAS DE DATOS DE LA WEB APP */}
-                <div className="grid grid-cols-3 gap-2.5">
-                  
-                  {/* 1. SILO */}
-                  <div className="p-2.5 bg-white rounded-xl border border-slate-300 shadow-2xs">
-                    <span className="text-[7pt] font-extrabold uppercase text-slate-500 block">1. N° DE SILO</span>
-                    <span className="text-base font-serif font-black text-slate-900 leading-tight">{ficha.siloId}</span>
-                    <span className="text-[6.5pt] text-slate-500 block">Cap: 180.000 kg</span>
-                  </div>
-
-                  {/* 2. ESPECIE */}
-                  <div className="p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-300 shadow-2xs">
-                    <span className="text-[7pt] font-extrabold uppercase text-emerald-800 block">2. ESPECIE</span>
-                    <span className="text-sm font-bold text-emerald-950 leading-tight block truncate">{ficha.especie}</span>
-                    <span className="text-[6.5pt] text-emerald-700 block">Grano Clasificado</span>
-                  </div>
-
-                  {/* 3. CLIENTE */}
-                  <div className="p-2.5 bg-blue-50/90 rounded-xl border border-blue-300 shadow-2xs">
-                    <span className="text-[7pt] font-extrabold uppercase text-blue-800 block">3. CLIENTE</span>
-                    <span className="text-sm font-bold text-blue-950 leading-tight block truncate">{ficha.cliente}</span>
-                    <span className="text-[6.5pt] text-blue-700 block">Titular Registrado</span>
-                  </div>
-
-                  {/* 4. VARIEDAD */}
-                  <div className="p-2.5 bg-purple-50/90 rounded-xl border border-purple-300 shadow-2xs">
-                    <span className="text-[7pt] font-extrabold uppercase text-purple-800 block">4. VARIEDAD / CAT</span>
-                    <span className="text-sm font-bold text-purple-950 leading-tight block uppercase truncate">{ficha.variedad}</span>
-                    <span className="text-[6.5pt] text-purple-700 block">Categoría: {ficha.categoria}</span>
-                  </div>
-
-                  {/* 5. STOCK TOTAL */}
-                  <div className="p-2.5 bg-amber-50/90 rounded-xl border border-amber-300 shadow-2xs">
-                    <span className="text-[7pt] font-extrabold uppercase text-amber-900 block">5. KG TOTALES</span>
-                    <span className="text-sm font-black font-mono text-amber-950 leading-tight block">{ficha.stockKg.toLocaleString('es-AR')} kg</span>
-                    <span className="text-[6.5pt] text-amber-800 font-bold block">{ficha.stockTn} Tn ({ficha.pctOcupacion}%)</span>
-                  </div>
-
-                  {/* 6. HUMEDAD */}
-                  <div className="p-2.5 bg-cyan-50/90 rounded-xl border border-cyan-300 shadow-2xs">
-                    <span className="text-[7pt] font-extrabold uppercase text-cyan-900 block">6. % HUMEDAD</span>
-                    <span className="text-base font-black font-mono text-cyan-950 leading-tight block">{ficha.humedad}%</span>
-                    <span className="text-[6.5pt] text-cyan-800 block">Humedad de Ingreso</span>
-                  </div>
-
-                </div>
-
-                {/* Barra de Ocupación Visual */}
-                <div className="bg-white border border-slate-300 rounded-xl p-2.5 flex justify-between items-center gap-3">
-                  <div className="flex-1">
-                    <div className="flex justify-between text-[7pt] font-bold text-slate-700 mb-1">
-                      <span>Capacidad y Estado de Ocupación de {ficha.siloId}</span>
-                      <span>{ficha.stockKg.toLocaleString('es-AR')} / 180.000 kg ({ficha.pctOcupacion}%)</span>
-                    </div>
-                    <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden border border-slate-300">
-                      <div
-                        className={`h-full ${
-                          Number(ficha.pctOcupacion) >= 100
-                            ? 'bg-red-600'
-                            : Number(ficha.pctOcupacion) >= 83.3
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-600'
-                        }`}
-                        style={{ width: `${Math.min(100, Number(ficha.pctOcupacion))}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tabla de Cargas Recientes */}
-                <div className="bg-white border border-slate-300 rounded-xl p-2.5">
-                  <div className="text-[7.5pt] font-bold text-slate-800 uppercase tracking-wider mb-1 flex justify-between">
-                    <span>Detalle de Cargas e Ingresos Activos ({ficha.totalIngresos} registros)</span>
-                    <span className="text-[6.5pt] text-slate-500 font-normal">Última Carga: {ficha.ultimoMovimiento}</span>
-                  </div>
-                  <table className="w-full text-left text-[7pt] border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[6.5pt] border-b border-slate-300">
-                        <th className="py-1 px-1.5">Fecha</th>
-                        <th className="py-1 px-1.5">Cliente</th>
-                        <th className="py-1 px-1.5">Especie / Variedad</th>
-                        <th className="py-1 px-1.5">Origen / Bolsón</th>
-                        <th className="py-1 px-1.5 text-right">Kg Carga</th>
-                        <th className="py-1 px-1.5 text-right">% Humedad</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
-                      {ficha.ingresosActivos.slice(0, 5).map((ing) => (
-                        <tr key={ing.id}>
-                          <td className="py-1 px-1.5 font-mono text-slate-600">{ing.fecha}</td>
-                          <td className="py-1 px-1.5 font-bold">{ing.cliente}</td>
-                          <td className="py-1 px-1.5">{ing.especie} ({ing.variedad})</td>
-                          <td className="py-1 px-1.5 text-[6.5pt] text-slate-600">{ing.campoOrigen || '-'} {ing.bolsonOrigenNro ? `· ${ing.bolsonOrigenNro}` : ''}</td>
-                          <td className="py-1 px-1.5 text-right font-mono font-bold text-emerald-700">+{ing.kg.toLocaleString('es-AR')} kg</td>
-                          <td className="py-1 px-1.5 text-right font-mono font-bold text-blue-800">{ing.humedad !== undefined ? `${ing.humedad}%` : '13.5%'}</td>
-                        </tr>
-                      ))}
-                      {ficha.ingresosActivos.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="text-center py-2 text-slate-400 italic">Sin ingresos activos registrados.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Firmas de Control */}
-                <div className="pt-4 grid grid-cols-2 gap-12 text-[7pt] text-center text-slate-700 font-bold">
-                  <div>
-                    <div className="border-b border-slate-400 mb-1 h-5"></div>
-                    <span>FIRMA Y SELLO OPERARIO ACOPIO</span>
-                  </div>
-                  <div>
-                    <div className="border-b border-slate-400 mb-1 h-5"></div>
-                    <span>RESPONSABLE TÉCNICO PLANTA</span>
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* VISTA DIGITAL PANTALLA (MODAL FIJO Y 100% VISIBLE EN PANTALLA AL 100% DE TAMAÑO) */}
-            <div className="bg-white w-[980px] max-w-[96vw] max-h-[92vh] flex flex-col rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 print:hidden">
-              
-              {/* Header Ficha Modal con Selector de Vista */}
-              <div className="shrink-0 bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white p-3.5 sm:p-4 relative">
-                <button
-                  onClick={() => setFichaModalSilo(null)}
-                  className="absolute top-3.5 right-3.5 p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition cursor-pointer"
-                  title="Cerrar Ficha"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
-                <div className="flex items-center gap-2 text-emerald-400 font-mono text-[9px] font-black uppercase tracking-widest mb-0.5">
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Planta Clasificadora y de Acopio AgroAbacus</span>
-                </div>
-                
-                <h2 className="text-xl sm:text-2xl font-black font-serif text-white flex items-center gap-2.5">
-                  <span>FICHA TÉCNICA · {ficha.siloId}</span>
-                  <span className="text-[10px] px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-sans font-bold rounded-full">
-                    {fichaModalMode === 'impresion' ? 'VISTA IMPRESIÓN (A4)' : 'FICHA DIGITAL WEB'}
-                  </span>
-                </h2>
-                
-                <p className="text-[11px] text-slate-300 mt-0.5 font-sans">
-                  Informe de control de acopio, calidad de grano, varietal y trazabilidad de silo.
-                </p>
-
-                {/* Pestañas de Modo de Vista */}
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/10">
+              {/* Barra de Acciones Superior (imprimir/cerrar) */}
+              <div className="flex items-center justify-between w-full max-w-[480px] bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-lg border border-slate-800 print:hidden">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Ficha de Silo</span>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setFichaModalMode('digital')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      fichaModalMode === 'digital'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                    }`}
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Vista Digital Web</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFichaModalMode('impresion')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      fichaModalMode === 'impresion'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                    }`}
+                    onClick={() => window.print()}
+                    className="px-3.5 py-1.5 bg-[#005e38] hover:bg-[#004d2e] text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
                   >
                     <Printer className="w-3.5 h-3.5" />
-                    <span>Vista de Impresión (A4 - 1 Hoja)</span>
+                    <span>Imprimir</span>
                   </button>
-                </div>
-              </div>
-
-              {/* MODO VISTA DE IMPRESIÓN (HOJA A4 PREVIEW) */}
-              {fichaModalMode === 'impresion' ? (
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200/80 space-y-4">
-                  
-                  {/* Banner de Acción de Impresión */}
-                  <div className="bg-emerald-950 text-white p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm border border-emerald-800">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-emerald-800 rounded-xl text-emerald-300">
-                        <Printer className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <div className="font-extrabold text-xs text-emerald-200 uppercase tracking-wider">Vista Previa de Impresión A4</div>
-                        <div className="text-xs text-slate-200">Diseñada para encajar exactamente en 1 única hoja de papel A4.</div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => window.print()}
-                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition flex items-center gap-2 shadow-md shrink-0 active:scale-95 cursor-pointer"
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span>Imprimir Ficha Ahora</span>
-                    </button>
-                  </div>
-
-                  {/* HOJA A4 DE PREVISUALIZACIÓN */}
-                  <div className="bg-white rounded-2xl shadow-xl border border-slate-300 p-6 max-w-[210mm] w-full mx-auto text-slate-900 space-y-4 font-sans">
-                    
-                    {/* Encabezado A4 */}
-                    <div className="border-b-2 border-slate-900 pb-3 flex justify-between items-center">
-                      <div>
-                        <div className="font-mono text-[9px] font-black uppercase text-emerald-800 tracking-wider">AGROABACUS · PLANTA DE ACOPIO Y CLASIFICACIÓN</div>
-                        <h3 className="text-xl font-black font-serif text-slate-900">FICHA TÉCNICA DE CONTROL DE SILO: {ficha.siloId}</h3>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="p-1.5 bg-white border-2 border-slate-900 rounded-xl flex flex-col items-center shrink-0 shadow-sm">
-                          <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-                              `AGROABACUS - SILO: ${ficha.siloId}\nCLIENTE: ${ficha.cliente}\nESPECIE: ${ficha.especie}\nVARIEDAD: ${ficha.variedad}\nSTOCK: ${ficha.stockKg} KG\nHUMEDAD: ${ficha.humedad}%\nFECHA: ${ficha.ultimoMovimiento}`
-                            )}`}
-                            alt={`QR ${ficha.siloId}`}
-                            className="w-24 h-24 object-contain"
-                          />
-                          <span className="text-[6.5pt] font-mono font-black text-slate-900 mt-1 uppercase tracking-wider">QR TRAZABILIDAD SILO</span>
-                        </div>
-                        <div className="text-right text-[9px] font-mono leading-tight text-slate-600">
-                          <div className="font-bold text-slate-900">ACOPIO OFICIAL</div>
-                          <div>EMISIÓN: {new Date().toLocaleDateString('es-AR')} {new Date().toLocaleTimeString('es-AR').slice(0, 5)} HS</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Grid 6 Datos A4 */}
-                    <div className="grid grid-cols-3 gap-3 text-xs">
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                        <span className="text-[9px] font-bold uppercase text-slate-500 block">1. N° DE SILO</span>
-                        <span className="text-base font-serif font-black text-slate-900 block">{ficha.siloId}</span>
-                        <span className="text-[9px] text-slate-500 block">Cap: 180.000 kg</span>
-                      </div>
-                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-                        <span className="text-[9px] font-bold uppercase text-emerald-800 block">2. ESPECIE</span>
-                        <span className="text-sm font-bold text-emerald-950 block truncate">{ficha.especie}</span>
-                        <span className="text-[9px] text-emerald-700 block">Grano Clasificado</span>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
-                        <span className="text-[9px] font-bold uppercase text-blue-800 block">3. CLIENTE</span>
-                        <span className="text-sm font-bold text-blue-950 block truncate">{ficha.cliente}</span>
-                        <span className="text-[9px] text-blue-700 block">Titular Registrado</span>
-                      </div>
-                      <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
-                        <span className="text-[9px] font-bold uppercase text-purple-800 block">4. VARIEDAD / CAT</span>
-                        <span className="text-sm font-bold text-purple-950 block uppercase truncate">{ficha.variedad} ({ficha.categoria})</span>
-                        <span className="text-[9px] text-purple-700 block">Categoría Activa</span>
-                      </div>
-                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                        <span className="text-[9px] font-bold uppercase text-amber-900 block">5. KG TOTALES</span>
-                        <span className="text-sm font-black font-mono text-amber-950 block">{ficha.stockKg.toLocaleString('es-AR')} kg</span>
-                        <span className="text-[9px] text-amber-800 block">{ficha.stockTn} Tn ({ficha.pctOcupacion}%)</span>
-                      </div>
-                      <div className="p-3 bg-cyan-50 rounded-xl border border-cyan-200">
-                        <span className="text-[9px] font-bold uppercase text-cyan-900 block">6. % HUMEDAD</span>
-                        <span className="text-base font-black font-mono text-cyan-950 block">{ficha.humedad}%</span>
-                        <span className="text-[9px] text-cyan-800 block">Humedad de Ingreso</span>
-                      </div>
-                    </div>
-
-                    {/* Barra de Ocupación */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
-                      <div className="flex justify-between text-xs font-bold text-slate-700">
-                        <span>Estado de Capacidad de {ficha.siloId}</span>
-                        <span>{ficha.stockKg.toLocaleString('es-AR')} / 180.000 kg ({ficha.pctOcupacion}%)</span>
-                      </div>
-                      <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden border border-slate-300">
-                        <div
-                          className={`h-full ${
-                            Number(ficha.pctOcupacion) >= 100
-                              ? 'bg-red-600'
-                              : Number(ficha.pctOcupacion) >= 83.3
-                              ? 'bg-amber-500'
-                              : 'bg-emerald-600'
-                          }`}
-                          style={{ width: `${Math.min(100, Number(ficha.pctOcupacion))}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tabla Cargas */}
-                    <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-                      <div className="bg-slate-100 px-3 py-2 font-bold uppercase text-[10px] text-slate-700 border-b border-slate-200 flex justify-between">
-                        <span>Ingresos y Cargas Registradas ({ficha.totalIngresos})</span>
-                        <span>Último: {ficha.ultimoMovimiento}</span>
-                      </div>
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-600 font-bold uppercase text-[9px] border-b border-slate-200">
-                            <th className="py-1.5 px-3">Fecha</th>
-                            <th className="py-1.5 px-3">Cliente</th>
-                            <th className="py-1.5 px-3">Especie / Variedad</th>
-                            <th className="py-1.5 px-3">Origen</th>
-                            <th className="py-1.5 px-3 text-right">Kg Carga</th>
-                            <th className="py-1.5 px-3 text-right">% Hum.</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-800 font-medium text-[11px]">
-                          {ficha.ingresosActivos.slice(0, 4).map((ing) => (
-                            <tr key={ing.id}>
-                              <td className="py-1.5 px-3 font-mono text-slate-600">{ing.fecha}</td>
-                              <td className="py-1.5 px-3 font-bold">{ing.cliente}</td>
-                              <td className="py-1.5 px-3">{ing.especie} ({ing.variedad})</td>
-                              <td className="py-1.5 px-3 text-slate-600 text-[10px]">{ing.campoOrigen || '-'} {ing.bolsonOrigenNro ? `· ${ing.bolsonOrigenNro}` : ''}</td>
-                              <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">+{ing.kg.toLocaleString('es-AR')} kg</td>
-                              <td className="py-1.5 px-3 text-right font-mono font-bold text-blue-800">{ing.humedad !== undefined ? `${ing.humedad}%` : '13.5%'}</td>
-                            </tr>
-                          ))}
-                          {ficha.ingresosActivos.length === 0 && (
-                            <tr>
-                              <td colSpan={6} className="text-center py-3 text-slate-400 italic">Sin ingresos activos registrados.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Firmas de Control */}
-                    <div className="pt-6 grid grid-cols-2 gap-12 text-xs text-center text-slate-700 font-bold">
-                      <div>
-                        <div className="border-b-2 border-slate-400 mb-1 h-6"></div>
-                        <span className="uppercase text-[10px]">FIRMA OPERARIO ACOPIO</span>
-                      </div>
-                      <div>
-                        <div className="border-b-2 border-slate-400 mb-1 h-6"></div>
-                        <span className="uppercase text-[10px]">RESPONSABLE TÉCNICO PLANTA</span>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              ) : (
-                /* BODY MODO DIGITAL WEB - OPTIMIZADO PARA VISIBILIDAD 100% EN PANTALLA */
-                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs bg-slate-50/50">
-                  
-                  {/* GRID 6 TARJETAS EN LÍNEA / DISTRIBUCIÓN HORIZONTAL */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-                    
-                    {/* 1. NÚMERO DE SILO */}
-                    <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between">
-                      <span className="text-[9px] font-extrabold uppercase text-slate-500 block">
-                        1. N° de Silo
-                      </span>
-                      <span className="text-lg font-serif font-black text-slate-900 my-0.5 block">
-                        {ficha.siloId}
-                      </span>
-                      <span className="text-[9px] text-slate-500 font-medium">Cap: 180 Tn</span>
-                    </div>
-
-                    {/* 2. ESPECIE */}
-                    <div className="p-2.5 bg-emerald-50/70 rounded-xl border border-emerald-200 flex flex-col justify-between">
-                      <span className="text-[9px] font-extrabold uppercase text-emerald-800 block">
-                        2. Especie
-                      </span>
-                      <span className="text-sm font-bold text-emerald-950 my-0.5 block truncate" title={ficha.especie}>
-                        {ficha.especie}
-                      </span>
-                      <span className="text-[9px] text-emerald-700 font-medium">Clasificación activa</span>
-                    </div>
-
-                    {/* 3. CLIENTE */}
-                    <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-200 flex flex-col justify-between">
-                      <span className="text-[9px] font-extrabold uppercase text-blue-800 block">
-                        3. Cliente
-                      </span>
-                      <span className="text-sm font-bold text-blue-950 my-0.5 block truncate" title={ficha.cliente}>
-                        {ficha.cliente}
-                      </span>
-                      <span className="text-[9px] text-blue-700 font-medium">Titular registrado</span>
-                    </div>
-
-                    {/* 4. VARIEDAD */}
-                    <div className="p-2.5 bg-purple-50/70 rounded-xl border border-purple-200 flex flex-col justify-between">
-                      <span className="text-[9px] font-extrabold uppercase text-purple-800 block">
-                        4. Variedad
-                      </span>
-                      <span className="text-sm font-bold text-purple-950 my-0.5 block uppercase truncate" title={ficha.variedad}>
-                        {ficha.variedad}
-                      </span>
-                      <span className="text-[9px] text-purple-700 font-medium">Cat: {ficha.categoria}</span>
-                    </div>
-
-                    {/* 5. KG TOTALES */}
-                    <div className="p-2.5 bg-amber-50/80 rounded-xl border border-amber-200 flex flex-col justify-between">
-                      <span className="text-[9px] font-extrabold uppercase text-amber-900 block">
-                        5. Kg Totales
-                      </span>
-                      <span className="text-sm font-black font-mono text-amber-950 my-0.5 block">
-                        {ficha.stockKg.toLocaleString('es-AR')} kg
-                      </span>
-                      <span className="text-[9px] text-amber-800 font-bold">
-                        {ficha.stockTn} Tn ({ficha.pctOcupacion}%)
-                      </span>
-                    </div>
-
-                    {/* 6. HUMEDAD */}
-                    <div className="p-2.5 bg-cyan-50/80 rounded-xl border border-cyan-200 flex flex-col justify-between">
-                      <span className="text-[9px] font-extrabold uppercase text-cyan-900 block flex items-center gap-1">
-                        <Droplets className="w-3 h-3 text-cyan-600" /> 6. % Humedad
-                      </span>
-                      <span className="text-lg font-black font-mono text-cyan-950 my-0.5 block">
-                        {ficha.humedad}%
-                      </span>
-                      <span className="text-[9px] text-cyan-800 font-medium">Ingreso promedio</span>
-                    </div>
-
-                  </div>
-
-                  {/* ROW DE DOS COLUMNAS: QR TRAZABILIDAD + ESTADO DE CAPACIDAD Y OCUPACIÓN */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                    
-                    {/* CÓDIGO QR TRAZABILIDAD (4 COLS) */}
-                    <div className="md:col-span-5 p-3.5 bg-slate-900 text-white rounded-2xl border border-slate-800 flex items-center justify-between gap-3 shadow-2xs">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[9px] font-bold uppercase text-emerald-400 flex items-center gap-1">
-                          <QrCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> QR Trazabilidad Digital
-                        </span>
-                        <span className="text-xs font-extrabold text-white block mt-1">Ficha Técnica {ficha.siloId}</span>
-                        <p className="text-[9.5px] text-slate-300 mt-1 line-clamp-2">
-                          Escaneo directo para verificación de stock, cliente, especie y humedad.
-                        </p>
-                      </div>
-                      <div className="p-1.5 bg-white rounded-xl shrink-0 border border-emerald-500 shadow-xs flex flex-col items-center">
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-                            `AGROABACUS - SILO: ${ficha.siloId}\nCLIENTE: ${ficha.cliente}\nESPECIE: ${ficha.especie}\nVARIEDAD: ${ficha.variedad}\nSTOCK: ${ficha.stockKg} KG\nHUMEDAD: ${ficha.humedad}%\nFECHA: ${ficha.ultimoMovimiento}`
-                          )}`}
-                          alt={`QR ${ficha.siloId}`}
-                          className="w-20 h-20 object-contain"
-                        />
-                        <span className="text-[6pt] font-mono font-black text-slate-800 mt-0.5 uppercase">QR {ficha.siloId}</span>
-                      </div>
-                    </div>
-
-                    {/* BARRA DE OCUPACIÓN Y ESTADO DE CAPACIDAD (7 COLS) */}
-                    <div className="md:col-span-7 bg-white border border-slate-200 rounded-2xl p-3.5 flex flex-col justify-center space-y-2 shadow-2xs">
-                      <div className="flex justify-between items-center text-xs font-bold text-slate-800">
-                        <span className="flex items-center gap-1.5">
-                          <Warehouse className="w-4 h-4 text-emerald-700" />
-                          Estado de Capacidad y Ocupación · {ficha.siloId}
-                        </span>
-                        <span className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
-                          {ficha.stockKg.toLocaleString('es-AR')} / 180.000 kg ({ficha.pctOcupacion}%)
-                        </span>
-                      </div>
-                      
-                      <div className="w-full bg-slate-100 h-3.5 rounded-full overflow-hidden border border-slate-200">
-                        <div
-                          className={`h-full transition-all duration-500 ${
-                            Number(ficha.pctOcupacion) >= 100
-                              ? 'bg-red-600'
-                              : Number(ficha.pctOcupacion) >= 83.3
-                              ? 'bg-amber-500'
-                              : 'bg-emerald-600'
-                          }`}
-                          style={{ width: `${Math.min(100, Number(ficha.pctOcupacion))}%` }}
-                        />
-                      </div>
-
-                      <div className="flex justify-between items-center text-[10px] text-slate-500 font-medium pt-0.5">
-                        <span>Disponible: {Math.max(0, 180000 - ficha.stockKg).toLocaleString('es-AR')} kg</span>
-                        <span>Último Ingreso: <strong className="text-slate-700">{ficha.ultimoMovimiento}</strong></span>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* TABLA DE CARGAS E INGRESOS REGISTRADOS */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                        <History className="w-3.5 h-3.5 text-emerald-700" />
-                        Detalle de Ingresos Registrados en Silo ({ficha.totalIngresos} cargas)
-                      </h4>
-                      <span className="text-[10px] text-slate-400 font-mono">Resumen Trazable Activo</span>
-                    </div>
-
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-100 text-slate-700 uppercase text-[9px] font-bold">
-                          <tr>
-                            <th className="py-2 px-3">Fecha</th>
-                            <th className="py-2 px-3">Cliente</th>
-                            <th className="py-2 px-3">Especie / Variedad</th>
-                            <th className="py-2 px-3">Origen / Bolsón</th>
-                            <th className="py-2 px-3 text-right">Kg Carga</th>
-                            <th className="py-2 px-3 text-right">% Humedad</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium">
-                          {ficha.ingresosActivos.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="py-4 text-center text-slate-400 italic">
-                                Sin cargas activas registradas en este silo.
-                              </td>
-                            </tr>
-                          ) : (
-                            ficha.ingresosActivos.map((ing) => (
-                              <tr key={ing.id} className="hover:bg-slate-50">
-                                <td className="py-1.5 px-3 font-mono text-slate-600">{ing.fecha}</td>
-                                <td className="py-1.5 px-3 font-bold text-slate-900">{ing.cliente}</td>
-                                <td className="py-1.5 px-3">
-                                  <span className="font-semibold text-slate-800">{ing.especie}</span>
-                                  <span className="text-[10px] text-slate-500 ml-1">({ing.variedad})</span>
-                                </td>
-                                <td className="py-1.5 px-3 text-[10px] text-slate-600">
-                                  {ing.campoOrigen} {ing.bolsonOrigenNro ? `· ${ing.bolsonOrigenNro}` : ''}
-                                </td>
-                                <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
-                                  +{ing.kg.toLocaleString('es-AR')} kg
-                                </td>
-                                <td className="py-1.5 px-3 text-right font-mono font-extrabold text-blue-800">
-                                  {ing.humedad !== undefined ? `${ing.humedad}%` : '13.5%'}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
-              {/* Footer Ficha */}
-              <div className="shrink-0 bg-slate-100 px-5 py-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                <div className="text-[10px] text-slate-500 font-medium">
-                  AgroAbacus Software · Ficha de Control Técnico de Silos
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFichaModalMode('impresion');
-                      setTimeout(() => window.print(), 100);
-                    }}
-                    className="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Imprimir Ficha (1 Hoja A4)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handlePrintSiloQrLabel(ficha)}
-                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-400 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs border border-slate-700 cursor-pointer"
-                  >
-                    <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Imprimir Etiqueta QR</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleExportFichaCSV(ficha)}
-                    className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Exportar CSV</span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => setFichaModalSilo(null)}
-                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer"
+                    className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition cursor-pointer"
+                    title="Cerrar"
                   >
-                    Cerrar
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
+              {/* TARJETA DE FICHA DE SILO (TAMAÑO FIJO, NO RESPONSIVE, 100% VISIBLE EN PANTALLA) */}
+              <div
+                id="ficha-silo-printable"
+                className="w-[480px] min-h-[580px] bg-white rounded-2xl border border-slate-300 shadow-2xl overflow-hidden flex flex-col text-left font-sans"
+              >
+                {/* Header verde #005e38, título "SILO (N°)" en blanco, negrita, fuente grande, sin subtítulo */}
+                <div className="bg-[#005e38] text-white px-8 py-6 text-left shrink-0">
+                  <h2 className="text-3xl font-black text-white tracking-tight uppercase">
+                    {siloTitle}
+                  </h2>
+                </div>
+
+                {/* Bloque de datos alineado a la izquierda, con margen interno uniforme respecto al borde de la ficha */}
+                <div className="p-8 flex flex-col justify-between flex-1 space-y-6">
+                  
+                  {/* Cliente y Especie arriba del bloque */}
+                  <div className="space-y-4">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        Cliente
+                      </span>
+                      <div className="text-2xl font-bold text-slate-900 leading-tight">
+                        {ficha.cliente}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        Especie
+                      </span>
+                      <div className="text-2xl font-bold text-[#005e38] leading-tight">
+                        {ficha.especie}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Categoría, Kg en stock y Humedad agrupados en el medio, cada uno en su línea */}
+                  <div className="space-y-4 py-1">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        Categoría
+                      </span>
+                      <div className="text-base font-medium text-slate-800">
+                        {ficha.categoria}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        Kg en stock
+                      </span>
+                      <div className="text-base font-bold text-slate-900 font-mono">
+                        {ficha.stockKg.toLocaleString('es-AR')} kg
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        Humedad
+                      </span>
+                      <div className="text-base font-medium text-slate-800 font-mono">
+                        {ficha.humedad}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fecha de stock al pie, separada del resto con una línea divisoria sutil */}
+                  <div className="pt-4 border-t border-slate-200 mt-auto">
+                    <div className="text-xs text-slate-500 font-normal">
+                      Fecha de stock: <span className="font-mono text-slate-700 font-medium">{ficha.ultimoMovimiento}</span>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
             </div>
+
           </div>
         );
       })()}
@@ -3008,7 +2622,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 ) : (
                   movimientosFiltrados.map((mov) => {
                     const isIngreso = mov.tipo === 'INGRESO';
-                    const isEgreso = mov.tipo === 'EGRESO_OP';
+                    const isEgresoOP = mov.tipo === 'EGRESO_OP';
+                    const isEgresoManual = mov.tipo === 'EGRESO_MANUAL';
+                    const isEgreso = isEgresoOP || isEgresoManual;
                     const isAjuste = mov.tipo === 'AJUSTE_ZERO';
 
                     return (
@@ -3031,10 +2647,16 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                                 INGRESO ACOPIO
                               </span>
                             )}
-                            {isEgreso && (
+                            {isEgresoOP && (
                               <span className="p-1.5 bg-amber-100 text-amber-900 rounded-lg flex items-center gap-1 text-xs font-black">
                                 <ArrowUpRight className="w-4 h-4 text-amber-700" />
                                 EGRESO A OP
+                              </span>
+                            )}
+                            {isEgresoManual && (
+                              <span className="p-1.5 bg-amber-100 text-amber-900 rounded-lg flex items-center gap-1 text-xs font-black">
+                                <ArrowUpRight className="w-4 h-4 text-amber-700" />
+                                SALIDA MANUAL
                               </span>
                             )}
                             {isAjuste && (
@@ -3094,7 +2716,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                           </div>
                         )}
 
-                        {isEgreso && (
+                        {isEgresoOP && (
                           <div className="space-y-1.5 text-xs">
                             <div className="flex items-center justify-between text-slate-800 font-bold">
                               <span>Orden de Proceso: <strong className="font-mono text-amber-900">{mov.numeroOrdenProceso || mov.ordenProcesoId || 'N/A'}</strong></span>
@@ -3105,6 +2727,29 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                             <p className="text-[11px] text-slate-600">
                               Cliente: <strong>{mov.cliente || 'San Diego Semilla'}</strong> · Cereal: {mov.especie || 'Soja'} {mov.variedad ? `(${mov.variedad})` : ''}
                             </p>
+                          </div>
+                        )}
+
+                        {isEgresoManual && (
+                          <div className="space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between text-slate-800 font-bold">
+                              <span>Motivo: <strong className="text-amber-900">{mov.motivoManual || 'Manual'}</strong></span>
+                              {mov.descontaminacionVarietal && (
+                                <span className="text-purple-900 bg-purple-100 px-2 py-0.5 rounded border border-purple-300 text-[10px] font-extrabold">
+                                  Descontaminación Varietal
+                                </span>
+                              )}
+                            </div>
+                            {(mov.cliente || mov.especie || mov.variedad) && (
+                              <p className="text-[11px] text-slate-700 font-medium">
+                                Cliente: <strong className="text-slate-900">{mov.cliente || '-'}</strong> · Especie: <strong className="text-slate-900">{mov.especie || '-'}</strong> ({mov.variedad || '-'})
+                              </p>
+                            )}
+                            {mov.observaciones && (
+                              <p className="text-[10px] text-slate-500 italic">
+                                Obs: {mov.observaciones}
+                              </p>
+                            )}
                           </div>
                         )}
 
