@@ -10,7 +10,8 @@ import { SILOS_DISPONIBLES } from './SilosSelector';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { findExistingChofer, mergeChoferData } from '../utils/choferes';
-import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload } from 'lucide-react';
+import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit } from 'lucide-react';
+import { ClienteSelect } from './ClienteSelect';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
 import {
   ResponsiveContainer,
@@ -96,6 +97,7 @@ interface IngresoSilosViewProps {
   onImportChoferes?: (choferes: Chofer[]) => void;
   onPonerEnCero?: (siloId: SiloId, fecha: string, usuario: string, motivo: string, kgAnterior: number) => void;
   onPonerSiloEnCero?: (siloId: SiloId, fecha: string, usuario: string, motivo: string, kgAnterior: number) => void;
+  onEditarMovimientoSilo?: (movimiento: MovimientoSilo) => void;
   onEliminarMovimientoSilo?: (movimientoId: string, siloId: SiloId) => void;
 }
 
@@ -112,6 +114,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   onImportChoferes,
   onPonerEnCero,
   onPonerSiloEnCero,
+  onEditarMovimientoSilo,
   onEliminarMovimientoSilo,
 }) => {
   // Silo activo seleccionado (Silo 1 a Silo 6)
@@ -234,6 +237,101 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [usuarioEliminar, setUsuarioEliminar] = useState('Amilcar Quiroz');
   const [claveEliminar, setClaveEliminar] = useState('');
   const [errorEliminar, setErrorEliminar] = useState('');
+
+  // Estado para el Modal de Edición Manual de Movimientos de Silos
+  const [movimientoAEditar, setMovimientoAEditar] = useState<MovimientoSilo | null>(null);
+  const [editSiloId, setEditSiloId] = useState<SiloId>('Silo 1');
+  const [editFecha, setEditFecha] = useState('');
+  const [editTipo, setEditTipo] = useState<'INGRESO' | 'EGRESO_MANUAL' | 'EGRESO_OP' | 'EGRESO_LOTE' | 'AJUSTE_ZERO'>('INGRESO');
+  const [editKg, setEditKg] = useState<number | ''>('');
+  const [editCliente, setEditCliente] = useState('');
+  const [editEspecie, setEditEspecie] = useState('');
+  const [editVariedad, setEditVariedad] = useState('');
+  const [editCategoria, setEditCategoria] = useState('');
+  const [editHumedad, setEditHumedad] = useState<number | ''>('');
+  const [editCampoOrigen, setEditCampoOrigen] = useState('');
+  const [editBolsonOrigenNro, setEditBolsonOrigenNro] = useState('');
+  const [editBolsonOrigenSector, setEditBolsonOrigenSector] = useState('');
+  const [editDepositoOrigen, setEditDepositoOrigen] = useState('');
+  const [editChofer, setEditChofer] = useState('');
+  const [editCuit, setEditCuit] = useState('');
+  const [editPatentes, setEditPatentes] = useState('');
+  const [editTransporte, setEditTransporte] = useState('');
+  const [editMotivoManual, setEditMotivoManual] = useState('');
+  const [editDescontaminacionVarietal, setEditDescontaminacionVarietal] = useState(false);
+  const [editNumeroOrdenProceso, setEditNumeroOrdenProceso] = useState('');
+  const [editLoteNro, setEditLoteNro] = useState('');
+  const [editObservaciones, setEditObservaciones] = useState('');
+
+  const handleAbrirEditarMovimiento = (mov: MovimientoSilo) => {
+    setMovimientoAEditar(mov);
+    setEditSiloId(mov.siloId);
+    setEditFecha(mov.fecha);
+    setEditTipo(mov.tipo || 'INGRESO');
+    setEditKg(mov.kg);
+    setEditCliente(mov.cliente || '');
+    setEditEspecie(mov.especie || '');
+    setEditVariedad(mov.variedad || '');
+    setEditCategoria(mov.categoria || '');
+    setEditHumedad(mov.humedad !== undefined ? mov.humedad : '');
+    setEditCampoOrigen(mov.campoOrigen || '');
+    setEditBolsonOrigenNro(mov.bolsonOrigenNro || '');
+    setEditBolsonOrigenSector(mov.bolsonOrigenSector || '');
+    setEditDepositoOrigen(mov.depositoOrigen || '');
+    setEditChofer(mov.chofer || '');
+    setEditCuit(mov.cuit || '');
+    setEditPatentes(mov.patentes || '');
+    setEditTransporte(mov.transporte || '');
+    setEditMotivoManual(mov.motivoManual || '');
+    setEditDescontaminacionVarietal(Boolean(mov.descontaminacionVarietal));
+    setEditNumeroOrdenProceso(mov.numeroOrdenProceso || mov.ordenProcesoId || '');
+    setEditLoteNro(mov.loteNro || mov.loteId || '');
+    setEditObservaciones(mov.observaciones || mov.motivoZero || mov.motivoAjuste || '');
+  };
+
+  const handleGuardarEdicionMovimiento = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movimientoAEditar) return;
+    if (!editKg || Number(editKg) <= 0) {
+      alert('Los kilogramos deben ser mayor a 0.');
+      return;
+    }
+
+    const movEditado: MovimientoSilo = {
+      ...movimientoAEditar,
+      siloId: editSiloId,
+      fecha: editFecha,
+      tipo: editTipo,
+      kg: Number(editKg),
+      cliente: editCliente,
+      especie: editEspecie,
+      variedad: editVariedad,
+      categoria: editCategoria,
+      humedad: editHumedad !== '' ? Number(editHumedad) : undefined,
+      campoOrigen: editCampoOrigen,
+      bolsonOrigenNro: editBolsonOrigenNro,
+      bolsonOrigenSector: editBolsonOrigenSector,
+      depositoOrigen: editDepositoOrigen,
+      chofer: editChofer,
+      cuit: editCuit,
+      patentes: editPatentes,
+      transporte: editTransporte,
+      motivoManual: editMotivoManual,
+      descontaminacionVarietal: editDescontaminacionVarietal,
+      numeroOrdenProceso: editNumeroOrdenProceso,
+      ordenProcesoId: editNumeroOrdenProceso || movimientoAEditar.ordenProcesoId,
+      loteNro: editLoteNro,
+      loteId: editLoteNro || movimientoAEditar.loteId,
+      observaciones: editObservaciones,
+    };
+
+    if (onEditarMovimientoSilo) {
+      onEditarMovimientoSilo(movEditado);
+    }
+    setMovimientoAEditar(null);
+    setFormSuccess(`Movimiento ${movEditado.id} actualizado correctamente.`);
+    setTimeout(() => setFormSuccess(''), 4000);
+  };
 
   const handleConfirmEliminarMovimiento = () => {
     setErrorEliminar('');
@@ -561,7 +659,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     setFormError('');
     setFormSuccess('');
 
-    const clienteFinal = cliente === 'Otro' ? clienteManual.trim() : cliente;
+    const clienteFinal = cliente ? cliente.trim() : '';
     if (!clienteFinal) {
       setFormError('Debe ingresar el Cliente.');
       return;
@@ -1413,36 +1511,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             </div>
 
             {/* Cliente */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                Cliente *
-              </label>
-              <select
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500"
-              >
-                {clientes.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-                <option value="Otro">Otro cliente...</option>
-              </select>
-            </div>
-
-            {cliente === 'Otro' && (
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                  Nombre de Cliente *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ingrese cliente..."
-                  value={clienteManual}
-                  onChange={(e) => setClienteManual(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-900"
-                />
-              </div>
-            )}
+            <ClienteSelect
+              value={cliente}
+              onChange={setCliente}
+              label="Cliente *"
+              selectClassName="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 text-xs"
+              inputClassName="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-900 text-xs mt-1"
+            />
 
             {/* Especie */}
             <div>
@@ -1869,19 +1944,30 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                         </td>
 
                         <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMovimientoAEliminar(m);
-                              setClaveEliminar('');
-                              setErrorEliminar('');
-                            }}
-                            className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 hover:text-red-900 rounded-lg border border-red-200 transition cursor-pointer active:scale-95 inline-flex items-center gap-1 text-[11px] font-bold"
-                            title="Eliminar este movimiento de silo (Requiere usuario y clave de Amilcar Quiroz)"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                            <span>Eliminar</span>
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirEditarMovimiento(m)}
+                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-900 rounded-lg border border-blue-200 transition cursor-pointer active:scale-95 inline-flex items-center gap-1 text-[11px] font-bold"
+                              title="Editar este movimiento de silo"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMovimientoAEliminar(m);
+                                setClaveEliminar('');
+                                setErrorEliminar('');
+                              }}
+                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 hover:text-red-900 rounded-lg border border-red-200 transition cursor-pointer active:scale-95 inline-flex items-center gap-1 text-[11px] font-bold"
+                              title="Eliminar este movimiento de silo (Requiere usuario y clave de Amilcar Quiroz)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                              <span>Eliminar</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -2240,7 +2326,293 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         </div>
       )}
 
-      {/* Modal Ficha Técnica del Silo */}
+      {/* Modal Editar Movimiento de Silo */}
+      {movimientoAEditar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header Modal */}
+            <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 text-white px-6 py-4 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-xl text-blue-200">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base font-serif text-white">
+                    Editar Movimiento de Silo
+                  </h3>
+                  <p className="text-[11px] text-blue-100 font-medium">
+                    Modifique cualquier parámetro registrado para este movimiento
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMovimientoAEditar(null)}
+                className="p-1.5 text-blue-100 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarEdicionMovimiento} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {/* Silo */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Silo *</label>
+                  <select
+                    value={editSiloId}
+                    onChange={(e) => setEditSiloId(e.target.value as SiloId)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                    required
+                  >
+                    {SILOS_DISPONIBLES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Fecha */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Fecha *</label>
+                  <input
+                    type="date"
+                    value={editFecha}
+                    onChange={(e) => setEditFecha(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                    required
+                  />
+                </div>
+
+                {/* Tipo de Movimiento */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Tipo de Movimiento *</label>
+                  <select
+                    value={editTipo}
+                    onChange={(e) => setEditTipo(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                    required
+                  >
+                    <option value="INGRESO">INGRESO</option>
+                    <option value="EGRESO_MANUAL">SALIDA MANUAL</option>
+                    <option value="EGRESO_OP">EGRESO POR OP</option>
+                    <option value="EGRESO_LOTE">EGRESO POR LOTE</option>
+                    <option value="AJUSTE_ZERO">AJUSTE A CERO</option>
+                  </select>
+                </div>
+
+                {/* Kilogramos */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Kilogramos (kg) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editKg}
+                    onChange={(e) => setEditKg(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                    required
+                  />
+                </div>
+
+                {/* Cliente */}
+                <div className="col-span-1 sm:col-span-2">
+                  <ClienteSelect
+                    value={editCliente}
+                    onChange={setEditCliente}
+                    label="Cliente *"
+                  />
+                </div>
+
+                {/* Especie */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Especie</label>
+                  <input
+                    type="text"
+                    value={editEspecie}
+                    onChange={(e) => setEditEspecie(e.target.value)}
+                    placeholder="Soja, Trigo..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Variedad */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Variedad</label>
+                  <input
+                    type="text"
+                    value={editVariedad}
+                    onChange={(e) => setEditVariedad(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Categoría */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Categoría</label>
+                  <input
+                    type="text"
+                    value={editCategoria}
+                    onChange={(e) => setEditCategoria(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Humedad */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">% Humedad</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editHumedad}
+                    onChange={(e) => setEditHumedad(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Campo Origen */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Campo Origen</label>
+                  <input
+                    type="text"
+                    value={editCampoOrigen}
+                    onChange={(e) => setEditCampoOrigen(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Bolsón N° */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Bolsón N°</label>
+                  <input
+                    type="text"
+                    value={editBolsonOrigenNro}
+                    onChange={(e) => setEditBolsonOrigenNro(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Sector Bolsón */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Sector Bolsón</label>
+                  <input
+                    type="text"
+                    value={editBolsonOrigenSector}
+                    onChange={(e) => setEditBolsonOrigenSector(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Depósito Origen */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Depósito Origen</label>
+                  <input
+                    type="text"
+                    value={editDepositoOrigen}
+                    onChange={(e) => setEditDepositoOrigen(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Chofer */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Chofer</label>
+                  <input
+                    type="text"
+                    value={editChofer}
+                    onChange={(e) => setEditChofer(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* CUIT Chofer */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">CUIT Chofer</label>
+                  <input
+                    type="text"
+                    value={editCuit}
+                    onChange={(e) => setEditCuit(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Patente(s) */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Patentes</label>
+                  <input
+                    type="text"
+                    value={editPatentes}
+                    onChange={(e) => setEditPatentes(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                  />
+                </div>
+
+                {/* Transporte */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Empresa Transporte</label>
+                  <input
+                    type="text"
+                    value={editTransporte}
+                    onChange={(e) => setEditTransporte(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Motivo Salida Manual */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Motivo (Salida Manual)</label>
+                  <input
+                    type="text"
+                    value={editMotivoManual}
+                    onChange={(e) => setEditMotivoManual(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* Descontaminación Varietal */}
+                <div className="flex items-center gap-2 pt-4">
+                  <input
+                    type="checkbox"
+                    id="editDescontaminacion"
+                    checked={editDescontaminacionVarietal}
+                    onChange={(e) => setEditDescontaminacionVarietal(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                  />
+                  <label htmlFor="editDescontaminacion" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Descontaminación Varietal
+                  </label>
+                </div>
+              </div>
+
+              {/* Observaciones */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Observaciones</label>
+                <textarea
+                  value={editObservaciones}
+                  onChange={(e) => setEditObservaciones(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="bg-slate-50 -mx-6 -mb-6 px-6 py-3.5 border-t border-slate-200 flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setMovimientoAEditar(null)}
+                  className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Guardar Cambios</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {fichaModalSilo && (() => {
         const ficha = getSiloFichaData(fichaModalSilo);
 
@@ -2672,7 +3044,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <span className={`text-base font-black font-mono ${
                               isIngreso ? 'text-emerald-700' : isEgreso ? 'text-amber-800' : 'text-red-700'
                             }`}>
@@ -2680,12 +3052,20 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                             </span>
                             <button
                               type="button"
+                              onClick={() => handleAbrirEditarMovimiento(mov)}
+                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-900 rounded-lg border border-blue-200 transition cursor-pointer active:scale-95 ml-1"
+                              title="Editar este movimiento de silo"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-blue-600" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => {
                                 setMovimientoAEliminar(mov);
                                 setClaveEliminar('');
                                 setErrorEliminar('');
                               }}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 hover:text-red-900 rounded-lg border border-red-200 transition cursor-pointer active:scale-95 ml-1"
+                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 hover:text-red-900 rounded-lg border border-red-200 transition cursor-pointer active:scale-95"
                               title="Eliminar este movimiento de silo"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-red-600" />

@@ -367,15 +367,15 @@ export const LotesView: React.FC<LotesViewProps> = ({
 
   // Opciones disponibles para cada filtro (extraídas dinámicamente)
   const clientesDisponibles = useMemo(() => {
-    const base = ['San Diego Semilla', 'Eco Rural', 'Pampa', 'Stine', 'Elementa Foods'];
+    const base = ['San Diego Semillas', 'Eco Rural', 'Pampa', 'Stine', 'Elementa Foods'];
     const fromLotes = lotes.map(l => {
       const c = l.cliente || '';
       const upper = c.toUpperCase().trim();
-      if (upper === 'SAN DIEGO' || upper === 'SAN DIEGO SEMILLAS') return 'San Diego Semilla';
+      if (upper === 'SAN DIEGO' || upper === 'SAN DIEGO SEMILLA' || upper === 'SAN DIEGO SEMILLAS') return 'San Diego Semillas';
       return c;
     }).filter(Boolean);
     return Array.from(new Set([...base, ...fromLotes]))
-      .filter(c => c !== 'San Diego' && c !== 'San Diego Semillas')
+      .filter(c => c !== 'San Diego' && c !== 'San Diego Semilla')
       .sort();
   }, [lotes]);
 

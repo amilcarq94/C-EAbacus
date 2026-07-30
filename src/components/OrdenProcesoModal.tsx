@@ -8,6 +8,7 @@ import { OrdenProceso, TipoOrdenProceso, EstadoOrdenProceso, CategoriaType, Espe
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { SilosSelector } from './SilosSelector';
 import { LotesOrigenSelector } from './LotesOrigenSelector';
+import { ClienteSelect } from './ClienteSelect';
 import { X, Factory, Truck, CheckCircle, AlertCircle, Save, Package, Plus, Trash2, Scale } from 'lucide-react';
 
 export function getKgPorEnvase(envaseStr: string): number {
@@ -398,27 +399,13 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
             </div>
 
             {/* Cliente */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Cliente *
-              </label>
-              <input
-                type="text"
-                list="clientes-list-op"
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-                placeholder="Ej. San Diego Semilla"
-                required
-                className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium"
-              />
-              <datalist id="clientes-list-op">
-                <option value="San Diego Semilla" />
-                <option value="Eco Rural" />
-                <option value="Pampa" />
-                <option value="Stine" />
-                <option value="Elementa Foods" />
-              </datalist>
-            </div>
+            <ClienteSelect
+              value={cliente}
+              onChange={setCliente}
+              label="Cliente *"
+              selectClassName="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-semibold"
+              inputClassName="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium mt-1"
+            />
 
             {/* Especie */}
             <div>

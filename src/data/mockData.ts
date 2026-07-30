@@ -7,9 +7,9 @@ import { Lote, SalidaRegistrada, OrdenCarga, OrdenProceso, MovimientoSilo, Chofe
 import { getCampaniaIdFromDate } from '../utils/campanias';
 
 export const CLIENTES_PRECARGADOS = [
-  "San Diego Semilla",
-  "Eco Rural",
   "Pampa",
+  "Eco Rural",
+  "San Diego Semillas",
   "Stine",
   "Elementa Foods"
 ];

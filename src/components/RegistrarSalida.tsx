@@ -9,6 +9,7 @@ import { getCampaniaIdFromDate } from '../utils/campanias';
 import { generateRemitoId, formatNumberArg, formatDateStr } from '../utils/formatters';
 import { LogoSiloLoose, LogoSiloSquare } from './Logo';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
+import { ClienteSelect } from './ClienteSelect';
 import { FileText, ArrowRight, Printer, AlertTriangle, UserCheck, Check, Trash2, Plus, Paperclip, Upload, X, Download } from 'lucide-react';
 
 interface RegistrarSalidaProps {
@@ -531,41 +532,28 @@ export const RegistrarSalida: React.FC<RegistrarSalidaProps> = ({
                 Selección de Lote de Origen
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">Comitente (Cliente) *</label>
-                  <select
-                    value={cliente}
-                    onChange={(e) => {
-                      const selectedVal = e.target.value;
-                      setCliente(selectedVal);
-                      
-                      // Filter lotesDisponibles for the newly selected client
-                      const matchingLotes = lotesDisponibles.filter(l => {
-                        if (!selectedVal) return true;
-                        return l.cliente.toLowerCase().includes(selectedVal.toLowerCase()) || 
-                               selectedVal.toLowerCase().includes(l.cliente.toLowerCase());
-                      });
-                      
-                      if (matchingLotes.length > 0) {
-                        // Keep current lote if it matches, otherwise select first matching
-                        const matchesCurrent = matchingLotes.find(l => l.id === loteId);
-                        if (!matchesCurrent) {
-                          setLoteId(matchingLotes[0].id);
-                        }
-                      } else {
-                        setLoteId('');
+                <ClienteSelect
+                  value={cliente}
+                  onChange={(selectedVal) => {
+                    setCliente(selectedVal);
+                    const matchingLotes = lotesDisponibles.filter(l => {
+                      if (!selectedVal) return true;
+                      return l.cliente.toLowerCase().includes(selectedVal.toLowerCase()) || 
+                             selectedVal.toLowerCase().includes(l.cliente.toLowerCase());
+                    });
+                    if (matchingLotes.length > 0) {
+                      const matchesCurrent = matchingLotes.find(l => l.id === loteId);
+                      if (!matchesCurrent) {
+                        setLoteId(matchingLotes[0].id);
                       }
-                    }}
-                    className="w-full px-4 py-2.5 bg-white text-xs font-semibold rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-                  >
-                    <option value="">Seleccione un Cliente...</option>
-                    <option value="San Diego Semilla">San Diego Semilla</option>
-                    <option value="Eco Rural">Eco Rural</option>
-                    <option value="Pampa">Pampa</option>
-                    <option value="Stine">Stine</option>
-                    <option value="Elementa Foods">Elementa Foods</option>
-                  </select>
-                </div>
+                    } else {
+                      setLoteId('');
+                    }
+                  }}
+                  label="Comitente (Cliente) *"
+                  selectClassName="w-full px-4 py-2.5 bg-white text-xs font-semibold rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
+                  inputClassName="w-full px-4 py-2.5 bg-white text-xs font-semibold rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C] mt-1"
+                />
 
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">Lote ID con Stock *</label>

@@ -1197,6 +1197,19 @@ export default function App() {
     }
   };
 
+  const handleEditarMovimientoSilo = async (movimiento: MovimientoSilo) => {
+    try {
+      const docRef = doc(db, 'movimientos_silo', movimiento.id);
+      await setDoc(docRef, movimiento, { merge: true });
+      setMovimientosSilo((prev) => prev.map((m) => m.id === movimiento.id ? movimiento : m));
+      showNotification(`Movimiento ${movimiento.id} actualizado correctamente.`);
+    } catch (e) {
+      console.error('Error al editar movimiento de silo:', e);
+      setMovimientosSilo((prev) => prev.map((m) => m.id === movimiento.id ? movimiento : m));
+      showNotification(`Movimiento ${movimiento.id} actualizado.`);
+    }
+  };
+
   const handleEliminarMovimientoSilo = async (movimientoId: string, siloId: SiloId) => {
     try {
       const docRef = doc(db, 'movimientos_silo', movimientoId);
@@ -1871,6 +1884,7 @@ export default function App() {
             onSaveChofer={handleSaveChofer}
             onImportChoferes={handleImportChoferes}
             onPonerSiloEnCero={handlePonerSiloEnCero}
+            onEditarMovimientoSilo={handleEditarMovimientoSilo}
             onEliminarMovimientoSilo={handleEliminarMovimientoSilo}
           />
         ) : activeView === 'lotes' ? (

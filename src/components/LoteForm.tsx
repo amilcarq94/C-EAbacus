@@ -9,6 +9,7 @@ import { generateLoteId } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { SilosSelector } from './SilosSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
+import { ClienteSelect } from './ClienteSelect';
 import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info } from 'lucide-react';
 
 interface LoteFormProps {
@@ -526,24 +527,14 @@ export const LoteForm: React.FC<LoteFormProps> = ({
             />
           </div>
 
-          {/* Cliente / Productor (Selector Cerrado) */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
-              Cliente / Productor *
-            </label>
-            <select
-              value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white text-gray-800 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-              required
-            >
-              <option value="San Diego Semilla">San Diego Semilla</option>
-              <option value="Eco Rural">Eco Rural</option>
-              <option value="Pampa">Pampa</option>
-              <option value="Stine">Stine</option>
-              <option value="Elementa Foods">Elementa Foods</option>
-            </select>
-          </div>
+          {/* Cliente / Productor */}
+          <ClienteSelect
+            value={cliente}
+            onChange={setCliente}
+            label="Cliente / Productor *"
+            selectClassName="w-full px-4 py-2.5 bg-white text-gray-800 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C] font-semibold"
+            inputClassName="w-full px-4 py-2.5 bg-gray-50 text-gray-800 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C] font-semibold mt-1"
+          />
 
           {/* Especie de Grano (Selector Cerrado) */}
           <div>

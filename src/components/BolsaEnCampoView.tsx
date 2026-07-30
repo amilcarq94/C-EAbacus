@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BolsonCampo } from '../types';
+import { ClienteSelect } from './ClienteSelect';
 import {
   Package,
   Search,
@@ -373,8 +374,18 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
     }
   };
 
+  const [selectedClienteFilter, setSelectedClienteFilter] = useState<string>('');
+
+  // Clientes disponibles dinámicos para filtro de bolsones
+  const clientesDisponiblesBolsas = useMemo(() => {
+    const base = ['Pampa', 'Eco Rural', 'San Diego Semillas', 'Stine', 'Elementa Foods'];
+    const fromBolsas = bolsones.map(b => b.cliente).filter(Boolean) as string[];
+    return Array.from(new Set([...base, ...fromBolsas])).sort();
+  }, [bolsones]);
+
   // Filtrar bolsones por búsqueda
   const filteredBolsones = bolsones.filter((b) => {
+    if (selectedClienteFilter && b.cliente !== selectedClienteFilter) return false;
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase().trim();
     return (
@@ -467,19 +478,36 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
 
       {/* Resumen de totales y buscador */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Buscar Bolsón
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="N° bolsón, cliente, cultivo, variedad, campo..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-            />
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="md:col-span-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Buscar Bolsón
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="N° bolsón, cliente, cultivo, variedad, campo..."
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Filtro por Cliente
+            </label>
+            <select
+              value={selectedClienteFilter}
+              onChange={(e) => setSelectedClienteFilter(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+            >
+              <option value="">Todos los Clientes ({clientesDisponiblesBolsas.length})</option>
+              {clientesDisponiblesBolsas.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -667,25 +695,13 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    Cliente *
-                  </label>
-                  <input
-                    type="text"
-                    list="clientes-list"
-                    value={formCliente}
-                    onChange={(e) => setFormCliente(e.target.value)}
-                    placeholder="ej: San Diego Semilla"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    required
-                  />
-                  <datalist id="clientes-list">
-                    {clientes.map(c => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                </div>
+                <ClienteSelect
+                  value={formCliente}
+                  onChange={setFormCliente}
+                  label="Cliente *"
+                  selectClassName="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none text-xs"
+                  inputClassName="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none text-xs mt-1"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

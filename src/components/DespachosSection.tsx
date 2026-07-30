@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Lote, OrdenCarga } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { LogoSiloLoose } from './Logo';
+import { ClienteSelect } from './ClienteSelect';
 import { formatNumberArg, formatDateStr } from '../utils/formatters';
 import {
   FileText,
@@ -593,21 +594,13 @@ export const DespachosSection: React.FC<DespachosSectionProps> = ({
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
                     {/* Cliente */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                        Cliente Comitente *
-                      </label>
-                      <select
-                        value={genCliente}
-                        onChange={(e) => setGenCliente(e.target.value)}
-                        className="w-full h-10 px-3 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-                        required
-                      >
-                        {LISTA_CLIENTES.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <ClienteSelect
+                      value={genCliente}
+                      onChange={setGenCliente}
+                      label="Cliente Comitente *"
+                      selectClassName="w-full h-10 px-3 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00603C] text-xs font-semibold"
+                      inputClassName="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00603C] text-xs font-medium mt-1"
+                    />
 
                     {/* Especie */}
                     <div>
