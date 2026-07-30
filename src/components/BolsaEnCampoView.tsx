@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { BolsonCampo } from '../types';
+import { BolsonCampo, MovimientoSilo } from '../types';
 import { ClienteSelect } from './ClienteSelect';
 import {
   Package,
@@ -17,7 +17,14 @@ import {
   Sprout,
   MapPin,
   Warehouse,
-  Check
+  Check,
+  History,
+  Clock,
+  ArrowUpRight,
+  FileText,
+  Calendar,
+  Truck,
+  Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { db } from '../lib/firebase';
@@ -25,6 +32,7 @@ import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 interface BolsaEnCampoViewProps {
   bolsones: BolsonCampo[];
+  movimientosSilo?: MovimientoSilo[];
   clientes?: string[];
   especies?: string[];
 }
@@ -33,13 +41,15 @@ export const CATEGORIAS_BOLSON = ['Fundadora', 'Preba', 'Original', 'Prima', 'Pr
 
 export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
   bolsones = [],
-  clientes = ['San Diego Semilla', 'Eco Rural', 'Pampa', 'Stine', 'Elementa Foods'],
+  movimientosSilo = [],
+  clientes = ['San Diego Semillas', 'Eco Rural', 'Pampa', 'Stine', 'Elementa Foods'],
   especies = ['Soja', 'Trigo', 'Arveja']
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModalAddEdit, setShowModalAddEdit] = useState(false);
   const [showModalImport, setShowModalImport] = useState(false);
   const [bolsonAEditar, setBolsonAEditar] = useState<BolsonCampo | null>(null);
+  const [bolsonHistorial, setBolsonHistorial] = useState<BolsonCampo | null>(null);
 
   // Form State
   const [formCampania, setFormCampania] = useState('2025/2026');
@@ -570,7 +580,17 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredBolsones.length > 0 ? (
                 filteredBolsones.map((b) => {
-                  const stock = b.stockKg !== undefined ? b.stockKg : ((b.entradasKg || 0) - (b.salidasKg || 0));
+                  const normNro = (b.numeroBolson || '').trim().toLowerCase();
+                  const movsBolson = (movimientosSilo || []).filter(m =>
+                    m.tipo === 'INGRESO' && (
+                      (m.bolsonOrigenId && m.bolsonOrigenId === b.id) ||
+                      (m.bolsonOrigenNro && m.bolsonOrigenNro.trim().toLowerCase() === normNro)
+                    )
+                  );
+                  const salidasCalculadas = movsBolson.reduce((acc, m) => acc + (m.kg || 0), 0);
+                  const salidasKg = Math.max(b.salidasKg || 0, salidasCalculadas);
+                  const stock = Math.max(0, (b.entradasKg || 0) - salidasKg);
+
                   return (
                     <tr key={b.id} className="hover:bg-slate-50/80 transition">
                       <td className="py-3 px-3 font-mono font-semibold text-slate-600">
@@ -610,7 +630,13 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
                         {(b.entradasKg || 0).toLocaleString('es-AR')}
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-semibold text-amber-700">
-                        {(b.salidasKg || 0).toLocaleString('es-AR')}
+                        <button
+                          onClick={() => setBolsonHistorial(b)}
+                          className="bg-amber-50 hover:bg-amber-100 text-amber-900 px-2 py-0.5 rounded border border-amber-200 transition cursor-pointer"
+                          title="Haga clic para ver el historial de ingresos a silos que descontaron stock"
+                        >
+                          {salidasKg.toLocaleString('es-AR')} kg
+                        </button>
                       </td>
                       <td className="py-3 px-3 text-right font-mono font-black text-emerald-800">
                         <span className={`px-2 py-0.5 rounded border ${
@@ -620,7 +646,20 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setBolsonHistorial(b)}
+                            className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                            title="Ver Historial de Movimientos por Bolsón"
+                          >
+                            <History className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Historial</span>
+                            {movsBolson.length > 0 && (
+                              <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-mono">
+                                {movsBolson.length}
+                              </span>
+                            )}
+                          </button>
                           <button
                             onClick={() => handleOpenEditModal(b)}
                             className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
@@ -994,6 +1033,207 @@ export const BolsaEnCampoView: React.FC<BolsaEnCampoViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL HISTORIAL DE MOVIMIENTOS POR BOLSÓN */}
+      {bolsonHistorial && (() => {
+        const normNro = (bolsonHistorial.numeroBolson || '').trim().toLowerCase();
+        const movsBolson = (movimientosSilo || [])
+          .filter(m => m.tipo === 'INGRESO' && (
+            (m.bolsonOrigenId && m.bolsonOrigenId === bolsonHistorial.id) ||
+            (m.bolsonOrigenNro && m.bolsonOrigenNro.trim().toLowerCase() === normNro)
+          ))
+          .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+        const totalDescontado = movsBolson.reduce((sum, m) => sum + (m.kg || 0), 0);
+        const entradas = bolsonHistorial.entradasKg || 0;
+        const stockRestante = Math.max(0, entradas - totalDescontado);
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Header Modal */}
+              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 p-5 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/20 border border-emerald-400/30 rounded-xl text-emerald-400">
+                    <History className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-base tracking-tight text-white">
+                        Historial de Movimientos por Bolsón
+                      </h3>
+                      <span className="bg-emerald-500/20 text-emerald-300 font-mono text-xs font-black px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                        {bolsonHistorial.numeroBolson}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Cliente: <strong className="text-white font-semibold">{bolsonHistorial.cliente}</strong> · Cultivo: <span className="text-emerald-300 font-medium">{bolsonHistorial.cultivo} {bolsonHistorial.variedad ? `(${bolsonHistorial.variedad})` : ''}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setBolsonHistorial(null)}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Informative Rule Header */}
+              <div className="bg-emerald-50/80 border-b border-emerald-100 px-5 py-2.5 text-[11px] text-emerald-900 flex items-center gap-2 shrink-0">
+                <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  <strong>Regla de Stock:</strong> Únicamente los <strong>Ingresos en Silos</strong> descuentan stock de la bolsa en campo. El alta o edición de lotes es meramente informativo y no afecta las existencias del bolsón.
+                </span>
+              </div>
+
+              {/* Content Body */}
+              <div className="p-6 space-y-6 overflow-y-auto grow">
+                {/* Tarjetas de Resumen de Stock */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                      Carga Inicial (Entrada)
+                    </span>
+                    <span className="text-lg font-mono font-black text-slate-900 mt-1 block">
+                      {entradas.toLocaleString('es-AR')} <span className="text-xs font-normal text-slate-500">kg</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      {bolsonHistorial.campo ? `Campo: ${bolsonHistorial.campo}` : 'Bolsón registrado'}
+                    </span>
+                  </div>
+
+                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+                      Total Descontado (En Silos)
+                    </span>
+                    <span className="text-lg font-mono font-black text-amber-900 mt-1 block">
+                      {totalDescontado.toLocaleString('es-AR')} <span className="text-xs font-normal text-amber-700">kg</span>
+                    </span>
+                    <span className="text-[10px] text-amber-700 block mt-0.5 font-medium">
+                      {movsBolson.length} ingreso(s) a silos registrado(s)
+                    </span>
+                  </div>
+
+                  <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
+                      Stock Restante en Campo
+                    </span>
+                    <span className="text-lg font-mono font-black text-emerald-900 mt-1 block">
+                      {stockRestante.toLocaleString('es-AR')} <span className="text-xs font-normal text-emerald-700">kg</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-700 block mt-0.5 font-medium">
+                      {stockRestante > 0 ? 'Disponible para descarga' : 'Bolsón Agotado (0 kg)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Listado Cronológico de Movimientos */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-emerald-600" />
+                      Listado Cronológico de Ingresos en Silos
+                    </h4>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Mostrando {movsBolson.length} movimiento(s)
+                    </span>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                          <th className="py-2.5 px-3">Fecha</th>
+                          <th className="py-2.5 px-3">Silo Destino</th>
+                          <th className="py-2.5 px-3 text-right">Kilos Descontados</th>
+                          <th className="py-2.5 px-3">Cliente / Comitente</th>
+                          <th className="py-2.5 px-3">Especie / Variedad</th>
+                          <th className="py-2.5 px-3">Chofer / Camión</th>
+                          <th className="py-2.5 px-3">Observaciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {movsBolson.length > 0 ? (
+                          movsBolson.map((m) => (
+                            <tr key={m.id} className="hover:bg-slate-50/80 transition">
+                              <td className="py-2.5 px-3 font-mono text-slate-700 font-medium whitespace-nowrap">
+                                {m.fecha}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="bg-slate-900 text-emerald-400 font-mono font-bold px-2 py-0.5 rounded text-[11px]">
+                                  {m.siloId}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-black text-amber-700">
+                                {m.kg.toLocaleString('es-AR')} kg
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-slate-900">
+                                {m.cliente || bolsonHistorial.cliente}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-700">
+                                <div>
+                                  <span className="font-semibold">{m.especie || bolsonHistorial.cultivo}</span>
+                                  {(m.variedad || bolsonHistorial.variedad) && (
+                                    <span className="text-[10px] text-slate-400 block font-mono">
+                                      {m.variedad || bolsonHistorial.variedad}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                                {m.choferNombre ? (
+                                  <div>
+                                    <span className="font-medium text-slate-800">{m.choferNombre}</span>
+                                    {m.patenteChasis && (
+                                      <span className="text-[10px] font-mono text-slate-400 block">
+                                        {m.patenteChasis}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-500 italic text-[11px]">
+                                {m.observaciones || '—'}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                              <div className="max-w-md mx-auto space-y-1">
+                                <p className="font-semibold text-slate-600 text-xs">Sin registros de ingresos a silos</p>
+                                <p className="text-[11px]">
+                                  Este bolsón no ha sido utilizado aún para realizar Ingresos en Silos en la planta.
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Modal */}
+              <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Trazabilidad completa de descargas de bolsa en campo a silos de planta.
+                </p>
+                <button
+                  onClick={() => setBolsonHistorial(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-md"
+                >
+                  Cerrar Historial
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

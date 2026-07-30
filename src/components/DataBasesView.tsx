@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Chofer, BolsonCampo } from '../types';
+import { Chofer, BolsonCampo, MovimientoSilo } from '../types';
 import { ChoferesView } from './ChoferesView';
 import { BolsaEnCampoView } from './BolsaEnCampoView';
 import { Truck, Package, Database } from 'lucide-react';
@@ -7,17 +7,23 @@ import { Truck, Package, Database } from 'lucide-react';
 interface DataBasesViewProps {
   choferes: Chofer[];
   bolsones: BolsonCampo[];
+  movimientosSilo?: MovimientoSilo[];
   clientes?: string[];
   especies?: string[];
   initialSubTab?: 'choferes' | 'bolsa-campo';
+  onSaveChofer?: (chofer: Chofer) => void;
+  onImportChoferes?: (choferes: Chofer[]) => void;
 }
 
 export const DataBasesView: React.FC<DataBasesViewProps> = ({
   choferes = [],
   bolsones = [],
+  movimientosSilo = [],
   clientes = [],
   especies = [],
-  initialSubTab = 'choferes'
+  initialSubTab = 'choferes',
+  onSaveChofer,
+  onImportChoferes
 }) => {
   const [subTab, setSubTab] = useState<'choferes' | 'bolsa-campo'>(initialSubTab);
 
@@ -67,10 +73,11 @@ export const DataBasesView: React.FC<DataBasesViewProps> = ({
 
       {/* Renderizado de la Base de Datos Seleccionada */}
       {subTab === 'choferes' ? (
-        <ChoferesView choferes={choferes} />
+        <ChoferesView choferes={choferes} onSaveChofer={onSaveChofer} onImportChoferes={onImportChoferes} />
       ) : (
         <BolsaEnCampoView
           bolsones={bolsones}
+          movimientosSilo={movimientosSilo}
           clientes={clientes}
           especies={especies}
         />

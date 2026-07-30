@@ -1107,17 +1107,17 @@ export default function App() {
       await setDoc(docRef, movimiento);
 
       // Si viene vinculado a un bolsón de campo, descontar el stock del bolsón en Firestore
-      if (movimiento.bolsonOrigenId) {
-        const targetBolson = bolsones.find(b => b.id === movimiento.bolsonOrigenId);
-        if (targetBolson) {
-          const nuevasSalidas = (targetBolson.salidasKg || 0) + movimiento.kg;
-          const nuevoStock = Math.max(0, (targetBolson.entradasKg || 0) - nuevasSalidas);
-          const bolsonRef = doc(db, 'bolsones_campo', targetBolson.id);
-          await updateDoc(bolsonRef, {
-            salidasKg: nuevasSalidas,
-            stockKg: nuevoStock
-          });
-        }
+      const targetBolson = (movimiento.bolsonOrigenId ? bolsones.find(b => b.id === movimiento.bolsonOrigenId) : null)
+        || (movimiento.bolsonOrigenNro ? bolsones.find(b => b.numeroBolson.toLowerCase().trim() === movimiento.bolsonOrigenNro.toLowerCase().trim()) : null);
+
+      if (targetBolson) {
+        const nuevasSalidas = (targetBolson.salidasKg || 0) + movimiento.kg;
+        const nuevoStock = Math.max(0, (targetBolson.entradasKg || 0) - nuevasSalidas);
+        const bolsonRef = doc(db, 'bolsones_campo', targetBolson.id);
+        await updateDoc(bolsonRef, {
+          salidasKg: nuevasSalidas,
+          stockKg: nuevoStock
+        });
       }
 
       showNotification(`Ingreso de ${movimiento.kg.toLocaleString('es-AR')} kg a ${movimiento.siloId} registrado correctamente.`);
@@ -1956,6 +1956,7 @@ export default function App() {
           <DataBasesView
             choferes={choferes}
             bolsones={bolsones}
+            movimientosSilo={movimientosSilo}
             clientes={clientes}
             especies={especies}
             onSaveChofer={handleSaveChofer}

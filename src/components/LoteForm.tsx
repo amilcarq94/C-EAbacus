@@ -82,6 +82,78 @@ export const LoteForm: React.FC<LoteFormProps> = ({
     return ordenesProceso.filter(op => op.estado === 'EN CURSO' || (loteAEditar && op.id === loteAEditar.ordenProcesoId));
   }, [ordenesProceso, loteAEditar]);
 
+  // Bolsones disponibles filtrados estrictamente por el/los Silo(s) de Origen (Extracción) seleccionados
+  const bolsonesFiltradosPorSilo = useMemo(() => {
+    const selectedSiloIds = (silosOrigen || []).map(s => s.siloId).filter(Boolean);
+    
+    if (selectedSiloIds.length === 0) {
+      return []; // Sin silos de origen seleccionados aún
+    }
+
+    // 1. Obtener movimientos de tipo INGRESO para los silos de origen seleccionados (posteriores al último AJUSTE_ZERO)
+    const bolsonNrosValidos = new Set<string>();
+    const bolsonIdsValidos = new Set<string>();
+    const bolsonMapExtra = new Map<string, BolsonCampo>();
+
+    selectedSiloIds.forEach(siloId => {
+      const movsSilo = (movimientosSilo || []).filter(m => m.siloId === siloId);
+      let lastZeroIdx = -1;
+      for (let i = movsSilo.length - 1; i >= 0; i--) {
+        if (movsSilo[i].tipo === 'AJUSTE_ZERO') {
+          lastZeroIdx = i;
+          break;
+        }
+      }
+      const relevantMovs = lastZeroIdx >= 0 ? movsSilo.slice(lastZeroIdx + 1) : movsSilo;
+
+      relevantMovs.forEach(m => {
+        if (m.tipo === 'INGRESO') {
+          if (m.bolsonOrigenId) {
+            bolsonIdsValidos.add(m.bolsonOrigenId);
+          }
+          if (m.bolsonOrigenNro && m.bolsonOrigenNro.trim()) {
+            const normNro = m.bolsonOrigenNro.trim().toLowerCase();
+            bolsonNrosValidos.add(normNro);
+
+            if (!bolsonMapExtra.has(normNro)) {
+              bolsonMapExtra.set(normNro, {
+                id: m.bolsonOrigenId || `MOV-BOLSON-${m.bolsonOrigenNro}`,
+                campania: '2025/2026',
+                numeroBolson: m.bolsonOrigenNro,
+                cliente: m.cliente || cliente || 'San Diego Semillas',
+                cultivo: m.especie || 'Soja',
+                variedad: m.variedad || '-',
+                categoria: m.categoria || 'Original',
+                campo: m.campoOrigen || '-',
+                zona: m.bolsonOrigenSector || '-',
+                entradasKg: 0,
+                salidasKg: 0,
+                stockKg: 0
+              });
+            }
+          }
+        }
+      });
+    });
+
+    // 2. Filtrar la lista general de bolsones
+    const matchedFromProp = bolsones.filter(b => {
+      const normNro = (b.numeroBolson || '').trim().toLowerCase();
+      return (b.id && bolsonIdsValidos.has(b.id)) || (normNro && bolsonNrosValidos.has(normNro));
+    });
+
+    // 3. Incluir extras de movimientos que no estén ya en matchedFromProp
+    const matchedNros = new Set(matchedFromProp.map(b => b.numeroBolson.trim().toLowerCase()));
+    const extraList: BolsonCampo[] = [];
+    bolsonMapExtra.forEach((item, normNro) => {
+      if (!matchedNros.has(normNro)) {
+        extraList.push(item);
+      }
+    });
+
+    return [...matchedFromProp, ...extraList];
+  }, [silosOrigen, movimientosSilo, bolsones, cliente]);
+
   // Inicializar o cargar lote a editar
   useEffect(() => {
     if (loteAEditar) {
@@ -478,7 +550,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
             {/* Bolsón de origen con Selector / Buscador */}
             <div>
               <BolsonSearchSelector
-                bolsones={bolsones}
+                bolsones={bolsonesFiltradosPorSilo}
                 selectedBolsonId={bolsonOrigenId}
                 selectedBolsonNro={numeroBolsonOrigen}
                 onSelectBolson={(bolson) => {
@@ -491,8 +563,31 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                   }
                 }}
                 label="Bolsón de Origen (Trazabilidad)"
-                placeholder="Buscar bolsón por N°, cliente, cultivo, variedad..."
+                placeholder={
+                  silosOrigen.length === 0
+                    ? "Seleccione primero el Silo de Origen abajo..."
+                    : bolsonesFiltradosPorSilo.length === 0
+                    ? "Sin bolsones registrados para este Silo"
+                    : "Buscar bolsón por N°, cliente, cultivo, variedad..."
+                }
               />
+              {silosOrigen.length === 0 ? (
+                <p className="text-[11px] text-amber-800 bg-amber-50/90 p-2 rounded-lg border border-amber-200 mt-1 flex items-center gap-1.5 font-medium">
+                  <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>
+                    Para seleccionar el Bolsón de Origen, primero elija el <strong>Silo de Origen (Extracción)</strong> en la sección inferior. Las opciones quedan predefinidas y filtradas por el silo seleccionado.
+                  </span>
+                </p>
+              ) : (
+                <div className="mt-1 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-600 font-medium">
+                    Filtrado por Silo(s): <strong className="text-slate-800 font-mono">{silosOrigen.map(s => s.siloId).join(', ')}</strong> ({bolsonesFiltradosPorSilo.length} bolsón(es) de origen hallado(s))
+                  </span>
+                  <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200 shadow-2xs">
+                    Sin afectación de stock
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
