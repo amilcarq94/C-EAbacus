@@ -91,12 +91,11 @@ export interface Chofer {
   id: string;
   nombre: string;
   cuit: string;
-  patentes: string;
   transporte: string;
-  licencia?: string;
-  telefono?: string;
-  patenteCamion?: string;
+  patenteChasis?: string;
   patenteAcoplado?: string;
+  patenteCamion?: string;
+  patentes?: string;
 }
 
 export type SiloId = 'Silo 1' | 'Silo 2' | 'Silo 3' | 'Silo 4' | 'Silo 5' | 'Silo 6';

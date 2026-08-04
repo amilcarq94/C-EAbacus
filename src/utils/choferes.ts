@@ -65,63 +65,18 @@ export function mergeChoferData(
   existing: Chofer | undefined,
   incoming: Partial<Chofer> & { nombre: string }
 ): Chofer {
-  if (!existing) {
-    const id = incoming.id || `CHOFER-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const cam = (incoming.patenteCamion || '').trim().toUpperCase();
-    const acop = (incoming.patenteAcoplado || '').trim().toUpperCase();
-    let patComb = (incoming.patentes || '').trim();
-    if (!patComb || patComb === '—') {
-      if (cam || acop) {
-        patComb = acop ? `${cam} / ${acop}` : cam;
-      } else {
-        patComb = '—';
-      }
-    }
-
-    return {
-      id,
-      nombre: incoming.nombre.trim(),
-      cuit: (incoming.cuit && incoming.cuit.trim() !== '') ? incoming.cuit.trim() : '—',
-      transporte: (incoming.transporte && incoming.transporte.trim() !== '') ? incoming.transporte.trim() : 'Sin Transporte',
-      licencia: incoming.licencia?.trim() || undefined,
-      patenteCamion: cam || undefined,
-      patenteAcoplado: acop || undefined,
-      patentes: patComb,
-      telefono: incoming.telefono?.trim() || undefined,
-    };
-  }
-
-  // Si YA EXISTE: Preservar datos completos del chofer existente y solo rellenar o actualizar con datos válidos no vacíos
-  const isValidVal = (val?: string, invalidDefaults: string[] = ['—', 'sin transporte', '']) => {
-    if (!val) return false;
-    const clean = val.trim().toLowerCase();
-    return !invalidDefaults.includes(clean);
-  };
-
-  // Patentes
-  const incCam = (incoming.patenteCamion || '').trim().toUpperCase();
-  const incAcop = (incoming.patenteAcoplado || '').trim().toUpperCase();
-  const finalCam = isValidVal(incCam) ? incCam : existing.patenteCamion;
-  const finalAcop = isValidVal(incAcop) ? incAcop : existing.patenteAcoplado;
-
-  let finalPatentes = existing.patentes;
-  if (isValidVal(incoming.patentes)) {
-    finalPatentes = incoming.patentes!.trim();
-  } else if (finalCam || finalAcop) {
-    finalPatentes = finalAcop ? `${finalCam} / ${finalAcop}` : (finalCam || '—');
-  }
+  const id = existing?.id || incoming.id || `CHOFER-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const chasis = (incoming.patenteChasis || incoming.patenteCamion || existing?.patenteChasis || existing?.patenteCamion || '').trim().toUpperCase();
+  const acoplado = (incoming.patenteAcoplado || existing?.patenteAcoplado || '').trim().toUpperCase();
 
   return {
-    id: existing.id,
-    nombre: existing.nombre.trim() || incoming.nombre.trim(),
-    cuit: isValidVal(incoming.cuit) ? incoming.cuit!.trim() : (existing.cuit || '—'),
-    transporte: isValidVal(incoming.transporte, ['—', 'sin transporte', ''])
-      ? incoming.transporte!.trim()
-      : (existing.transporte || 'Sin Transporte'),
-    licencia: isValidVal(incoming.licencia) ? incoming.licencia!.trim() : existing.licencia,
-    patenteCamion: finalCam,
-    patenteAcoplado: finalAcop,
-    patentes: finalPatentes,
-    telefono: isValidVal(incoming.telefono) ? incoming.telefono!.trim() : existing.telefono,
+    id,
+    nombre: (incoming.nombre || existing?.nombre || '').trim(),
+    cuit: (incoming.cuit || existing?.cuit || '').trim(),
+    transporte: (incoming.transporte || existing?.transporte || '').trim(),
+    patenteChasis: chasis,
+    patenteAcoplado: acoplado,
+    patenteCamion: chasis,
+    patentes: acoplado ? `${chasis} / ${acoplado}` : chasis,
   };
 }

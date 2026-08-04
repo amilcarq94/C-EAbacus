@@ -11,6 +11,7 @@ import {
   Trash2,
   CheckCircle,
   AlertCircle,
+  Info,
   X,
   CreditCard,
   Phone,
@@ -41,9 +42,16 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
   const [formNombre, setFormNombre] = useState('');
   const [formCuit, setFormCuit] = useState('');
   const [formTransporte, setFormTransporte] = useState('');
-  const [formPatenteCamion, setFormPatenteCamion] = useState('');
+  const [formPatenteChasis, setFormPatenteChasis] = useState('');
   const [formPatenteAcoplado, setFormPatenteAcoplado] = useState('');
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    nombre?: string;
+    cuit?: string;
+    transporte?: string;
+    patenteChasis?: string;
+    patenteAcoplado?: string;
+  }>({});
 
   // Import State
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -58,15 +66,22 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
   // Modal para confirmación de eliminación
   const [choferAEliminar, setChoferAEliminar] = useState<Chofer | null>(null);
 
+  // Detección de CUIT duplicado en tiempo real
+  const cleanCuitActual = formCuit.trim();
+  const choferExistentePorCuit = cleanCuitActual.length === 11
+    ? choferes.find((c) => c.cuit && c.cuit.trim() === cleanCuitActual && c.id !== choferAEditar?.id)
+    : undefined;
+
   // Reset y Abrir Modal de Chofer (Creación)
   const handleOpenAddModal = () => {
     setChoferAEditar(null);
     setFormNombre('');
     setFormCuit('');
     setFormTransporte('');
-    setFormPatenteCamion('');
+    setFormPatenteChasis('');
     setFormPatenteAcoplado('');
     setFormError('');
+    setFieldErrors({});
     setShowModalAddEdit(true);
   };
 
@@ -76,13 +91,11 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
     setFormNombre(ch.nombre || '');
     setFormCuit(ch.cuit || '');
     setFormTransporte(ch.transporte || '');
-    
-    // Separar patentes si vienen separadas por barra
-    const patentesArr = (ch.patentes || '').split('/');
-    setFormPatenteCamion(ch.patenteCamion || patentesArr[0]?.trim() || '');
-    setFormPatenteAcoplado(ch.patenteAcoplado || patentesArr[1]?.trim() || '');
+    setFormPatenteChasis(ch.patenteChasis || ch.patenteCamion || '');
+    setFormPatenteAcoplado(ch.patenteAcoplado || '');
     
     setFormError('');
+    setFieldErrors({});
     setShowModalAddEdit(true);
   };
 
@@ -90,49 +103,77 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
   const handleSaveChofer = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    setFieldErrors({});
 
+    const errors: {
+      nombre?: string;
+      cuit?: string;
+      transporte?: string;
+      patenteChasis?: string;
+      patenteAcoplado?: string;
+    } = {};
+
+    // 1. Nombre: texto libre
     if (!formNombre.trim()) {
-      setFormError('El nombre y apellido del chofer es obligatorio.');
+      errors.nombre = 'El campo Nombre es obligatorio.';
+    }
+
+    // 2. CUIT: solo números, sin guiones (11 dígitos), validar que no acepte letras ni guiones y no esté duplicado
+    const cleanCuit = formCuit.trim();
+    if (!cleanCuit) {
+      errors.cuit = 'El campo CUIT es obligatorio.';
+    } else if (!/^\d{11}$/.test(cleanCuit)) {
+      errors.cuit = 'El CUIT debe contener exactamente 11 dígitos numéricos (sin guiones ni letras).';
+    } else if (choferExistentePorCuit) {
+      errors.cuit = `El CUIT ${cleanCuit} ya está registrado para "${choferExistentePorCuit.nombre}".`;
+    }
+
+    // 3. Transporte: solo letras (sin números ni caracteres especiales)
+    const cleanTransporte = formTransporte.trim();
+    if (!cleanTransporte) {
+      errors.transporte = 'El campo Transporte es obligatorio.';
+    } else if (!/^[a-zA-ZáéióúÁÉÍÓÚñÑ\s]+$/.test(cleanTransporte)) {
+      errors.transporte = 'El Transporte solo debe contener letras (sin números ni caracteres especiales).';
+    }
+
+    // 4. Patente chasis: 6 o 7 caracteres alfanuméricos
+    const cleanChasis = formPatenteChasis.trim().toUpperCase();
+    if (!cleanChasis) {
+      errors.patenteChasis = 'La Patente del chasis es obligatoria.';
+    } else if (!/^[A-Z0-9]{6,7}$/.test(cleanChasis)) {
+      errors.patenteChasis = 'La Patente del chasis debe contener entre 6 y 7 caracteres alfanuméricos.';
+    }
+
+    // 5. Patente acoplado: 6 o 7 caracteres alfanuméricos
+    const cleanAcoplado = formPatenteAcoplado.trim().toUpperCase();
+    if (!cleanAcoplado) {
+      errors.patenteAcoplado = 'La Patente del acoplado es obligatoria.';
+    } else if (!/^[A-Z0-9]{6,7}$/.test(cleanAcoplado)) {
+      errors.patenteAcoplado = 'La Patente del acoplado debe contener entre 6 y 7 caracteres alfanuméricos.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFormError('Por favor complete y corrija los campos marcados antes de enviar.');
       return;
     }
 
-    if (!formCuit.trim()) {
-      setFormError('El DNI o CUIT del chofer es obligatorio.');
-      return;
-    }
-
-    if (!formTransporte.trim()) {
-      setFormError('La empresa de transporte es obligatoria.');
-      return;
-    }
-
-    // Combinar patentes
-    const cam = formPatenteCamion.trim().toUpperCase();
-    const acop = formPatenteAcoplado.trim().toUpperCase();
-    let patentesComb = cam;
-    if (acop) {
-      patentesComb = cam ? `${cam} / ${acop}` : acop;
-    }
-
-    const candidateData = {
-      id: choferAEditar ? choferAEditar.id : undefined,
+    const candidateData: Chofer = {
+      id: choferAEditar ? choferAEditar.id : `CHOFER-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       nombre: formNombre.trim(),
-      cuit: formCuit.trim(),
-      transporte: formTransporte.trim(),
-      patenteCamion: cam || undefined,
-      patenteAcoplado: acop || undefined,
-      patentes: patentesComb || '—',
+      cuit: cleanCuit,
+      transporte: cleanTransporte,
+      patenteChasis: cleanChasis,
+      patenteAcoplado: cleanAcoplado,
+      patenteCamion: cleanChasis,
+      patentes: `${cleanChasis} / ${cleanAcoplado}`,
     };
-
-    // Buscar si ya existe un chofer registrado con este nombre o CUIT
-    const existing = choferAEditar || findExistingChofer(candidateData, choferes);
-    const newChofer = mergeChoferData(existing, candidateData);
 
     try {
       // Guardar en Firestore
-      await setDoc(doc(db, 'choferes', newChofer.id), newChofer, { merge: true });
+      await setDoc(doc(db, 'choferes', candidateData.id), candidateData, { merge: false });
       setShowModalAddEdit(false);
-      setNotificacion(existing && choferAEditar ? 'Chofer actualizado con éxito.' : existing ? `Se actualizaron los datos del chofer registrado "${newChofer.nombre}".` : 'Nuevo chofer registrado en la base de datos.');
+      setNotificacion(choferAEditar ? 'Chofer actualizado con éxito.' : 'Nuevo chofer registrado en la base de datos.');
       setTimeout(() => setNotificacion(''), 4000);
     } catch (err: any) {
       console.error('Error al guardar chofer en Firestore:', err);
@@ -158,35 +199,28 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
   const handleExportModelTemplate = () => {
     const templateData = [
       {
-        'Nombre y Apellido *': 'Carlos Eduardo Gómez',
-        'DNI / CUIT *': '20-28491039-4',
-        'Empresa de Transporte *': 'Transporte Expreso Pampa SRL',
-        'Patente Camión': 'AA 123 BB',
-        'Patente Acoplado': 'CC 456 DD'
+        'Nombre': 'Carlos Eduardo Gómez',
+        'CUIT': '20284910394',
+        'Transporte': 'Transporte Expreso Pampa',
+        'Patente chasis': 'AA123BB',
+        'Patente acoplado': 'CC456DD'
       },
       {
-        'Nombre y Apellido *': 'Juan Manuel Pérez',
-        'DNI / CUIT *': '20-31849201-8',
-        'Empresa de Transporte *': 'TransAgro SRL',
-        'Patente Camión': 'AB 987 CD',
-        'Patente Acoplado': 'EF 321 GH'
-      },
-      {
-        'Nombre y Apellido *': 'Roberto Fernández',
-        'DNI / CUIT *': '20-25948302-3',
-        'Empresa de Transporte *': 'Logística del Campo SA',
-        'Patente Camión': 'AC 456 EF',
-        'Patente Acoplado': ''
+        'Nombre': 'Juan Manuel Pérez',
+        'CUIT': '20318492018',
+        'Transporte': 'TransAgro',
+        'Patente chasis': 'AB987CD',
+        'Patente acoplado': 'EF321GH'
       }
     ];
 
     const ws = XLSX.utils.json_to_sheet(templateData);
     ws['!cols'] = [
       { wch: 30 }, // Nombre
-      { wch: 18 }, // DNI/CUIT
+      { wch: 18 }, // CUIT
       { wch: 32 }, // Transporte
-      { wch: 16 }, // Camion
-      { wch: 16 }  // Acoplado
+      { wch: 18 }, // Patente chasis
+      { wch: 18 }  // Patente acoplado
     ];
 
     const wb = XLSX.utils.book_new();
@@ -203,12 +237,11 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
 
     const exportData = choferes.map((c, idx) => ({
       'N°': idx + 1,
-      'Nombre y Apellido': c.nombre,
-      'DNI / CUIT': c.cuit || '—',
-      'Empresa de Transporte': c.transporte || '—',
-      'Patente Camión': c.patenteCamion || (c.patentes ? c.patentes.split('/')[0]?.trim() : '—'),
-      'Patente Acoplado': c.patenteAcoplado || (c.patentes && c.patentes.includes('/') ? c.patentes.split('/')[1]?.trim() : '—'),
-      'Patentes Combinadas': c.patentes || '—'
+      'Nombre': c.nombre,
+      'CUIT': c.cuit || '—',
+      'Transporte': c.transporte || '—',
+      'Patente chasis': c.patenteChasis || c.patenteCamion || '—',
+      'Patente acoplado': c.patenteAcoplado || '—'
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -217,9 +250,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       { wch: 30 },
       { wch: 18 },
       { wch: 32 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 24 }
+      { wch: 18 },
+      { wch: 18 }
     ];
 
     const wb = XLSX.utils.book_new();
@@ -268,32 +300,24 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
           const nombre = getVal(['nombre', 'chofer', 'driver', 'conductor', 'apellido']);
           const cuit = getVal(['cuit', 'dni', 'documento', 'identificacion']);
           const transporte = getVal(['transporte', 'empresa', 'razon social', 'flete']);
-          const licencia = getVal(['licencia', 'carnet', 'conducir']);
-          const patenteCamion = getVal(['camion', 'camión', 'tractor']);
-          const patenteAcoplado = getVal(['acoplado', 'remolque', 'chasis']);
-          let patentesComb = getVal(['patentes', 'patente', 'dominio']);
-          const telefono = getVal(['telefono', 'teléfono', 'celular', 'contacto', 'movil']);
-
-          if (!patentesComb && (patenteCamion || patenteAcoplado)) {
-            patentesComb = patenteAcoplado ? `${patenteCamion} / ${patenteAcoplado}` : patenteCamion;
-          }
+          const patenteChasis = getVal(['chasis', 'camion', 'camión', 'tractor']);
+          const patenteAcoplado = getVal(['acoplado', 'remolque']);
 
           if (nombre || cuit || transporte) {
             parsedChoferes.push({
               nombre: nombre || `Chofer ${idx + 1}`,
-              cuit: cuit || '—',
-              transporte: transporte || 'Sin Transporte',
-              licencia: licencia || undefined,
-              patenteCamion: patenteCamion || undefined,
-              patenteAcoplado: patenteAcoplado || undefined,
-              patentes: patentesComb || '—',
-              telefono: telefono || undefined
+              cuit: cuit.replace(/\D/g, '').slice(0, 11),
+              transporte: transporte.replace(/[^a-zA-ZáéióúÁÉÍÓÚñÑ\s]/g, ''),
+              patenteChasis: patenteChasis.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7),
+              patenteAcoplado: patenteAcoplado.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7),
+              patenteCamion: patenteChasis.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7),
+              patentes: patenteAcoplado ? `${patenteChasis} / ${patenteAcoplado}` : patenteChasis
             });
           }
         });
 
         if (parsedChoferes.length === 0) {
-          setImportError('No se pudieron reconocer columnas válidas (Nombre, DNI, Transporte) en el archivo Excel.');
+          setImportError('No se pudieron reconocer columnas válidas (Nombre, CUIT, Transporte) en el archivo Excel.');
           setImportPreview([]);
         } else {
           setImportPreview(parsedChoferes);
@@ -322,13 +346,12 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
 
         const candidateData = {
           nombre: item.nombre.trim(),
-          cuit: (item.cuit || '—').trim(),
-          transporte: (item.transporte || 'Sin Transporte').trim(),
-          licencia: item.licencia ? item.licencia.trim() : undefined,
-          patenteCamion: item.patenteCamion ? item.patenteCamion.trim() : undefined,
-          patenteAcoplado: item.patenteAcoplado ? item.patenteAcoplado.trim() : undefined,
-          patentes: (item.patentes || '—').trim(),
-          telefono: item.telefono ? item.telefono.trim() : undefined
+          cuit: (item.cuit || '').trim(),
+          transporte: (item.transporte || '').trim(),
+          patenteChasis: (item.patenteChasis || '').trim().toUpperCase(),
+          patenteAcoplado: (item.patenteAcoplado || '').trim().toUpperCase(),
+          patenteCamion: (item.patenteChasis || '').trim().toUpperCase(),
+          patentes: item.patenteAcoplado ? `${item.patenteChasis} / ${item.patenteAcoplado}` : (item.patenteChasis || '')
         };
 
         const existing = findExistingChofer(candidateData, choferes);
@@ -531,10 +554,11 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100/80 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                <th className="py-3 px-4">Chofer / Conductor</th>
-                <th className="py-3 px-4">DNI / CUIT</th>
-                <th className="py-3 px-4">Empresa / Transporte</th>
-                <th className="py-3 px-4">Patentes (Camión/Acoplado)</th>
+                <th className="py-3 px-4">Nombre</th>
+                <th className="py-3 px-4">CUIT</th>
+                <th className="py-3 px-4">Transporte</th>
+                <th className="py-3 px-4">Patente chasis</th>
+                <th className="py-3 px-4">Patente acoplado</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
@@ -557,7 +581,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                           {c.cuit}
                         </span>
                       ) : (
-                        <span className="text-slate-400 italic">No especificado</span>
+                        <span className="text-slate-400 italic">—</span>
                       )}
                     </td>
 
@@ -569,12 +593,22 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                     </td>
 
                     <td className="py-3 px-4 font-mono text-slate-800">
-                      {c.patentes && c.patentes !== '—' ? (
-                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200/80 font-bold">
-                          {c.patentes}
+                      {c.patenteChasis || c.patenteCamion ? (
+                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200/80 font-bold uppercase">
+                          {c.patenteChasis || c.patenteCamion}
                         </span>
                       ) : (
-                        <span className="text-slate-400 italic">Sin patente</span>
+                        <span className="text-slate-400 italic">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4 font-mono text-slate-800">
+                      {c.patenteAcoplado ? (
+                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200/80 font-bold uppercase">
+                          {c.patenteAcoplado}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">—</span>
                       )}
                     </td>
 
@@ -600,11 +634,11 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500 italic">
+                  <td colSpan={6} className="py-8 text-center text-slate-500 italic">
                     {searchTerm ? (
                       <div>No se encontraron choferes que coincidan con "{searchTerm}".</div>
                     ) : (
-                      <div>No hay choferes registrados en la base de datos. Haga clic en "+ Nuevo Chofer" o "Importar Ficha (Excel)".</div>
+                      <div>No hay choferes registrados en la base de datos. Haga clic en "+ Nuevo Chofer" para agregar uno.</div>
                     )}
                   </td>
                 </tr>
@@ -630,19 +664,19 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                     {choferAEditar ? 'Editar Chofer' : 'Registrar Nuevo Chofer'}
                   </h3>
                   <p className="text-[11px] text-emerald-100">
-                    Sincronización directa con la Base de Datos Central
+                    Formulario oficial de registro de choferes (5 campos)
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowModalAddEdit(false)}
-                className="p-1 text-emerald-200 hover:text-white rounded-lg"
+                className="p-1 text-emerald-200 hover:text-white rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveChofer} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSaveChofer} className="p-6 space-y-4 text-xs" noValidate>
               {formError && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl font-bold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
@@ -650,74 +684,350 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                 </div>
               )}
 
+              {/* 1. Nombre */}
               <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                  Nombre y Apellido Conductor *
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Nombre *</span>
+                  {formNombre.trim().length >= 3 && (
+                    <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 normal-case">
+                      <CheckCircle className="w-3 h-3" /> Válido
+                    </span>
+                  )}
                 </label>
-                <input
-                  type="text"
-                  placeholder="ej: Carlos Eduardo Gómez"
-                  value={formNombre}
-                  onChange={(e) => setFormNombre(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                  DNI / CUIT *
-                </label>
-                <input
-                  type="text"
-                  placeholder="ej: 20-28491039-4"
-                  value={formCuit}
-                  onChange={(e) => setFormCuit(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                  Empresa de Transporte *
-                </label>
-                <input
-                  type="text"
-                  placeholder="ej: Transporte Expreso Pampa SRL"
-                  value={formTransporte}
-                  onChange={(e) => setFormTransporte(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    Patente Camión
-                  </label>
+                <div className="relative flex items-center">
                   <input
                     type="text"
-                    placeholder="ej: AA 123 BB"
-                    value={formPatenteCamion}
-                    onChange={(e) => setFormPatenteCamion(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="ej: Carlos Eduardo Gómez"
+                    value={formNombre}
+                    onChange={(e) => {
+                      setFormNombre(e.target.value);
+                      if (fieldErrors.nombre) setFieldErrors((prev) => ({ ...prev, nombre: undefined }));
+                    }}
+                    className={`w-full px-3 py-2 pr-9 bg-slate-50 border rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none transition ${
+                      fieldErrors.nombre
+                        ? 'border-red-500 bg-red-50/50'
+                        : formNombre.trim().length >= 3
+                        ? 'border-emerald-500 bg-emerald-50/20'
+                        : 'border-slate-300'
+                    }`}
                   />
+                  <div className="absolute right-3 pointer-events-none">
+                    {fieldErrors.nombre ? (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    ) : formNombre.trim().length >= 3 ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    ) : null}
+                  </div>
+                </div>
+                {fieldErrors.nombre ? (
+                  <p className="text-red-600 font-semibold text-[11px] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {fieldErrors.nombre}
+                  </p>
+                ) : formNombre.trim().length >= 3 ? (
+                  <p className="text-emerald-700 font-medium text-[11px] mt-1 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Nombre verificado correctamente.
+                  </p>
+                ) : null}
+              </div>
+
+              {/* 2. CUIT */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center justify-between">
+                  <span>CUIT *</span>
+                  <span className={`text-[10px] font-bold flex items-center gap-1 normal-case ${
+                    choferExistentePorCuit
+                      ? 'text-red-600'
+                      : formCuit.length === 11
+                      ? 'text-emerald-600'
+                      : formCuit.length > 0
+                      ? 'text-amber-600'
+                      : 'text-slate-400'
+                  }`}>
+                    {choferExistentePorCuit ? (
+                      <><AlertCircle className="w-3 h-3 text-red-500" /> ¡CUIT Ya Registrado!</>
+                    ) : formCuit.length === 11 ? (
+                      <><CheckCircle className="w-3 h-3" /> CUIT Válido (11/11)</>
+                    ) : (
+                      <>{formCuit.length}/11 dígitos</>
+                    )}
+                  </span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    maxLength={11}
+                    placeholder="ej: 20284910394"
+                    value={formCuit}
+                    onChange={(e) => {
+                      const onlyNums = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      setFormCuit(onlyNums);
+                      if (fieldErrors.cuit) setFieldErrors((prev) => ({ ...prev, cuit: undefined }));
+                    }}
+                    className={`w-full px-3 py-2 pr-9 bg-slate-50 border rounded-xl font-mono text-slate-900 focus:ring-2 outline-none transition ${
+                      fieldErrors.cuit || choferExistentePorCuit
+                        ? 'border-red-500 bg-red-50/50 focus:ring-red-500'
+                        : formCuit.length === 11
+                        ? 'border-emerald-500 bg-emerald-50/20 focus:ring-emerald-500'
+                        : formCuit.length > 0
+                        ? 'border-amber-400 bg-amber-50/20 focus:ring-amber-400'
+                        : 'border-slate-300 focus:ring-emerald-500'
+                    }`}
+                  />
+                  <div className="absolute right-3 pointer-events-none">
+                    {fieldErrors.cuit || choferExistentePorCuit ? (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    ) : formCuit.length === 11 ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    ) : formCuit.length > 0 ? (
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                    ) : null}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
-                    Patente Acoplado
-                  </label>
+                {/* Banner de advertencia de CUIT Duplicado en tiempo real */}
+                {choferExistentePorCuit && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs font-medium flex items-start gap-2.5 shadow-xs">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1 w-full">
+                      <p className="font-bold text-red-950 flex items-center justify-between">
+                        <span>⚠️ Este CUIT ya existe en la base de datos</span>
+                      </p>
+                      <p className="text-red-800 text-[11px] leading-relaxed">
+                        El CUIT <strong className="font-mono text-red-950 font-bold">{cleanCuitActual}</strong> pertenece al siguiente chofer registrado:
+                      </p>
+                      <div className="mt-1 p-2 bg-white/90 border border-red-200 rounded-lg text-[11px] text-slate-800 space-y-0.5">
+                        <p><strong>Chofer:</strong> {choferExistentePorCuit.nombre}</p>
+                        <p><strong>Empresa:</strong> {choferExistentePorCuit.transporte || '—'}</p>
+                        <p><strong>Patentes:</strong> {choferExistentePorCuit.patenteChasis || choferExistentePorCuit.patenteCamion || '—'} {choferExistentePorCuit.patenteAcoplado ? `/ ${choferExistentePorCuit.patenteAcoplado}` : ''}</p>
+                      </div>
+                      <p className="text-red-700 text-[10px] font-semibold mt-1">
+                        Para evitar registros duplicados, verifique el CUIT o edite la ficha del chofer existente.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {fieldErrors.cuit ? (
+                  <p className="text-red-600 font-semibold text-[11px] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {fieldErrors.cuit}
+                  </p>
+                ) : !choferExistentePorCuit && formCuit.length === 11 ? (
+                  <p className="text-emerald-700 font-semibold text-[11px] mt-1 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    CUIT único y verificado (11 dígitos numéricos válidos).
+                  </p>
+                ) : !choferExistentePorCuit && formCuit.length > 0 ? (
+                  <p className="text-amber-700 font-medium text-[11px] mt-1 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    CUIT incompleto ({formCuit.length}/11 dígitos — faltan {11 - formCuit.length} dígitos).
+                  </p>
+                ) : !choferExistentePorCuit ? (
+                  <p className="text-slate-500 text-[11px] mt-1 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    Ingrese exactamente 11 números sin guiones ni puntos.
+                  </p>
+                ) : null}
+              </div>
+
+              {/* 3. Transporte */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Transporte *</span>
+                  {formTransporte.trim().length >= 2 && (
+                    <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 normal-case">
+                      <CheckCircle className="w-3 h-3" /> Válido
+                    </span>
+                  )}
+                </label>
+                <div className="relative flex items-center">
                   <input
                     type="text"
-                    placeholder="ej: CC 456 DD"
+                    placeholder="ej: Transporte Don Pedro"
+                    value={formTransporte}
+                    onChange={(e) => {
+                      const onlyLetters = e.target.value.replace(/[^a-zA-ZáéióúÁÉÍÓÚñÑ\s]/g, '');
+                      setFormTransporte(onlyLetters);
+                      if (fieldErrors.transporte) setFieldErrors((prev) => ({ ...prev, transporte: undefined }));
+                    }}
+                    className={`w-full px-3 py-2 pr-9 bg-slate-50 border rounded-xl font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none transition ${
+                      fieldErrors.transporte
+                        ? 'border-red-500 bg-red-50/50'
+                        : formTransporte.trim().length >= 2
+                        ? 'border-emerald-500 bg-emerald-50/20'
+                        : 'border-slate-300'
+                    }`}
+                  />
+                  <div className="absolute right-3 pointer-events-none">
+                    {fieldErrors.transporte ? (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    ) : formTransporte.trim().length >= 2 ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    ) : null}
+                  </div>
+                </div>
+                {fieldErrors.transporte ? (
+                  <p className="text-red-600 font-semibold text-[11px] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {fieldErrors.transporte}
+                  </p>
+                ) : formTransporte.trim().length >= 2 ? (
+                  <p className="text-emerald-700 font-medium text-[11px] mt-1 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Empresa de transporte válida (solo letras).
+                  </p>
+                ) : (
+                  <p className="text-slate-500 text-[11px] mt-1 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    Solo debe contener letras (sin números ni caracteres especiales).
+                  </p>
+                )}
+              </div>
+
+              {/* 4. Patente chasis */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Patente chasis *</span>
+                  <span className={`text-[10px] font-bold flex items-center gap-1 normal-case ${
+                    formPatenteChasis.length === 6 || formPatenteChasis.length === 7
+                      ? 'text-emerald-600'
+                      : formPatenteChasis.length > 0
+                      ? 'text-amber-600'
+                      : 'text-slate-400'
+                  }`}>
+                    {formPatenteChasis.length === 6 || formPatenteChasis.length === 7 ? (
+                      <><CheckCircle className="w-3 h-3" /> Formato correcto ({formPatenteChasis.length} car.)</>
+                    ) : (
+                      <>{formPatenteChasis.length}/6-7 car.</>
+                    )}
+                  </span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    maxLength={7}
+                    placeholder="ej: AB123CD"
+                    value={formPatenteChasis}
+                    onChange={(e) => {
+                      const clean = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7);
+                      setFormPatenteChasis(clean);
+                      if (fieldErrors.patenteChasis) setFieldErrors((prev) => ({ ...prev, patenteChasis: undefined }));
+                    }}
+                    className={`w-full px-3 py-2 pr-9 bg-slate-50 border rounded-xl font-mono uppercase text-slate-900 focus:ring-2 outline-none transition ${
+                      fieldErrors.patenteChasis
+                        ? 'border-red-500 bg-red-50/50 focus:ring-red-500'
+                        : formPatenteChasis.length === 6 || formPatenteChasis.length === 7
+                        ? 'border-emerald-500 bg-emerald-50/20 focus:ring-emerald-500'
+                        : formPatenteChasis.length > 0
+                        ? 'border-amber-400 bg-amber-50/20 focus:ring-amber-400'
+                        : 'border-slate-300 focus:ring-emerald-500'
+                    }`}
+                  />
+                  <div className="absolute right-3 pointer-events-none">
+                    {fieldErrors.patenteChasis ? (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    ) : formPatenteChasis.length === 6 || formPatenteChasis.length === 7 ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    ) : formPatenteChasis.length > 0 ? (
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                    ) : null}
+                  </div>
+                </div>
+                {fieldErrors.patenteChasis ? (
+                  <p className="text-red-600 font-semibold text-[11px] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {fieldErrors.patenteChasis}
+                  </p>
+                ) : formPatenteChasis.length === 6 || formPatenteChasis.length === 7 ? (
+                  <p className="text-emerald-700 font-semibold text-[11px] mt-1 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Patente de chasis válida ({formPatenteChasis.length} caracteres alfanuméricos).
+                  </p>
+                ) : formPatenteChasis.length > 0 ? (
+                  <p className="text-amber-700 font-medium text-[11px] mt-1 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    Patente incompleta ({formPatenteChasis.length} caracteres). Se requieren 6 o 7 caracteres.
+                  </p>
+                ) : (
+                  <p className="text-slate-500 text-[11px] mt-1 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    6 o 7 caracteres alfanuméricos (ej: AB123CD o AA123BB).
+                  </p>
+                )}
+              </div>
+
+              {/* 5. Patente acoplado */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Patente acoplado *</span>
+                  <span className={`text-[10px] font-bold flex items-center gap-1 normal-case ${
+                    formPatenteAcoplado.length === 6 || formPatenteAcoplado.length === 7
+                      ? 'text-emerald-600'
+                      : formPatenteAcoplado.length > 0
+                      ? 'text-amber-600'
+                      : 'text-slate-400'
+                  }`}>
+                    {formPatenteAcoplado.length === 6 || formPatenteAcoplado.length === 7 ? (
+                      <><CheckCircle className="w-3 h-3" /> Formato correcto ({formPatenteAcoplado.length} car.)</>
+                    ) : (
+                      <>{formPatenteAcoplado.length}/6-7 car.</>
+                    )}
+                  </span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    maxLength={7}
+                    placeholder="ej: CC456DD"
                     value={formPatenteAcoplado}
-                    onChange={(e) => setFormPatenteAcoplado(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    onChange={(e) => {
+                      const clean = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7);
+                      setFormPatenteAcoplado(clean);
+                      if (fieldErrors.patenteAcoplado) setFieldErrors((prev) => ({ ...prev, patenteAcoplado: undefined }));
+                    }}
+                    className={`w-full px-3 py-2 pr-9 bg-slate-50 border rounded-xl font-mono uppercase text-slate-900 focus:ring-2 outline-none transition ${
+                      fieldErrors.patenteAcoplado
+                        ? 'border-red-500 bg-red-50/50 focus:ring-red-500'
+                        : formPatenteAcoplado.length === 6 || formPatenteAcoplado.length === 7
+                        ? 'border-emerald-500 bg-emerald-50/20 focus:ring-emerald-500'
+                        : formPatenteAcoplado.length > 0
+                        ? 'border-amber-400 bg-amber-50/20 focus:ring-amber-400'
+                        : 'border-slate-300 focus:ring-emerald-500'
+                    }`}
                   />
+                  <div className="absolute right-3 pointer-events-none">
+                    {fieldErrors.patenteAcoplado ? (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    ) : formPatenteAcoplado.length === 6 || formPatenteAcoplado.length === 7 ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    ) : formPatenteAcoplado.length > 0 ? (
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                    ) : null}
+                  </div>
                 </div>
+                {fieldErrors.patenteAcoplado ? (
+                  <p className="text-red-600 font-semibold text-[11px] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {fieldErrors.patenteAcoplado}
+                  </p>
+                ) : formPatenteAcoplado.length === 6 || formPatenteAcoplado.length === 7 ? (
+                  <p className="text-emerald-700 font-semibold text-[11px] mt-1 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Patente de acoplado válida ({formPatenteAcoplado.length} caracteres alfanuméricos).
+                  </p>
+                ) : formPatenteAcoplado.length > 0 ? (
+                  <p className="text-amber-700 font-medium text-[11px] mt-1 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    Patente incompleta ({formPatenteAcoplado.length} caracteres). Se requieren 6 o 7 caracteres.
+                  </p>
+                ) : (
+                  <p className="text-slate-500 text-[11px] mt-1 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    6 o 7 caracteres alfanuméricos (ej: CC456DD o AA123BB).
+                  </p>
+                )}
               </div>
 
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-2">
