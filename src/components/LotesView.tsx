@@ -866,19 +866,34 @@ export const LotesView: React.FC<LotesViewProps> = ({
         ?.filter(m => m.tipo === 'INGRESO' && targetSilos.has(m.siloId) && m.bolsonOrigenNro)
         .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))[0];
 
-      const bolsonOrigenStr =
-        l.numeroBolsonOrigen ||
-        l.bolsonOrigenNro ||
-        (linkedOp as any)?.numeroBolsonOrigen ||
-        (linkedOp as any)?.bolsonOrigenNro ||
-        ingresoPrevioSilo?.bolsonOrigenNro ||
-        'Sin dato';
+      let bolsonOrigenStr = 'Sin dato';
+      let sectorBolsonOrigenStr = '—';
 
-      const sectorBolsonOrigenStr =
-        l.sectorBolsonOrigen ||
-        (linkedOp as any)?.bolsonOrigenSector ||
-        ingresoPrevioSilo?.bolsonOrigenSector ||
-        '—';
+      if (l.origenesBolson && l.origenesBolson.length > 0) {
+        const origenesValidos = l.origenesBolson.filter(o => o.bolsonNro && o.bolsonNro.trim() !== '');
+        if (origenesValidos.length > 0) {
+          bolsonOrigenStr = origenesValidos.map(o => o.bolsonNro!.trim()).join(', ');
+          sectorBolsonOrigenStr = origenesValidos.map(o => (o.sector && o.sector.trim()) ? o.sector.trim() : '—').join(', ');
+        }
+      }
+
+      if (bolsonOrigenStr === 'Sin dato') {
+        bolsonOrigenStr =
+          l.numeroBolsonOrigen ||
+          l.bolsonOrigenNro ||
+          (linkedOp as any)?.numeroBolsonOrigen ||
+          (linkedOp as any)?.bolsonOrigenNro ||
+          ingresoPrevioSilo?.bolsonOrigenNro ||
+          'Sin dato';
+      }
+
+      if (sectorBolsonOrigenStr === '—') {
+        sectorBolsonOrigenStr =
+          l.sectorBolsonOrigen ||
+          (linkedOp as any)?.bolsonOrigenSector ||
+          ingresoPrevioSilo?.bolsonOrigenSector ||
+          '—';
+      }
 
       return {
         'Cliente': cliente,

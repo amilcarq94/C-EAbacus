@@ -4,13 +4,13 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo } from '../types';
-import { generateLoteId } from '../utils/formatters';
+import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo, OrigenBolsonItem } from '../types';
+import { generateLoteId, formatKg } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { SilosSelector } from './SilosSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { ClienteSelect } from './ClienteSelect';
-import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info } from 'lucide-react';
+import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info, Trash2, Layers } from 'lucide-react';
 
 interface LoteFormProps {
   existingLotes: Lote[];
@@ -68,9 +68,30 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [ordenProcesoId, setOrdenProcesoId] = useState('');
   const [numeroOrdenMovimiento, setNumeroOrdenMovimiento] = useState('');
   const [silosOrigen, setSilosOrigen] = useState<SiloExtraccion[]>([]);
-  const [bolsonOrigenId, setBolsonOrigenId] = useState('');
-  const [numeroBolsonOrigen, setNumeroBolsonOrigen] = useState('');
-  const [sectorBolsonOrigen, setSectorBolsonOrigen] = useState('');
+  
+  // Lista dinámica de orígenes de bolsón con su sector
+  const [origenesBolson, setOrigenesBolson] = useState<OrigenBolsonItem[]>([
+    { bolsonId: '', bolsonNro: '', sector: '' }
+  ]);
+
+  const handleAgregarOrigen = () => {
+    setOrigenesBolson(prev => [...prev, { bolsonId: '', bolsonNro: '', sector: '' }]);
+  };
+
+  const handleQuitarOrigen = (index: number) => {
+    setOrigenesBolson(prev => {
+      const filtered = prev.filter((_, i) => i !== index);
+      return filtered.length > 0 ? filtered : [{ bolsonId: '', bolsonNro: '', sector: '' }];
+    });
+  };
+
+  const handleUpdateOrigen = (index: number, updatedItem: OrigenBolsonItem) => {
+    setOrigenesBolson(prev => {
+      const copy = [...prev];
+      copy[index] = updatedItem;
+      return copy;
+    });
+  };
 
   const [error, setError] = useState('');
 
@@ -214,9 +235,17 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setOrdenProcesoId(loteAEditar.ordenProcesoId || '');
       setNumeroOrdenMovimiento(loteAEditar.numeroOrdenMovimiento || '');
       setSilosOrigen(loteAEditar.silosOrigen || []);
-      setBolsonOrigenId(loteAEditar.bolsonOrigenId || '');
-      setNumeroBolsonOrigen(loteAEditar.numeroBolsonOrigen || loteAEditar.bolsonOrigenNro || '');
-      setSectorBolsonOrigen(loteAEditar.sectorBolsonOrigen || '');
+      if (loteAEditar.origenesBolson && loteAEditar.origenesBolson.length > 0) {
+        setOrigenesBolson(loteAEditar.origenesBolson);
+      } else if (loteAEditar.numeroBolsonOrigen || loteAEditar.bolsonOrigenNro) {
+        setOrigenesBolson([{
+          bolsonId: loteAEditar.bolsonOrigenId || '',
+          bolsonNro: loteAEditar.numeroBolsonOrigen || loteAEditar.bolsonOrigenNro || '',
+          sector: loteAEditar.sectorBolsonOrigen || ''
+        }]);
+      } else {
+        setOrigenesBolson([{ bolsonId: '', bolsonNro: '', sector: '' }]);
+      }
     } else {
       // Generar nuevo loteNro sugerido
       const allLoteNros = existingLotes.map(l => l.loteNro || l.id);
@@ -229,8 +258,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setObservaciones('');
       setAla('');
       setSector('');
-      setNumeroBolsonOrigen('');
-      setSectorBolsonOrigen('');
+      setOrigenesBolson([{ bolsonId: '', bolsonNro: '', sector: '' }]);
       if (ordenesEnCurso.length > 0) {
         const firstOp = ordenesEnCurso[0];
         setOrdenProcesoId(firstOp.id);
@@ -364,9 +392,30 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       return;
     }
 
+    // Validar que la suma de kilos/bolsas del lote no supere el stock disponible del/los silo(s) de origen seleccionado(s)
+    if (silosOrigen && silosOrigen.length > 0 && siloStocks) {
+      let stockSilosDisponible = 0;
+      silosOrigen.forEach(s => {
+        stockSilosDisponible += (siloStocks[s.siloId as SiloId] || 0);
+      });
+
+      if (isEditing && loteAEditar && loteAEditar.stockKg) {
+        stockSilosDisponible += loteAEditar.stockKg;
+      }
+
+      if (stockKg > stockSilosDisponible) {
+        setError(`La cantidad total del lote (${formatKg(stockKg)}) supera el stock disponible acumulado en los silos de origen seleccionados (${formatKg(stockSilosDisponible)}).`);
+        return;
+      }
+    }
+
     const uniqueId = isEditing ? id : `${cliente.replace(/\s+/g, '_')}_${loteNro.trim()}`;
 
     const calculatedCampania = getCampaniaIdFromDate(fechaIngreso);
+
+    const origenesValidos = origenesBolson.filter(o => o.bolsonNro && o.bolsonNro.trim() !== '');
+    const bolsonesNroConcat = origenesValidos.map(o => o.bolsonNro!.trim()).join(', ');
+    const sectoresConcat = origenesValidos.map(o => (o.sector && o.sector.trim()) ? o.sector.trim() : '—').join(', ');
 
     // Crear el objeto lote completo
     const loteGuardar: Lote = {
@@ -393,10 +442,11 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       ordenProcesoId: ordenProcesoId,
       numeroOrdenMovimiento: selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined,
       silosOrigen: silosOrigen,
-      bolsonOrigenId: bolsonOrigenId || undefined,
-      numeroBolsonOrigen: numeroBolsonOrigen.trim() || undefined,
-      bolsonOrigenNro: numeroBolsonOrigen.trim() || undefined,
-      sectorBolsonOrigen: sectorBolsonOrigen.trim() || undefined,
+      origenesBolson: origenesValidos.length > 0 ? origenesValidos : undefined,
+      bolsonOrigenId: origenesValidos[0]?.bolsonId || undefined,
+      numeroBolsonOrigen: bolsonesNroConcat || undefined,
+      bolsonOrigenNro: bolsonesNroConcat || undefined,
+      sectorBolsonOrigen: sectoresConcat || undefined,
       historial: loteAEditar ? loteAEditar.historial : [
         {
           id: `MOV-${Date.now()}`,
@@ -585,61 +635,104 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               return null;
             })()}
 
-            {/* Bolsón de origen con Selector / Buscador + Sector de bolsón de origen */}
+            {/* Lista dinámica de Orígenes de Bolsón y Sectores */}
             <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <BolsonSearchSelector
-                    bolsones={bolsonesFiltradosPorSilo}
-                    selectedBolsonId={bolsonOrigenId}
-                    selectedBolsonNro={numeroBolsonOrigen}
-                    onSelectBolson={(bolson) => {
-                      if (bolson) {
-                        setBolsonOrigenId(bolson.id);
-                        setNumeroBolsonOrigen(bolson.numeroBolson);
-                        if (bolson.zona) {
-                          const zNorm = bolson.zona.trim().toLowerCase();
-                          if (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'todos'].includes(zNorm)) {
-                            setSectorBolsonOrigen(zNorm === 'todos' ? 'Todos' : zNorm);
-                          }
-                        }
-                      } else {
-                        setBolsonOrigenId('');
-                        setNumeroBolsonOrigen('');
-                      }
-                    }}
-                    label="Bolsón de Origen (Trazabilidad)"
-                    placeholder={
-                      silosOrigen.length === 0
-                        ? "Seleccione primero el Silo de Origen abajo..."
-                        : bolsonesFiltradosPorSilo.length === 0
-                        ? "Sin bolsones registrados para este Silo"
-                        : "Buscar bolsón por N°, cliente, cultivo, variedad..."
-                    }
-                  />
-                </div>
-
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-emerald-900 mb-1">
-                    Sector de bolsón de origen
+                  <label className="text-xs font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-emerald-700" />
+                    Origen(es) de Bolsón y Sector (Trazabilidad)
                   </label>
-                  <select
-                    value={sectorBolsonOrigen}
-                    onChange={(e) => setSectorBolsonOrigen(e.target.value)}
-                    className="w-full px-3 py-2 bg-white text-slate-800 text-xs font-bold rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-2xs h-10 cursor-pointer"
-                  >
-                    <option value="">-- Sector --</option>
-                    <option value="a">a</option>
-                    <option value="b">b</option>
-                    <option value="c">c</option>
-                    <option value="d">d</option>
-                    <option value="e">e</option>
-                    <option value="f">f</option>
-                    <option value="g">g</option>
-                    <option value="h">h</option>
-                    <option value="Todos">Todos</option>
-                  </select>
+                  <p className="text-[11px] text-slate-600">
+                    Indique una o varias líneas de bolsón de origen y sectores vinculados.
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleAgregarOrigen}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-[#00603C] hover:bg-[#254731] text-white rounded-xl shadow-2xs transition cursor-pointer self-start sm:self-auto shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#C9922E]" />
+                  <span>Agregar origen</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {origenesBolson.map((origen, idx) => (
+                  <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white/90 p-3 rounded-xl border border-emerald-200/80 shadow-2xs">
+                    <div className="md:col-span-7">
+                      <label className="block text-[11px] font-bold text-emerald-950 uppercase tracking-wider mb-1">
+                        Bolsón de Origen {origenesBolson.length > 1 ? `#${idx + 1}` : ''}
+                      </label>
+                      <BolsonSearchSelector
+                        bolsones={bolsonesFiltradosPorSilo}
+                        selectedBolsonId={origen.bolsonId}
+                        selectedBolsonNro={origen.bolsonNro}
+                        onSelectBolson={(bolson) => {
+                          if (bolson) {
+                            let autoSector = origen.sector || '';
+                            if (bolson.zona) {
+                              const zNorm = bolson.zona.trim().toLowerCase();
+                              if (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'todos'].includes(zNorm)) {
+                                autoSector = zNorm === 'todos' ? 'Todos' : zNorm;
+                              }
+                            }
+                            handleUpdateOrigen(idx, {
+                              bolsonId: bolson.id,
+                              bolsonNro: bolson.numeroBolson,
+                              sector: autoSector
+                            });
+                          } else {
+                            handleUpdateOrigen(idx, { bolsonId: '', bolsonNro: '', sector: '' });
+                          }
+                        }}
+                        label=""
+                        placeholder={
+                          silosOrigen.length === 0
+                            ? "Seleccione primero el Silo de Origen abajo..."
+                            : bolsonesFiltradosPorSilo.length === 0
+                            ? "Sin bolsones registrados para este Silo"
+                            : "Buscar bolsón por N°, cliente, cultivo, variedad..."
+                        }
+                      />
+                    </div>
+
+                    <div className="md:col-span-4">
+                      <label className="block text-[11px] font-bold text-emerald-950 uppercase tracking-wider mb-1">
+                        Sector del bolsón
+                      </label>
+                      <select
+                        value={origen.sector || ''}
+                        onChange={(e) => handleUpdateOrigen(idx, { ...origen, sector: e.target.value })}
+                        className="w-full px-3 py-2 bg-white text-slate-800 text-xs font-bold rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-2xs h-10 cursor-pointer"
+                      >
+                        <option value="">-- Sector --</option>
+                        <option value="a">a</option>
+                        <option value="b">b</option>
+                        <option value="c">c</option>
+                        <option value="d">d</option>
+                        <option value="e">e</option>
+                        <option value="f">f</option>
+                        <option value="g">g</option>
+                        <option value="h">h</option>
+                        <option value="Todos">Todos</option>
+                      </select>
+                    </div>
+
+                    <div className="md:col-span-1 flex justify-end pb-0.5">
+                      {origenesBolson.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuitarOrigen(idx)}
+                          className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition border border-rose-200"
+                          title="Quitar esta línea de origen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {silosOrigen.length === 0 ? (

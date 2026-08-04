@@ -37,6 +37,12 @@ export interface MovimientoStock {
   detalle: string;
 }
 
+export interface OrigenBolsonItem {
+  bolsonId?: string;
+  bolsonNro?: string;
+  sector?: string;
+}
+
 export interface Lote {
   id: string; // ID único interno, ej: `${cliente}_${loteNro}`
   loteNro: string; // N° de Lote real editado por el usuario (ej: 58FIN, 32INT)
@@ -70,6 +76,7 @@ export interface Lote {
   numeroBolsonOrigen?: string; // N° de Bolsón de origen
   bolsonOrigenNro?: string; // Aliased for consistency
   sectorBolsonOrigen?: string; // Sector de bolsón de origen ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'Todos')
+  origenesBolson?: OrigenBolsonItem[]; // Detalle dinámico de orígenes de bolsón con su sector
 }
 
 export interface BolsonCampo {
