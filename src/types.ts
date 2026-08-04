@@ -69,6 +69,7 @@ export interface Lote {
   bolsonOrigenId?: string; // ID único del bolsón de origen
   numeroBolsonOrigen?: string; // N° de Bolsón de origen
   bolsonOrigenNro?: string; // Aliased for consistency
+  sectorBolsonOrigen?: string; // Sector de bolsón de origen ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'Todos')
 }
 
 export interface BolsonCampo {

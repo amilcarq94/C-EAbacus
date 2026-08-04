@@ -7,7 +7,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Lote, EstadoLoteType, TipoLoteType, OrdenProceso, MovimientoSilo } from '../types';
 import { formatNumberArg, formatKg, formatDateStr } from '../utils/formatters';
-import { Search, Grid, List, Plus, Filter, Eye, Edit2, ArrowDownRight, Trash2, QrCode, Download, Lock, ShieldAlert, KeyRound, X, Flame, Warehouse, Layers, Info, SlidersHorizontal, Check, Pin, RotateCcw, ChevronDown, Package, Sprout, Clock, CheckCircle2 } from 'lucide-react';
+import { Search, Grid, List, Plus, Filter, Eye, Edit2, ArrowDownRight, Trash2, QrCode, Download, Lock, ShieldAlert, KeyRound, X, Flame, Warehouse, Layers, Info, SlidersHorizontal, Check, Pin, RotateCcw, ChevronDown, Package, Sprout, Clock, CheckCircle2, BarChart2, Building2, Tag, FlaskConical, PieChart, Wheat } from 'lucide-react';
 import { QrCodeModal } from './QrCodeModal';
 
 interface MultiSelectDropdownProps {
@@ -164,6 +164,99 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
   );
 };
 
+interface DashboardGroupBlockProps {
+  title: string;
+  icon: React.ElementType;
+  groups: Array<{ label: string; bolsas: number; kg: number; lotes: number }>;
+  grandTotalKg: number;
+}
+
+const DashboardGroupBlock: React.FC<DashboardGroupBlockProps> = ({
+  title,
+  icon: Icon,
+  groups,
+  grandTotalKg,
+}) => {
+  if (groups.length === 0) {
+    return (
+      <div className="bg-gray-50/50 p-4 rounded-xl border border-dashed border-gray-200">
+        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          <Icon className="w-4 h-4 text-gray-400" />
+          <span>{title}</span>
+        </div>
+        <p className="text-xs text-gray-400">Sin datos para los filtros seleccionados.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex justify-between items-center text-xs font-bold text-[#00603C] uppercase tracking-wider border-b border-gray-100 pb-1.5">
+        <div className="flex items-center gap-2">
+          <Icon className="w-4 h-4 text-[#00603C]" />
+          <span>{title}</span>
+        </div>
+        <span className="text-[11px] font-semibold text-gray-500 font-mono normal-case">
+          {groups.length} {groups.length === 1 ? 'grupo' : 'grupos'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        {groups.map(group => {
+          const pct = grandTotalKg > 0 ? (group.kg / grandTotalKg) * 100 : 0;
+          return (
+            <div
+              key={`${title}-${group.label}`}
+              className="bg-gradient-to-br from-gray-50/80 via-white to-emerald-50/20 p-3.5 rounded-xl border border-gray-200/80 hover:border-[#00603C]/40 hover:shadow-2xs transition-all flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex justify-between items-start gap-1.5 mb-2">
+                  <span className="text-xs font-extrabold text-[#1A1A1A] line-clamp-2" title={group.label}>
+                    {group.label}
+                  </span>
+                  <span className="text-[10px] font-bold text-[#00603C] bg-[#E3EFE7] px-2 py-0.5 rounded-md shrink-0 font-mono">
+                    {group.lotes} {group.lotes === 1 ? 'lote' : 'lotes'}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-baseline text-xs">
+                    <span className="text-gray-500 font-medium">Bolsas:</span>
+                    <span className="font-black text-gray-900 font-mono">
+                      {formatNumberArg(group.bolsas)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-baseline text-xs border-t border-gray-100 pt-1">
+                    <span className="text-gray-500 font-medium">Total Kg:</span>
+                    <span className="font-black text-[#00603C] font-mono">
+                      {formatKg(group.kg)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Barra de Progresion Porcentual */}
+              <div className="mt-3 pt-2 border-t border-gray-100">
+                <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono mb-1">
+                  <span>Proporción</span>
+                  <span className="font-bold text-[#00603C]">{pct.toFixed(1)}%</span>
+                </div>
+                <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-[#00603C] h-full rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.max(2, pct))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 interface LotesViewProps {
   lotes: Lote[];
   ordenesProceso?: OrdenProceso[];
@@ -248,6 +341,26 @@ export const LotesView: React.FC<LotesViewProps> = ({
   const [filterAlas, setFilterAlas] = useState<string[]>(initialFilters.filterAlas);
   const [filterSectores, setFilterSectores] = useState<string[]>(initialFilters.filterSectores);
   const [isFilterPinned, setIsFilterPinned] = useState<boolean>(initialFilters.isPinned);
+
+  // Estado para la pestaña activa del Dashboard de Totales por Filtro
+  const [activeDashboardTab, setActiveDashboardTab] = useState<'TODOS' | 'CLIENTE' | 'ESPECIE' | 'VARIEDAD' | 'CATEGORIA' | 'TIPO' | 'TRATAMIENTO' | 'ESTADO'>('TODOS');
+
+  // Identificar qué dimensiones tienen un filtro activo aplicado
+  const activeFilterDimensions = useMemo(() => {
+    return {
+      CLIENTE: filterClientes.length > 0,
+      ESPECIE: filterEspecies.length > 0,
+      VARIEDAD: filterVariedades.length > 0,
+      CATEGORIA: filterCategorias.length > 0,
+      TIPO: filterTipos.length > 0,
+      TRATAMIENTO: filterTratamientos.length > 0,
+      ESTADO: filterEstados.length > 0,
+    };
+  }, [filterClientes, filterEspecies, filterVariedades, filterCategorias, filterTipos, filterTratamientos, filterEstados]);
+
+  const activeDimensionCount = useMemo(() => {
+    return Object.values(activeFilterDimensions).filter(Boolean).length;
+  }, [activeFilterDimensions]);
 
   const [selectedQrLote, setSelectedQrLote] = useState<Lote | null>(null);
   
@@ -562,6 +675,103 @@ export const LotesView: React.FC<LotesViewProps> = ({
     };
   }, [filteredLotes]);
 
+  // Dashboard de Totales Desagregados por los 7 criterios requeridos según los filtros activos
+  const dashboardTotalesPorFiltro = useMemo(() => {
+    let grandTotalBolsas = 0;
+    let grandTotalKg = 0;
+
+    const mapCliente: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+    const mapEspecie: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+    const mapVariedad: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+    const mapCategoria: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+    const mapTipo: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+    const mapTratamiento: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+    const mapEstado: Record<string, { label: string; bolsas: number; kg: number; lotes: number }> = {};
+
+    filteredLotes.forEach(lote => {
+      const bolsas = lote.stockBolsas || 0;
+      const kg = lote.stockKg !== undefined ? lote.stockKg : (bolsas * (lote.kgPorBolsa || 0));
+
+      grandTotalBolsas += bolsas;
+      grandTotalKg += kg;
+
+      // 1. Cliente
+      let rawCliente = lote.cliente || 'Sin cliente';
+      const upperC = rawCliente.toUpperCase().trim();
+      if (upperC === 'SAN DIEGO' || upperC === 'SAN DIEGO SEMILLA' || upperC === 'SAN DIEGO SEMILLAS') {
+        rawCliente = 'San Diego Semilla';
+      }
+      if (!mapCliente[rawCliente]) mapCliente[rawCliente] = { label: rawCliente, bolsas: 0, kg: 0, lotes: 0 };
+      mapCliente[rawCliente].bolsas += bolsas;
+      mapCliente[rawCliente].kg += kg;
+      mapCliente[rawCliente].lotes += 1;
+
+      // 2. Especie
+      const esp = lote.especie?.trim() || 'Sin especificar';
+      if (!mapEspecie[esp]) mapEspecie[esp] = { label: esp, bolsas: 0, kg: 0, lotes: 0 };
+      mapEspecie[esp].bolsas += bolsas;
+      mapEspecie[esp].kg += kg;
+      mapEspecie[esp].lotes += 1;
+
+      // 3. Variedad
+      const varName = lote.variedad?.trim() || 'Sin variedad';
+      if (!mapVariedad[varName]) mapVariedad[varName] = { label: varName, bolsas: 0, kg: 0, lotes: 0 };
+      mapVariedad[varName].bolsas += bolsas;
+      mapVariedad[varName].kg += kg;
+      mapVariedad[varName].lotes += 1;
+
+      // 4. Categoría
+      const cat = lote.categoria?.trim() || 'PRIMU';
+      if (!mapCategoria[cat]) mapCategoria[cat] = { label: cat, bolsas: 0, kg: 0, lotes: 0 };
+      mapCategoria[cat].bolsas += bolsas;
+      mapCategoria[cat].kg += kg;
+      mapCategoria[cat].lotes += 1;
+
+      // 5. Tipo
+      const tp = lote.tipo?.trim() || 'Final';
+      if (!mapTipo[tp]) mapTipo[tp] = { label: tp, bolsas: 0, kg: 0, lotes: 0 };
+      mapTipo[tp].bolsas += bolsas;
+      mapTipo[tp].kg += kg;
+      mapTipo[tp].lotes += 1;
+
+      // 6. Tratamiento
+      const tratStr = (lote.tratamiento && lote.tratamiento.length > 0)
+        ? lote.tratamiento.join(', ')
+        : (lote.producto && !['Ninguno', 'Sin Tratamiento', 'FINAL', 'INTERMEDIO', ''].includes(lote.producto)
+            ? lote.producto
+            : 'Sin tratar');
+      if (!mapTratamiento[tratStr]) mapTratamiento[tratStr] = { label: tratStr, bolsas: 0, kg: 0, lotes: 0 };
+      mapTratamiento[tratStr].bolsas += bolsas;
+      mapTratamiento[tratStr].kg += kg;
+      mapTratamiento[tratStr].lotes += 1;
+
+      // 7. Estado
+      const est = lote.estado || 'Disponible';
+      if (!mapEstado[est]) mapEstado[est] = { label: est, bolsas: 0, kg: 0, lotes: 0 };
+      mapEstado[est].bolsas += bolsas;
+      mapEstado[est].kg += kg;
+      mapEstado[est].lotes += 1;
+    });
+
+    const sortByKg = (arr: Array<{ label: string; bolsas: number; kg: number; lotes: number }>) =>
+      arr.sort((a, b) => b.kg - a.kg);
+
+    return {
+      grandTotalBolsas,
+      grandTotalKg,
+      totalLotes: filteredLotes.length,
+      desagregado: {
+        cliente: sortByKg(Object.values(mapCliente)),
+        especie: sortByKg(Object.values(mapEspecie)),
+        variedad: sortByKg(Object.values(mapVariedad)),
+        categoria: sortByKg(Object.values(mapCategoria)),
+        tipo: sortByKg(Object.values(mapTipo)),
+        tratamiento: sortByKg(Object.values(mapTratamiento)),
+        estado: sortByKg(Object.values(mapEstado)),
+      }
+    };
+  }, [filteredLotes]);
+
   const formatBolsasLabel = (count: number) => {
     const formatted = formatNumberArg(count);
     return count === 1 ? `${formatted} bolsa` : `${formatted} bolsas`;
@@ -582,22 +792,48 @@ export const LotesView: React.FC<LotesViewProps> = ({
     }
   };
 
-  // Exportar a Excel (.xlsx) con ORDEN ESTRICTO de 15 columnas
+  // Exportar a Excel (.xlsx) con ORDEN ESTRICTO de 17 columnas
   const handleExportExcel = () => {
-    if (filteredLotes.length === 0) return;
+    // Exportar únicamente los lotes con estado "REALIZADO" (excluir "PRE-CARGA")
+    const lotesRealizados = filteredLotes.filter(
+      l => (l.estadoRegistro || 'REALIZADO') === 'REALIZADO' && l.estadoRegistro !== 'PRE-CARGA'
+    );
 
-    const dataToExport = filteredLotes.map(l => {
+    if (lotesRealizados.length === 0) {
+      alert('No hay lotes con estado "Realizado" para exportar con los filtros seleccionados.');
+      return;
+    }
+
+    const dataToExport = lotesRealizados.map(l => {
       let cliente = l.cliente || 'Sin cliente';
       if (cliente.toUpperCase() === 'SAN DIEGO' || cliente.toUpperCase() === 'SAN DIEGO SEMILLAS') {
         cliente = 'San Diego Semilla';
       }
+
+      // Fecha de realizado: fechaHoraProduccion o fechaIngreso
+      let fechaRealizadoStr = '—';
+      if (l.fechaHoraProduccion) {
+        if (l.fechaHoraProduccion.includes('T')) {
+          const [d, t] = l.fechaHoraProduccion.split('T');
+          fechaRealizadoStr = `${formatDateStr(d)} ${t}`;
+        } else {
+          fechaRealizadoStr = formatDateStr(l.fechaHoraProduccion);
+        }
+      } else if (l.fechaIngreso) {
+        fechaRealizadoStr = formatDateStr(l.fechaIngreso);
+      }
+
       const tratamientoStr = (l.tratamiento && l.tratamiento.length > 0)
         ? l.tratamiento.join(', ')
         : 'Sin tratar';
 
-      const alaStr = l.ala ? `ALA ${l.ala}` : 'Sin asignar';
-      const sectorStr = l.sector ? `SECTOR ${l.sector}` : 'Sin asignar';
-      const ubicacionStr = (l.ala && l.sector) ? `ALA ${l.ala} · SECTOR ${l.sector}` : 'Sin asignar';
+      const ubicacionStr = (l.ala && l.sector)
+        ? `ALA ${l.ala} · SECTOR ${l.sector}`
+        : l.ala
+        ? `ALA ${l.ala}`
+        : l.sector
+        ? `SECTOR ${l.sector}`
+        : 'Sin asignar';
 
       // Resolver vinculación a Orden, Silo y Bolsón de Origen
       const linkedOp = ordenesProceso?.find(
@@ -638,23 +874,28 @@ export const LotesView: React.FC<LotesViewProps> = ({
         ingresoPrevioSilo?.bolsonOrigenNro ||
         'Sin dato';
 
+      const sectorBolsonOrigenStr =
+        l.sectorBolsonOrigen ||
+        (linkedOp as any)?.bolsonOrigenSector ||
+        ingresoPrevioSilo?.bolsonOrigenSector ||
+        '—';
+
       return {
         'Cliente': cliente,
-        'Fecha de ingreso': l.fechaIngreso ? formatDateStr(l.fechaIngreso) : '—',
+        'Fecha de realizado': fechaRealizadoStr,
         'Especie': l.especie || 'Sin especificar',
         'Variedad': l.variedad || 'Sin variedad',
+        'Número de lote': l.loteNro || l.id,
         'N° Orden de Proceso / Movimiento': ordenProcesoMovStr,
         'Silo de origen': siloOrigenStr,
         'N° de Bolsón de origen': bolsonOrigenStr,
+        'Sector de bolsón de origen': sectorBolsonOrigenStr,
         'Stock bolsas': l.stockBolsas,
         'Kg por bolsa': l.kgPorBolsa,
         'Stock total': l.stockKg,
         'Tipo de lote': l.tipo || 'Final',
         'Categoría': l.categoria || 'PRIMU',
         'Tratamiento': tratamientoStr,
-        'Producto tratamiento': l.producto || 'Ninguno',
-        'Ala acopio': alaStr,
-        'Sector acopio': sectorStr,
         'Ubicación acopio': ubicacionStr,
         'Estado': l.estado
       };
@@ -674,48 +915,71 @@ export const LotesView: React.FC<LotesViewProps> = ({
     worksheet['!cols'] = colWidths;
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Lotes Filtrados');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Lotes Realizados');
     
-    XLSX.writeFile(workbook, `Reporte_Lotes_Filtrados_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `Reporte_Lotes_Realizados_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Exportar CSV delimitado por punto y coma (;) respetando las columnas
   const handleExportCSV = () => {
-    if (filteredLotes.length === 0) return;
+    const lotesRealizados = filteredLotes.filter(
+      l => (l.estadoRegistro || 'REALIZADO') === 'REALIZADO' && l.estadoRegistro !== 'PRE-CARGA'
+    );
+
+    if (lotesRealizados.length === 0) {
+      alert('No hay lotes con estado "Realizado" para exportar con los filtros seleccionados.');
+      return;
+    }
 
     const headers = [
       'Cliente',
-      'Fecha de ingreso',
+      'Fecha de realizado',
       'Especie',
       'Variedad',
+      'Número de lote',
       'N° Orden de Proceso / Movimiento',
       'Silo de origen',
       'N° de Bolsón de origen',
+      'Sector de bolsón de origen',
       'Stock bolsas',
       'Kg por bolsa',
       'Stock total',
       'Tipo de lote',
       'Categoría',
       'Tratamiento',
-      'Producto tratamiento',
-      'Ala acopio',
-      'Sector acopio',
       'Ubicación acopio',
       'Estado'
     ];
 
-    const rows = filteredLotes.map(l => {
+    const rows = lotesRealizados.map(l => {
       let cliente = l.cliente || 'Sin cliente';
       if (cliente.toUpperCase() === 'SAN DIEGO' || cliente.toUpperCase() === 'SAN DIEGO SEMILLAS') {
         cliente = 'San Diego Semilla';
       }
+
+      let fechaRealizadoStr = '—';
+      if (l.fechaHoraProduccion) {
+        if (l.fechaHoraProduccion.includes('T')) {
+          const [d, t] = l.fechaHoraProduccion.split('T');
+          fechaRealizadoStr = `${formatDateStr(d)} ${t}`;
+        } else {
+          fechaRealizadoStr = formatDateStr(l.fechaHoraProduccion);
+        }
+      } else if (l.fechaIngreso) {
+        fechaRealizadoStr = formatDateStr(l.fechaIngreso);
+      }
+
       const tratamientoStr = (l.tratamiento && l.tratamiento.length > 0)
         ? l.tratamiento.join(', ')
         : 'Sin tratar';
 
-      const alaStr = l.ala ? `ALA ${l.ala}` : 'Sin asignar';
-      const sectorStr = l.sector ? `SECTOR ${l.sector}` : 'Sin asignar';
-      const ubicacionStr = (l.ala && l.sector) ? `ALA ${l.ala} · SECTOR ${l.sector}` : 'Sin asignar';
+      const ubicacionStr = (l.ala && l.sector)
+        ? `ALA ${l.ala} · SECTOR ${l.sector}`
+        : l.ala
+        ? `ALA ${l.ala}`
+        : l.sector
+        ? `SECTOR ${l.sector}`
+        : 'Sin asignar';
 
       const linkedOp = ordenesProceso?.find(
         o => o.id === l.ordenProcesoId || o.numeroOrden === l.ordenProcesoId
@@ -755,23 +1019,28 @@ export const LotesView: React.FC<LotesViewProps> = ({
         ingresoPrevioSiloCsv?.bolsonOrigenNro ||
         'Sin dato';
 
+      const sectorBolsonOrigenStr =
+        l.sectorBolsonOrigen ||
+        (linkedOp as any)?.bolsonOrigenSector ||
+        ingresoPrevioSiloCsv?.bolsonOrigenSector ||
+        '—';
+
       return [
         cliente,
-        l.fechaIngreso ? formatDateStr(l.fechaIngreso) : '—',
+        fechaRealizadoStr,
         l.especie || 'Sin especificar',
         l.variedad || 'Sin variedad',
+        l.loteNro || l.id,
         ordenProcesoMovStr,
         siloOrigenStr,
         bolsonOrigenStr,
+        sectorBolsonOrigenStr,
         l.stockBolsas,
         l.kgPorBolsa,
         l.stockKg,
         l.tipo || 'Final',
         l.categoria || 'PRIMU',
         tratamientoStr,
-        l.producto || 'Ninguno',
-        alaStr,
-        sectorStr,
         ubicacionStr,
         l.estado
       ];
@@ -1280,6 +1549,249 @@ export const LotesView: React.FC<LotesViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Dashboard de Totales según Filtros */}
+      <div className="bg-white p-5 rounded-2xl border border-[#00603C]/20 shadow-sm space-y-4" id="dashboard-totales-filtros">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-[#00603C] text-white rounded-xl shadow-2xs">
+              <BarChart2 className="w-5 h-5 text-[#C9922E]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">
+                  Dashboard de Totales Según Filtros
+                </h3>
+                {hasActiveFilters && (
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Filtros Activos
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                Resumen dinámico de bolsas y kilogramos desagregados por las 7 dimensiones clave
+              </p>
+            </div>
+          </div>
+
+          {/* Totales Globales Filtrados */}
+          <div className="flex flex-wrap items-center gap-2.5 text-xs bg-[#E3EFE7]/50 p-2.5 rounded-xl border border-[#00603C]/15">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white rounded-lg border border-gray-200/80 font-medium text-gray-700">
+              <span className="text-gray-400 font-semibold">Lotes:</span>
+              <span className="font-extrabold text-[#00603C] font-mono">{dashboardTotalesPorFiltro.totalLotes}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white rounded-lg border border-gray-200/80 font-medium text-gray-700">
+              <span className="text-gray-400 font-semibold">Total Bolsas:</span>
+              <span className="font-extrabold text-[#00603C] font-mono">{formatNumberArg(dashboardTotalesPorFiltro.grandTotalBolsas)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#00603C] text-white rounded-lg font-bold shadow-2xs">
+              <span className="text-emerald-200 font-normal">Total Kg:</span>
+              <span className="font-mono">{formatKg(dashboardTotalesPorFiltro.grandTotalKg)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Pestañas de Desagregación */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-100 pb-2 overflow-x-auto">
+          {[
+            {
+              id: 'TODOS',
+              label: activeDimensionCount > 0 ? `Filtros Aplicados (${activeDimensionCount})` : 'Filtros Aplicados',
+              icon: PieChart,
+              count: activeDimensionCount,
+              isApplied: activeDimensionCount > 0
+            },
+            {
+              id: 'CLIENTE',
+              label: 'Cliente',
+              icon: Building2,
+              count: dashboardTotalesPorFiltro.desagregado.cliente.length,
+              isApplied: activeFilterDimensions.CLIENTE
+            },
+            {
+              id: 'ESPECIE',
+              label: 'Especie',
+              icon: Sprout,
+              count: dashboardTotalesPorFiltro.desagregado.especie.length,
+              isApplied: activeFilterDimensions.ESPECIE
+            },
+            {
+              id: 'VARIEDAD',
+              label: 'Variedad',
+              icon: Wheat,
+              count: dashboardTotalesPorFiltro.desagregado.variedad.length,
+              isApplied: activeFilterDimensions.VARIEDAD
+            },
+            {
+              id: 'CATEGORIA',
+              label: 'Categoría',
+              icon: Tag,
+              count: dashboardTotalesPorFiltro.desagregado.categoria.length,
+              isApplied: activeFilterDimensions.CATEGORIA
+            },
+            {
+              id: 'TIPO',
+              label: 'Tipo',
+              icon: Package,
+              count: dashboardTotalesPorFiltro.desagregado.tipo.length,
+              isApplied: activeFilterDimensions.TIPO
+            },
+            {
+              id: 'TRATAMIENTO',
+              label: 'Tratamiento',
+              icon: FlaskConical,
+              count: dashboardTotalesPorFiltro.desagregado.tratamiento.length,
+              isApplied: activeFilterDimensions.TRATAMIENTO
+            },
+            {
+              id: 'ESTADO',
+              label: 'Estado',
+              icon: CheckCircle2,
+              count: dashboardTotalesPorFiltro.desagregado.estado.length,
+              isApplied: activeFilterDimensions.ESTADO
+            },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeDashboardTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveDashboardTab(tab.id as any)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer shrink-0 relative ${
+                  isActive
+                    ? 'bg-[#00603C] text-white shadow-2xs'
+                    : tab.isApplied
+                    ? 'bg-emerald-50 text-[#00603C] border border-[#00603C]/30 hover:bg-emerald-100/80'
+                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-gray-200/60'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#C9922E]' : tab.isApplied ? 'text-[#00603C]' : 'text-gray-500'}`} />
+                <span>{tab.label}</span>
+                {tab.isApplied && !isActive && (
+                  <span className="w-2 h-2 rounded-full bg-[#C9922E] animate-pulse" title="Filtro aplicado" />
+                )}
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  isActive ? 'bg-white/20 text-white' : tab.isApplied ? 'bg-[#00603C]/10 text-[#00603C]' : 'bg-gray-200/80 text-gray-600'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Contenido de Desagregación */}
+        {dashboardTotalesPorFiltro.totalLotes === 0 ? (
+          <div className="text-xs text-gray-400 py-8 text-center bg-gray-50/60 rounded-xl border border-dashed border-gray-200">
+            No hay lotes que coincidan con los filtros activos.
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {activeDashboardTab === 'TODOS' && activeDimensionCount === 0 && (
+              <div className="bg-gradient-to-r from-emerald-50/80 via-white to-amber-50/50 p-4.5 rounded-xl border border-dashed border-emerald-300 text-center space-y-3">
+                <div className="flex items-center justify-center gap-2 text-xs font-extrabold text-[#00603C] uppercase tracking-wider">
+                  <Filter className="w-4 h-4 text-[#C9922E]" />
+                  <span>Sin Filtros de Dimensión Seleccionados</span>
+                </div>
+                <p className="text-xs text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                  Este panel muestra únicamente los totales desagregados para las dimensiones que tengas <strong className="text-[#00603C]">aplicadas en los filtros superiores</strong> (Cliente, Especie, Variedad, Categoría, Tipo, Tratamiento o Estado).
+                </p>
+                <p className="text-[11px] font-semibold text-gray-500">
+                  Selecciona una dimensión abajo para explorar sus desgloses directamente:
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  {[
+                    { id: 'CLIENTE', label: 'Cliente', icon: Building2 },
+                    { id: 'ESPECIE', label: 'Especie', icon: Sprout },
+                    { id: 'VARIEDAD', label: 'Variedad', icon: Wheat },
+                    { id: 'CATEGORIA', label: 'Categoría', icon: Tag },
+                    { id: 'TIPO', label: 'Tipo', icon: Package },
+                    { id: 'TRATAMIENTO', label: 'Tratamiento', icon: FlaskConical },
+                    { id: 'ESTADO', label: 'Estado', icon: CheckCircle2 },
+                  ].map(d => {
+                    const Icon = d.icon;
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setActiveDashboardTab(d.id as any)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#00603C] bg-white hover:bg-[#E3EFE7] rounded-xl border border-[#00603C]/30 shadow-2xs transition cursor-pointer"
+                      >
+                        <Icon className="w-3.5 h-3.5 text-[#C9922E]" />
+                        <span>Ver por {d.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(activeDashboardTab === 'CLIENTE' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.CLIENTE)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Cliente"
+                icon={Building2}
+                groups={dashboardTotalesPorFiltro.desagregado.cliente}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+
+            {(activeDashboardTab === 'ESPECIE' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.ESPECIE)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Especie"
+                icon={Sprout}
+                groups={dashboardTotalesPorFiltro.desagregado.especie}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+
+            {(activeDashboardTab === 'VARIEDAD' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.VARIEDAD)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Variedad"
+                icon={Wheat}
+                groups={dashboardTotalesPorFiltro.desagregado.variedad}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+
+            {(activeDashboardTab === 'CATEGORIA' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.CATEGORIA)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Categoría"
+                icon={Tag}
+                groups={dashboardTotalesPorFiltro.desagregado.categoria}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+
+            {(activeDashboardTab === 'TIPO' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.TIPO)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Tipo de Lote"
+                icon={Package}
+                groups={dashboardTotalesPorFiltro.desagregado.tipo}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+
+            {(activeDashboardTab === 'TRATAMIENTO' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.TRATAMIENTO)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Tratamiento"
+                icon={FlaskConical}
+                groups={dashboardTotalesPorFiltro.desagregado.tratamiento}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+
+            {(activeDashboardTab === 'ESTADO' || (activeDashboardTab === 'TODOS' && activeFilterDimensions.ESTADO)) && (
+              <DashboardGroupBlock
+                title="Desagregado por Estado"
+                icon={CheckCircle2}
+                groups={dashboardTotalesPorFiltro.desagregado.estado}
+                grandTotalKg={dashboardTotalesPorFiltro.grandTotalKg}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Resumen de Existencias por Especie */}

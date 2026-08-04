@@ -70,6 +70,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [silosOrigen, setSilosOrigen] = useState<SiloExtraccion[]>([]);
   const [bolsonOrigenId, setBolsonOrigenId] = useState('');
   const [numeroBolsonOrigen, setNumeroBolsonOrigen] = useState('');
+  const [sectorBolsonOrigen, setSectorBolsonOrigen] = useState('');
 
   const [error, setError] = useState('');
 
@@ -215,6 +216,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setSilosOrigen(loteAEditar.silosOrigen || []);
       setBolsonOrigenId(loteAEditar.bolsonOrigenId || '');
       setNumeroBolsonOrigen(loteAEditar.numeroBolsonOrigen || loteAEditar.bolsonOrigenNro || '');
+      setSectorBolsonOrigen(loteAEditar.sectorBolsonOrigen || '');
     } else {
       // Generar nuevo loteNro sugerido
       const allLoteNros = existingLotes.map(l => l.loteNro || l.id);
@@ -228,6 +230,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setAla('');
       setSector('');
       setNumeroBolsonOrigen('');
+      setSectorBolsonOrigen('');
       if (ordenesEnCurso.length > 0) {
         const firstOp = ordenesEnCurso[0];
         setOrdenProcesoId(firstOp.id);
@@ -393,6 +396,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       bolsonOrigenId: bolsonOrigenId || undefined,
       numeroBolsonOrigen: numeroBolsonOrigen.trim() || undefined,
       bolsonOrigenNro: numeroBolsonOrigen.trim() || undefined,
+      sectorBolsonOrigen: sectorBolsonOrigen.trim() || undefined,
       historial: loteAEditar ? loteAEditar.historial : [
         {
           id: `MOV-${Date.now()}`,
@@ -581,30 +585,63 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               return null;
             })()}
 
-            {/* Bolsón de origen con Selector / Buscador */}
-            <div>
-              <BolsonSearchSelector
-                bolsones={bolsonesFiltradosPorSilo}
-                selectedBolsonId={bolsonOrigenId}
-                selectedBolsonNro={numeroBolsonOrigen}
-                onSelectBolson={(bolson) => {
-                  if (bolson) {
-                    setBolsonOrigenId(bolson.id);
-                    setNumeroBolsonOrigen(bolson.numeroBolson);
-                  } else {
-                    setBolsonOrigenId('');
-                    setNumeroBolsonOrigen('');
-                  }
-                }}
-                label="Bolsón de Origen (Trazabilidad)"
-                placeholder={
-                  silosOrigen.length === 0
-                    ? "Seleccione primero el Silo de Origen abajo..."
-                    : bolsonesFiltradosPorSilo.length === 0
-                    ? "Sin bolsones registrados para este Silo"
-                    : "Buscar bolsón por N°, cliente, cultivo, variedad..."
-                }
-              />
+            {/* Bolsón de origen con Selector / Buscador + Sector de bolsón de origen */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <BolsonSearchSelector
+                    bolsones={bolsonesFiltradosPorSilo}
+                    selectedBolsonId={bolsonOrigenId}
+                    selectedBolsonNro={numeroBolsonOrigen}
+                    onSelectBolson={(bolson) => {
+                      if (bolson) {
+                        setBolsonOrigenId(bolson.id);
+                        setNumeroBolsonOrigen(bolson.numeroBolson);
+                        if (bolson.zona) {
+                          const zNorm = bolson.zona.trim().toLowerCase();
+                          if (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'todos'].includes(zNorm)) {
+                            setSectorBolsonOrigen(zNorm === 'todos' ? 'Todos' : zNorm);
+                          }
+                        }
+                      } else {
+                        setBolsonOrigenId('');
+                        setNumeroBolsonOrigen('');
+                      }
+                    }}
+                    label="Bolsón de Origen (Trazabilidad)"
+                    placeholder={
+                      silosOrigen.length === 0
+                        ? "Seleccione primero el Silo de Origen abajo..."
+                        : bolsonesFiltradosPorSilo.length === 0
+                        ? "Sin bolsones registrados para este Silo"
+                        : "Buscar bolsón por N°, cliente, cultivo, variedad..."
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-emerald-900 mb-1">
+                    Sector de bolsón de origen
+                  </label>
+                  <select
+                    value={sectorBolsonOrigen}
+                    onChange={(e) => setSectorBolsonOrigen(e.target.value)}
+                    className="w-full px-3 py-2 bg-white text-slate-800 text-xs font-bold rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-2xs h-10 cursor-pointer"
+                  >
+                    <option value="">-- Sector --</option>
+                    <option value="a">a</option>
+                    <option value="b">b</option>
+                    <option value="c">c</option>
+                    <option value="d">d</option>
+                    <option value="e">e</option>
+                    <option value="f">f</option>
+                    <option value="g">g</option>
+                    <option value="h">h</option>
+                    <option value="Todos">Todos</option>
+                  </select>
+                </div>
+              </div>
+
               {silosOrigen.length === 0 ? (
                 <p className="text-[11px] text-amber-800 bg-amber-50/90 p-2 rounded-lg border border-amber-200 mt-1 flex items-center gap-1.5 font-medium">
                   <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
