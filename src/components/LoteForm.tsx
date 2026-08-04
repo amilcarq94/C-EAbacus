@@ -58,12 +58,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [stockKg, setStockKg] = useState<number>(4000);
   const [fechaIngreso, setFechaIngreso] = useState(() => new Date().toISOString().split('T')[0]);
   const [estado, setEstado] = useState<EstadoLoteType>('Disponible');
-  const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('REALIZADO');
-  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  });
+  const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('PRE-CARGA');
+  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>('');
   const [observaciones, setObservaciones] = useState('');
   const [ala, setAla] = useState('');
   const [sector, setSector] = useState('');
@@ -82,7 +78,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
     return ordenesProceso.filter(op => op.estado === 'EN CURSO' || (loteAEditar && op.id === loteAEditar.ordenProcesoId));
   }, [ordenesProceso, loteAEditar]);
 
-  // Bolsones disponibles filtrados estrictamente por el/los Silo(s) de Origen (Extracción) seleccionados
+  // Bolsones disponibles filtrados estrictamente por el/los Silo(s) de Origen (Extracción) seleccionados con stock > 0
   const bolsonesFiltradosPorSilo = useMemo(() => {
     const selectedSiloIds = (silosOrigen || []).map(s => s.siloId).filter(Boolean);
     
@@ -90,23 +86,41 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       return []; // Sin silos de origen seleccionados aún
     }
 
-    // 1. Obtener movimientos de tipo INGRESO para los silos de origen seleccionados (posteriores al último AJUSTE_ZERO)
+    // 1. Obtener movimientos de tipo INGRESO para los silos de origen seleccionados (posteriores al último AJUSTE_ZERO o bal=0)
     const bolsonNrosValidos = new Set<string>();
     const bolsonIdsValidos = new Set<string>();
     const bolsonMapExtra = new Map<string, BolsonCampo>();
 
     selectedSiloIds.forEach(siloId => {
-      const movsSilo = (movimientosSilo || []).filter(m => m.siloId === siloId);
-      let lastZeroIdx = -1;
-      for (let i = movsSilo.length - 1; i >= 0; i--) {
-        if (movsSilo[i].tipo === 'AJUSTE_ZERO') {
-          lastZeroIdx = i;
-          break;
-        }
-      }
-      const relevantMovs = lastZeroIdx >= 0 ? movsSilo.slice(lastZeroIdx + 1) : movsSilo;
+      const movsSilo = (movimientosSilo || [])
+        .filter(m => m.siloId === siloId)
+        .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (a.id || '').localeCompare(b.id || ''));
 
-      relevantMovs.forEach(m => {
+      // Verificar el balance acumulado del silo para localizar el inicio de la carga activa del silo
+      let currentBal = 0;
+      let lastZeroIdx = -1;
+      movsSilo.forEach((m, idx) => {
+        if (m.tipo === 'INGRESO') {
+          currentBal += m.kg;
+        } else if (m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')) {
+          currentBal = Math.max(0, currentBal - m.kg);
+        } else if (m.tipo === 'AJUSTE_ZERO') {
+          currentBal = 0;
+        }
+        if (currentBal === 0) {
+          lastZeroIdx = idx;
+        }
+      });
+
+      // Si el stock actual del silo es 0, no hay bolsones activos con stock > 0 en este silo
+      if (currentBal <= 0) {
+        return;
+      }
+
+      // Movimientos de la carga activa posterior al último punto de stock 0 o AJUSTE_ZERO
+      const activeBatchMovs = lastZeroIdx >= 0 ? movsSilo.slice(lastZeroIdx + 1) : movsSilo;
+
+      activeBatchMovs.forEach(m => {
         if (m.tipo === 'INGRESO') {
           if (m.bolsonOrigenId) {
             bolsonIdsValidos.add(m.bolsonOrigenId);
@@ -126,9 +140,9 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                 categoria: m.categoria || 'Original',
                 campo: m.campoOrigen || '-',
                 zona: m.bolsonOrigenSector || '-',
-                entradasKg: 0,
+                entradasKg: m.kg || 0,
                 salidasKg: 0,
-                stockKg: 0
+                stockKg: m.kg || 0
               });
             }
           }
@@ -136,23 +150,39 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       });
     });
 
-    // 2. Filtrar la lista general de bolsones
+    // 2. Filtrar bolsones para incluir únicamente aquellos con stock en el silo > 0 (sin incluir histórico consumido)
     const matchedFromProp = bolsones.filter(b => {
       const normNro = (b.numeroBolson || '').trim().toLowerCase();
-      return (b.id && bolsonIdsValidos.has(b.id)) || (normNro && bolsonNrosValidos.has(normNro));
+      const isMatchBySilo = (b.id && bolsonIdsValidos.has(b.id)) || (normNro && bolsonNrosValidos.has(normNro));
+      if (!isMatchBySilo) return false;
+
+      const currentStock = b.stockKg !== undefined ? b.stockKg : ((b.entradasKg || 0) - (b.salidasKg || 0));
+      
+      const isCurrentlySelectedInEditing = loteAEditar && (
+        (b.id && b.id === loteAEditar.bolsonOrigenId) ||
+        (b.numeroBolson && loteAEditar.numeroBolsonOrigen && b.numeroBolson.toLowerCase() === loteAEditar.numeroBolsonOrigen.toLowerCase())
+      );
+
+      return currentStock > 0 || isCurrentlySelectedInEditing;
     });
 
-    // 3. Incluir extras de movimientos que no estén ya en matchedFromProp
     const matchedNros = new Set(matchedFromProp.map(b => b.numeroBolson.trim().toLowerCase()));
     const extraList: BolsonCampo[] = [];
     bolsonMapExtra.forEach((item, normNro) => {
       if (!matchedNros.has(normNro)) {
-        extraList.push(item);
+        const itemStock = item.stockKg !== undefined ? item.stockKg : ((item.entradasKg || 0) - (item.salidasKg || 0));
+        const isCurrentlySelectedInEditing = loteAEditar && (
+          (item.id && item.id === loteAEditar.bolsonOrigenId) ||
+          (item.numeroBolson && loteAEditar.numeroBolsonOrigen && item.numeroBolson.toLowerCase() === loteAEditar.numeroBolsonOrigen.toLowerCase())
+        );
+        if (itemStock > 0 || isCurrentlySelectedInEditing) {
+          extraList.push(item);
+        }
       }
     });
 
     return [...matchedFromProp, ...extraList];
-  }, [silosOrigen, movimientosSilo, bolsones, cliente]);
+  }, [silosOrigen, movimientosSilo, bolsones, cliente, loteAEditar]);
 
   // Inicializar o cargar lote a editar
   useEffect(() => {
@@ -175,11 +205,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setStockKg(loteAEditar.stockKg);
       setFechaIngreso(loteAEditar.fechaIngreso);
       setEstado(loteAEditar.estado);
-      setEstadoRegistro(loteAEditar.estadoRegistro || 'REALIZADO');
-      setFechaHoraProduccion(
-        loteAEditar.fechaHoraProduccion ||
-        (loteAEditar.fechaIngreso ? `${loteAEditar.fechaIngreso}T09:00` : new Date().toISOString().slice(0, 16))
-      );
+      setEstadoRegistro(loteAEditar.estadoRegistro || 'PRE-CARGA');
+      setFechaHoraProduccion(loteAEditar.fechaHoraProduccion || '');
       setObservaciones(loteAEditar.observaciones || '');
       setAla(loteAEditar.ala || '');
       setSector(loteAEditar.sector || '');
@@ -193,6 +220,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       const allLoteNros = existingLotes.map(l => l.loteNro || l.id);
       const suggestedNro = generateLoteId(allLoteNros);
       setLoteNro(suggestedNro);
+      setEstadoRegistro('PRE-CARGA');
+      setFechaHoraProduccion('');
       // ID es cliente + _ + loteNro, lo calcularemos al guardar o dinámicamente
       setId(`${cliente.replace(/\s+/g, '_')}_${suggestedNro}`);
       setObservaciones('');
@@ -327,6 +356,11 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       return;
     }
 
+    if (estadoRegistro === 'REALIZADO' && !fechaHoraProduccion.trim()) {
+      setError('Debe ingresar manualmente la Fecha y Hora de Producción para guardar en modo REALIZADO.');
+      return;
+    }
+
     const uniqueId = isEditing ? id : `${cliente.replace(/\s+/g, '_')}_${loteNro.trim()}`;
 
     const calculatedCampania = getCampaniaIdFromDate(fechaIngreso);
@@ -349,7 +383,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       campaniaId: calculatedCampania,
       estado: estado,
       estadoRegistro: estadoRegistro,
-      fechaHoraProduccion: estadoRegistro === 'REALIZADO' ? (fechaHoraProduccion || `${fechaIngreso}T09:00`) : undefined,
+      fechaHoraProduccion: estadoRegistro === 'REALIZADO' ? (fechaHoraProduccion.trim() || undefined) : undefined,
       observaciones: observaciones.trim(),
       ala: ala,
       sector: sector,

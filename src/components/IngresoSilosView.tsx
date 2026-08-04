@@ -354,6 +354,44 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     }
   };
 
+  // Estado para el Modal de Limpieza Varietal de Silo
+  const [siloLimpiezaTarget, setSiloLimpiezaTarget] = useState<SiloId | null>(null);
+  const [limpiezaFecha, setLimpiezaFecha] = useState(() => new Date().toISOString().split('T')[0]);
+  const [limpiezaUsuario, setLimpiezaUsuario] = useState(currentUser?.nombre || 'Amilcar Quiroz');
+  const [limpiezaMotivo, setLimpiezaMotivo] = useState('Limpieza Varietal - Descontaminación de Silo');
+  const [limpiezaError, setLimpiezaError] = useState('');
+
+  const openModalLimpiezaVarietal = (siloId: SiloId) => {
+    setSiloLimpiezaTarget(siloId);
+    setLimpiezaFecha(new Date().toISOString().split('T')[0]);
+    setLimpiezaUsuario(currentUser?.nombre || 'Amilcar Quiroz');
+    setLimpiezaMotivo('Limpieza Varietal - Descontaminación de Silo');
+    setLimpiezaError('');
+  };
+
+  const handleConfirmLimpiezaVarietal = async () => {
+    if (!siloLimpiezaTarget) return;
+    setLimpiezaError('');
+
+    const targetFicha = getSiloFichaData(siloLimpiezaTarget);
+    const stockAnterior = targetFicha.stockKg;
+
+    const callback = onPonerSiloEnCero || onPonerEnCero;
+    if (callback) {
+      await callback(
+        siloLimpiezaTarget,
+        limpiezaFecha || new Date().toISOString().split('T')[0],
+        limpiezaUsuario || currentUser?.nombre || 'Amilcar Quiroz',
+        limpiezaMotivo || 'Limpieza Varietal',
+        stockAnterior
+      );
+    }
+
+    setFormSuccess(`¡Limpieza Varietal ejecutada en ${siloLimpiezaTarget}! Silo vaciado (0 kg), desvinculada especie/variedad/cliente y puesto en estado Vacío/Disponible.`);
+    setTimeout(() => setFormSuccess(''), 5000);
+    setSiloLimpiezaTarget(null);
+  };
+
   // Estado para el tipo de métrica del Gráfico de Ocupación de Silos
   const [chartMetric, setChartMetric] = useState<'PORCENTAJE' | 'TONELADAS'>('PORCENTAJE');
 
@@ -1313,7 +1351,21 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       }`}
                       title="Registrar Salida Manual de este silo"
                     >
-                      <ArrowUpRight className="w-3 h-3 text-amber-600" /> Salida Manual
+                      <ArrowUpRight className="w-3 h-3 text-amber-600" /> Salida
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openModalLimpiezaVarietal(siloId);
+                      }}
+                      className={`flex items-center gap-1 hover:underline ${
+                        isSelected ? 'text-amber-300 font-black' : 'text-amber-900 font-black'
+                      }`}
+                      title="Ejecutar Limpieza Varietal de este silo"
+                    >
+                      <RotateCcw className="w-3 h-3 text-amber-600" /> Limpieza
                     </button>
                   </div>
                 </div>
@@ -1401,6 +1453,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             >
               <ArrowUpRight className="w-4 h-4 text-amber-200" />
               <span>Salida Manual</span>
+            </button>
+
+            <button
+              onClick={() => openModalLimpiezaVarietal(activeSilo)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer border border-amber-700"
+              title="Ejecutar Limpieza Varietal (Vaciar stock a 0 kg y desvincular Especie, Variedad, Cliente y Bolsón)"
+            >
+              <RotateCcw className="w-4 h-4 text-amber-300" />
+              <span>Limpieza Varietal</span>
             </button>
           </div>
         </div>
@@ -3194,6 +3255,106 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 </button>
               </div>
 
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL DE CONFIRMACIÓN DE LIMPIEZA VARIETAL DE SILO */}
+      {siloLimpiezaTarget && (() => {
+        const targetFicha = getSiloFichaData(siloLimpiezaTarget);
+        return (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2 text-amber-900 font-black text-lg font-serif">
+                  <RotateCcw className="w-5 h-5 text-amber-600" />
+                  <span>Limpieza Varietal — {siloLimpiezaTarget}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSiloLimpiezaTarget(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 space-y-2">
+                <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Confirmar Vaciamiento y Descontaminación de Silo</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-900/90">
+                  Esta acción ejecutará la <strong>Limpieza Varietal</strong> en <strong className="font-bold">{siloLimpiezaTarget}</strong>:
+                </p>
+                <ul className="list-disc list-inside text-[11px] space-y-1 font-medium text-amber-900">
+                  <li>Pondrá el stock remanente en <strong>0 kg</strong> (Actual: {targetFicha.stockKg.toLocaleString('es-AR')} kg).</li>
+                  <li>Eliminará la asociación actual de <strong>Especie ({targetFicha.especie})</strong>, <strong>Variedad ({targetFicha.variedad})</strong>, <strong>Cliente ({targetFicha.cliente})</strong> y <strong>Bolsón de Origen</strong>.</li>
+                  <li>Dejará el silo en estado <strong>Vacío / Disponible</strong> para una nueva carga.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                    Fecha de Limpieza *
+                  </label>
+                  <input
+                    type="date"
+                    value={limpiezaFecha}
+                    onChange={(e) => setLimpiezaFecha(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-900 font-bold focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                    Usuario Responsable *
+                  </label>
+                  <input
+                    type="text"
+                    value={limpiezaUsuario}
+                    onChange={(e) => setLimpiezaUsuario(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-sans text-slate-900 font-bold focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                    Motivo / Observaciones *
+                  </label>
+                  <input
+                    type="text"
+                    value={limpiezaMotivo}
+                    onChange={(e) => setLimpiezaMotivo(e.target.value)}
+                    placeholder="Ej: Limpieza Varietal - Cambio de variedad en silo"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-sans text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {limpiezaError && (
+                <p className="text-red-600 text-xs font-bold">{limpiezaError}</p>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSiloLimpiezaTarget(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmLimpiezaVarietal}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <RotateCcw className="w-4 h-4 text-amber-200" />
+                  <span>Ejecutar Limpieza Varietal</span>
+                </button>
+              </div>
             </div>
           </div>
         );
