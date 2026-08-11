@@ -486,9 +486,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         humedad: '0.0',
         ingresosActivos: [],
         totalIngresos: 0,
+        totalKgIngresados: 0,
+        totalKgEgresados: 0,
         ultimoMovimiento: movsAsc[movsAsc.length - 1]?.fecha || 'Sin registros',
       };
     }
+
+    const egresosBatchActual = movsBatchActual.filter((m) => m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO'));
+    const totalKgIngresados = ingresosBatchActual.reduce((acc, m) => acc + m.kg, 0);
+    const totalKgEgresados = egresosBatchActual.reduce((acc, m) => acc + m.kg, 0);
 
     const especiesSet = Array.from(new Set(ingresosBatchActual.map((i) => i.especie).filter(Boolean)));
     const clientesSet = Array.from(new Set(ingresosBatchActual.map((i) => i.cliente).filter(Boolean)));
@@ -530,6 +536,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       humedad: humedadPromedio,
       ingresosActivos,
       totalIngresos: ingresosActivos.length,
+      totalKgIngresados,
+      totalKgEgresados,
       ultimoMovimiento: movsAsc[movsAsc.length - 1]?.fecha || 'Sin registros',
     };
   };
@@ -1971,12 +1979,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
                           {m.tipo === 'EGRESO_OP' && (
                             <div>
-                              <div className="font-bold text-blue-950">
-                                Extracción para Orden de Proceso #{m.numeroOrdenProceso || 'S/N'}
+                              <div className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                                <span>Salida por Lote:</span>
+                                <span className="font-mono text-amber-900 font-extrabold">{m.loteNro || m.loteResultanteId || m.loteId || 'S/N'}</span>
                               </div>
-                              <div className="text-[10px] text-slate-500">
-                                Lote vinculado: {m.loteNro || 'En proceso'}
-                              </div>
+                              {m.cliente && (
+                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                  Cliente: <strong className="text-slate-700">{m.cliente}</strong> · Cereal: {m.especie || '-'} {m.variedad ? `(${m.variedad})` : ''}
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -2845,14 +2856,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
           .filter((m) => m.siloId === drawerSilo)
           .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
-        // Calcular totales acumulados
-        const totalKgIngresados = todosMovimientos
-          .filter(m => m.tipo === 'INGRESO')
-          .reduce((acc, m) => acc + m.kg, 0);
-
-        const totalKgEgresados = todosMovimientos
-          .filter(m => m.tipo === 'EGRESO_OP')
-          .reduce((acc, m) => acc + m.kg, 0);
+        // Usar acumulados solo de la especie/variedad activa en stock (o 0 si está vacío)
+        const totalKgIngresados = siloFicha.totalKgIngresados;
+        const totalKgEgresados = siloFicha.totalKgEgresados;
 
         // Filtrar por tipo y búsqueda
         const movimientosFiltrados = todosMovimientos.filter((m) => {
@@ -2862,11 +2868,11 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             const matchCliente = m.cliente?.toLowerCase().includes(query);
             const matchEspecie = m.especie?.toLowerCase().includes(query);
             const matchVariedad = m.variedad?.toLowerCase().includes(query);
-            const matchOP = m.numeroOrdenProceso?.toLowerCase().includes(query) || m.ordenProcesoId?.toLowerCase().includes(query);
+            const matchLote = m.loteNro?.toLowerCase().includes(query) || m.loteResultanteId?.toLowerCase().includes(query) || m.loteId?.toLowerCase().includes(query);
             const matchOrigen = m.campoOrigen?.toLowerCase().includes(query) || m.depositoOrigen?.toLowerCase().includes(query) || m.bolsonOrigenNro?.toLowerCase().includes(query);
             const matchMotivo = m.motivoAjuste?.toLowerCase().includes(query) || m.motivoZero?.toLowerCase().includes(query);
             const matchFecha = m.fecha.includes(query);
-            return Boolean(matchCliente || matchEspecie || matchVariedad || matchOP || matchOrigen || matchMotivo || matchFecha);
+            return Boolean(matchCliente || matchEspecie || matchVariedad || matchLote || matchOrigen || matchMotivo || matchFecha);
           }
           return true;
         });
@@ -3160,10 +3166,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                         {isEgresoOP && (
                           <div className="space-y-1.5 text-xs">
                             <div className="flex items-center justify-between text-slate-800 font-bold">
-                              <span>Orden de Proceso: <strong className="font-mono text-amber-900">{mov.numeroOrdenProceso || mov.ordenProcesoId || 'N/A'}</strong></span>
-                              <span className="text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px]">
-                                Lote: {mov.loteNro || mov.loteResultanteId || 'N/A'}
-                              </span>
+                              <span>Salida por Lote: <strong className="font-mono text-amber-900">{mov.loteNro || mov.loteResultanteId || mov.loteId || 'S/N'}</strong></span>
                             </div>
                             <p className="text-[11px] text-slate-600">
                               Cliente: <strong>{mov.cliente || 'San Diego Semilla'}</strong> · Cereal: {mov.especie || 'Soja'} {mov.variedad ? `(${mov.variedad})` : ''}

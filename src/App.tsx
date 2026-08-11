@@ -16,10 +16,12 @@ import { SalidasList } from './components/SalidasList';
 import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer, BolsonCampo } from './types';
 import { getLoteAuditoria } from './utils/audit';
 import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES, BOLSONES_INICIALES } from './data/mockData';
-import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database } from 'lucide-react';
+import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database, PackagePlus, BarChart3 } from 'lucide-react';
+import { GenerarLoteView } from './components/GenerarLoteView';
 import { QrCodeScanner } from './components/QrCodeScanner';
 import { DespachosSection } from './components/DespachosSection';
 import { DashboardProduccion } from './components/DashboardProduccion';
+import { DashboardCierreMensual } from './components/DashboardCierreMensual';
 import { OrdenesProcesoView } from './components/OrdenesProcesoView';
 import { IngresoSilosView } from './components/IngresoSilosView';
 import { ChoferesView } from './components/ChoferesView';
@@ -27,6 +29,8 @@ import { DataBasesView } from './components/DataBasesView';
 import { CampaniaSelector } from './components/CampaniaSelector';
 import { getActiveCampaniaIdStored, setActiveCampaniaIdStored, getCampaniaIdFromDate } from './utils/campanias';
 import { findExistingChofer, mergeChoferData } from './utils/choferes';
+import { getLoteLimits } from './utils/loteLimits';
+import { LoteLimitsConfig } from './types';
 import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, seedBolsonesIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 
@@ -56,6 +60,7 @@ export default function App() {
   const [movimientosSilo, setMovimientosSilo] = useState<MovimientoSilo[]>([]);
   const [choferes, setChoferes] = useState<Chofer[]>([]);
   const [bolsones, setBolsones] = useState<BolsonCampo[]>([]);
+  const [loteLimits, setLoteLimits] = useState<LoteLimitsConfig>(() => getLoteLimits());
   const [clientes, setClientes] = useState<string[]>([]);
   const [especies, setEspecies] = useState<string[]>([]);
   const [stockThresholds, setStockThresholds] = useState<Record<string, number>>({});
@@ -191,8 +196,8 @@ export default function App() {
   const tieneAlertaSilo95 = silosConAlerta95.length > 0;
 
   // 3. Control de Vistas
-  // 'dashboard' | 'dashboard-produccion' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
-  const [activeView, setActiveView] = useState<'dashboard' | 'dashboard-produccion' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('dashboard');
+  // 'dashboard' | 'dashboard-produccion' | 'cierre-mensual' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
+  const [activeView, setActiveView] = useState<'dashboard' | 'dashboard-produccion' | 'cierre-mensual' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('dashboard');
   const [loteSeleccionado, setLoteSeleccionado] = useState<Lote | null>(null);
   const [loteAEditar, setLoteAEditar] = useState<Lote | null>(null);
   const [preselectedLoteId, setPreselectedLoteId] = useState<string | undefined>(undefined);
@@ -931,6 +936,7 @@ export default function App() {
               tipo: 'EGRESO_OP',
               kg: kgCant,
               loteResultanteId: docId,
+              loteNro: loteGuardar.loteNro,
               ordenProcesoId: loteGuardar.ordenProcesoId,
               cliente: loteGuardar.cliente,
               especie: loteGuardar.especie,
@@ -963,6 +969,21 @@ export default function App() {
     } catch (e) {
       console.error('Error al guardar lote en Firestore:', e);
       showNotification('Error al registrar el lote.');
+    }
+  };
+
+  const handleBatchUpdateLotes = async (updatedLotes: Lote[]) => {
+    try {
+      const batch = writeBatch(db);
+      for (const loteGuardar of updatedLotes) {
+        const docRef = doc(db, 'lotes', loteGuardar.id);
+        batch.set(docRef, mapLoteToFirestore(loteGuardar));
+      }
+      await batch.commit();
+      showNotification(`¡${updatedLotes.length} lotes actualizados con éxito en conjunto!`);
+    } catch (e) {
+      console.error('Error al realizar edición masiva de lotes:', e);
+      showNotification('Error al aplicar cambios masivos.');
     }
   };
 
@@ -1596,6 +1617,21 @@ export default function App() {
             Producción
           </button>
 
+          {/* Tab Cierre Mensual */}
+          <button
+            id="nav-tab-cierre-mensual"
+            onClick={() => navigateTo('cierre-mensual')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+              activeView === 'cierre-mensual'
+                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
+                : 'text-white hover:bg-white/10'
+            }`}
+            title="Dashboard Cierre Mensual: Análisis gráfico por especie y variedad"
+          >
+            <BarChart3 className="w-4 h-4 text-amber-300" />
+            <span>Cierre Mensual</span>
+          </button>
+
           {/* Tab Órdenes de Proceso */}
           <button
             id="nav-tab-ordenes-proceso"
@@ -1722,7 +1758,20 @@ export default function App() {
             </span>
           </button>
 
-          {/* Tab Despachos */}
+          {/* Tab Generar Lote (Alta rápida en Precarga) */}
+          <button
+            id="nav-tab-generar-lote"
+            onClick={() => navigateTo('generar-lote')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-300 ${
+              activeView === 'generar-lote'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-[0_0_16px_rgba(251,191,36,0.8)] ring-2 ring-amber-300'
+                : 'bg-amber-500/20 text-amber-300 hover:bg-amber-400 hover:text-slate-950 border border-amber-400/40'
+            }`}
+            title="Alta rápida individual o múltiple de lotes en Precarga"
+          >
+            <PackagePlus className="w-4 h-4" />
+            <span>Generar Lote</span>
+          </button>
           <button
             id="nav-tab-despachos"
             onClick={() => navigateTo('despachos')}
@@ -1850,6 +1899,22 @@ export default function App() {
             onSelectLote={(l) => setLoteSeleccionado(l)}
             onNavigateToSilos={() => navigateTo('ingreso-silos')}
           />
+        ) : activeView === 'cierre-mensual' ? (
+          <DashboardCierreMensual
+            lotes={filteredLotesByCampania}
+            siloStocks={siloStocks}
+            onNavigate={(view) => navigateTo(view as any)}
+          />
+        ) : activeView === 'generar-lote' ? (
+          <GenerarLoteView
+            lotes={lotes}
+            ordenesProceso={ordenesProcesoConHechos}
+            clientes={clientes}
+            especies={especies}
+            loteLimits={loteLimits}
+            onSaveLote={handleSaveLote}
+            onNavigateToLotes={() => navigateTo('lotes')}
+          />
         ) : activeView === 'ordenes-proceso' ? (
           <OrdenesProcesoView
             ordenes={filteredOrdenesProcesoByCampania}
@@ -1861,7 +1926,7 @@ export default function App() {
             onDeleteOrden={handleDeleteOrdenProceso}
             onUpdateEstadoOrden={handleUpdateEstadoOrdenProceso}
             onSelectLote={(l) => setLoteSeleccionado(l)}
-            onNavigateToAltaLote={() => navigateTo('alta-lote')}
+            onNavigateToAltaLote={() => navigateTo('generar-lote')}
           />
         ) : activeView === 'ingreso-silos' ? (
           <IngresoSilosView
@@ -1890,6 +1955,7 @@ export default function App() {
               clientes={clientes}
               especies={especies}
               loteAEditar={loteAEditar}
+              loteLimits={loteLimits}
               activeCampaniaId={activeCampaniaId}
               siloStocks={siloStocks}
               onSave={handleSaveLote}
@@ -1901,9 +1967,15 @@ export default function App() {
               lotes={filteredLotesByCampania}
               ordenesProceso={ordenesProcesoConHechos}
               movimientosSilo={movimientosSilo}
+              siloStocks={siloStocks}
+              bolsones={bolsones}
+              clientes={clientes}
+              especies={especies}
+              loteLimits={loteLimits}
+              onUpdateLoteLimits={(newLimits) => setLoteLimits(newLimits)}
               onSelectLote={(l) => setLoteSeleccionado(l)}
               onEditLote={(l) => setLoteAEditar(l)}
-              onAddLote={() => navigateTo('alta-lote')}
+              onAddLote={() => navigateTo('generar-lote')}
               onRegistrarSalidaLote={(l) => {
                 setPreselectedLoteId(l.id);
                 setActiveView('registrar-salida');
@@ -1913,6 +1985,7 @@ export default function App() {
               currentUser={currentUser}
               onWipeStocks={handleWipeStocks}
               onSaveLote={handleSaveLote}
+              onBatchUpdateLotes={handleBatchUpdateLotes}
             />
           )
         ) : activeView === 'alta-lote' ? (
@@ -1924,6 +1997,7 @@ export default function App() {
             clientes={clientes}
             especies={especies}
             loteAEditar={null}
+            loteLimits={loteLimits}
             activeCampaniaId={activeCampaniaId}
             siloStocks={siloStocks}
             onSave={handleSaveLote}
@@ -1933,6 +2007,7 @@ export default function App() {
         ) : activeView === 'importar' ? (
           <ImportarStock
             existingLotes={lotes}
+            loteLimits={loteLimits}
             onImportConfirm={handleImportConfirm}
             onCancel={() => navigateTo('dashboard')}
           />

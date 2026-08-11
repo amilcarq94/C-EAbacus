@@ -5,9 +5,9 @@
 
 export type EspecieType = 'Soja' | 'Trigo' | 'Arveja' | 'Sin especificar';
 
-export type TipoLoteType = 'Intermedio' | 'Final';
+export type TipoLoteType = 'Intermedio' | 'Final' | 'Procesado' | 'Semilla' | 'Descarte' | 'Bajo Consumo' | 'Mezcla' | 'Rechazo' | string;
 
-export type TratamientoType = 'Tratado' | 'Sin Tratar';
+export type TratamientoType = 'Tratado' | 'Sin Tratar' | 'Curado Completo' | 'Fungicida' | 'Insecticida' | 'Inoculado' | 'Polímero' | string;
 
 export type CategoriaType = 'FUNDADORA' | 'PREBA' | 'ORIGINAL' | 'PRIMU' | 'Fundadora' | 'Preba' | 'Original' | 'Primera' | string;
 
@@ -16,7 +16,7 @@ export const UMBRAL_ALERTA_SILO = 150000; // Alerta desde 150.000 kg (83.3%)
 
 export type EstadoLoteType = 'Disponible' | 'Reservado' | 'Agotado' | 'A Consumo';
 
-export type EstadoRegistroLote = 'PRE-CARGA' | 'REALIZADO';
+export type EstadoRegistroLote = 'PRE-CARGA' | 'REALIZADO' | 'EN_CURSO';
 
 export interface AuditLogEntry {
   id: string;
@@ -77,7 +77,20 @@ export interface Lote {
   bolsonOrigenNro?: string; // Aliased for consistency
   sectorBolsonOrigen?: string; // Sector de bolsón de origen ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'Todos')
   origenesBolson?: OrigenBolsonItem[]; // Detalle dinámico de orígenes de bolsón con su sector
+  ubicacionAcopio?: string; // Ubicación acopio (e.g., 'Ala A - Sector 1' o texto personalizado)
 }
+
+export interface LoteLimitsConfig {
+  maxKgPorLote: number; // Por defecto: 28000 kg
+  maxBolsasPorLote: number; // Por defecto: 35 bolsas
+  kgPorBolsaDefault: number; // Por defecto: 800 kg
+}
+
+export const DEFAULT_LOTE_LIMITS: LoteLimitsConfig = {
+  maxKgPorLote: 28000,
+  maxBolsasPorLote: 35,
+  kgPorBolsaDefault: 800,
+};
 
 export interface BolsonCampo {
   id: string; // ID único del bolsón

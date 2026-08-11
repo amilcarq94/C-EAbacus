@@ -236,6 +236,82 @@ export const DashboardAnalitico: React.FC<DashboardAnaliticoProps> = ({ lotes })
       'ESTADO': l.estado
     }));
 
+    // Hoja Resumen Consolidada por Especie y Variedad
+    interface ResumenGroup {
+      especie: string;
+      variedad: string;
+      cantidadLotes: number;
+      totalBolsas: number;
+      totalKg: number;
+    }
+
+    const summaryMap = new Map<string, ResumenGroup>();
+    let grandTotalBolsas = 0;
+    let grandTotalKg = 0;
+
+    filteredResult.forEach(l => {
+      const esp = l.especie || 'Sin especificar';
+      const varN = l.variedad || 'Sin variedad';
+      const key = `${esp}___${varN}`;
+
+      const bolsas = Number(l.stockBolsas) || 0;
+      const kg = Number(l.stockKg) || 0;
+
+      grandTotalBolsas += bolsas;
+      grandTotalKg += kg;
+
+      const existing = summaryMap.get(key);
+      if (existing) {
+        existing.cantidadLotes += 1;
+        existing.totalBolsas += bolsas;
+        existing.totalKg += kg;
+      } else {
+        summaryMap.set(key, {
+          especie: esp,
+          variedad: varN,
+          cantidadLotes: 1,
+          totalBolsas: bolsas,
+          totalKg: kg
+        });
+      }
+    });
+
+    const summarySorted = Array.from(summaryMap.values()).sort((a, b) => {
+      const cmpEsp = a.especie.localeCompare(b.especie);
+      if (cmpEsp !== 0) return cmpEsp;
+      return a.variedad.localeCompare(b.variedad);
+    });
+
+    const summaryRows = summarySorted.map(g => ({
+      'Especie': g.especie,
+      'Variedad': g.variedad,
+      'Cantidad de Lotes': g.cantidadLotes,
+      'Total Bolsas': g.totalBolsas,
+      'Total Kilogramos (Kg)': g.totalKg,
+      'Total Toneladas (Tn)': Number((g.totalKg / 1000).toFixed(2)),
+      'Participación (% Kg)': grandTotalKg > 0 ? `${((g.totalKg / grandTotalKg) * 100).toFixed(1)}%` : '0.0%'
+    }));
+
+    summaryRows.push({
+      'Especie': 'TOTAL GENERAL',
+      'Variedad': '—',
+      'Cantidad de Lotes': filteredResult.length,
+      'Total Bolsas': grandTotalBolsas,
+      'Total Kilogramos (Kg)': grandTotalKg,
+      'Total Toneladas (Tn)': Number((grandTotalKg / 1000).toFixed(2)),
+      'Participación (% Kg)': '100.0%'
+    });
+
+    const summaryWorksheet = XLSX.utils.json_to_sheet(summaryRows);
+    const summaryKeys = Object.keys(summaryRows[0] || {});
+    summaryWorksheet['!cols'] = summaryKeys.map(key => {
+      const maxLen = Math.max(
+        key.length,
+        ...summaryRows.map(row => String((row as any)[key] ?? '').length)
+      );
+      return { wch: Math.min(Math.max(maxLen + 4, 15), 35) };
+    });
+
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
     const keys = Object.keys(dataToExport[0] || {});
@@ -249,6 +325,7 @@ export const DashboardAnalitico: React.FC<DashboardAnaliticoProps> = ({ lotes })
     worksheet['!cols'] = colWidths;
 
     const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Resumen Cierre');
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Lotes Analítico');
 
     XLSX.writeFile(workbook, `Reporte_Analitico_Lotes_${new Date().toISOString().split('T')[0]}.xlsx`);

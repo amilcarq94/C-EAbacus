@@ -216,13 +216,22 @@ export function mapFirestoreToLote(id: string, data: any): Lote {
     fechaIngreso: fechaIngreso,
     campaniaId: campaniaId,
     estado: data.estado || 'Disponible',
-    historial: [], // Carga diferida
+    estadoRegistro: data.estadoRegistro || 'PRE-CARGA',
+    fechaHoraProduccion: data.fechaHoraProduccion || undefined,
+    historial: data.historial || [],
     auditoria: data.auditoria || [],
     observaciones: data.observaciones || '',
     ala: data.ala || '',
     sector: data.sector || '',
+    ubicacionAcopio: data.ubicacionAcopio || (data.ala && data.sector ? `Ala ${data.ala} - Sector ${data.sector}` : ''),
     ordenProcesoId: data.ordenProcesoId || '',
-    numeroOrdenMovimiento: data.numeroOrdenMovimiento || ''
+    numeroOrdenMovimiento: data.numeroOrdenMovimiento || '',
+    silosOrigen: data.silosOrigen || [],
+    siloOrigen: data.siloOrigen || '',
+    origenesBolson: data.origenesBolson || [],
+    numeroBolsonOrigen: data.numeroBolsonOrigen || data.bolsonOrigenNro || '',
+    bolsonOrigenNro: data.bolsonOrigenNro || data.numeroBolsonOrigen || '',
+    sectorBolsonOrigen: data.sectorBolsonOrigen || ''
   };
 }
 
@@ -241,11 +250,13 @@ export function mapLoteToFirestore(lote: Lote): any {
     cliente: lote.cliente,
     tipoLote: lote.tipo,
     categoria: lote.categoria,
-    tratamiento: lote.tratamiento[0] || 'Sin Tratar',
+    tratamiento: lote.tratamiento,
     stockBolsas: lote.stockBolsas,
     kgPorBolsa: lote.kgPorBolsa,
     stockKgTotal: lote.stockBolsas * lote.kgPorBolsa,
     estado: lote.stockBolsas === 0 ? 'Agotado' : lote.estado,
+    estadoRegistro: lote.estadoRegistro || 'PRE-CARGA',
+    fechaHoraProduccion: lote.fechaHoraProduccion || null,
     fechaIngreso: fechaIngreso,
     campaniaId: campaniaId,
     producto: lote.producto,
@@ -253,8 +264,15 @@ export function mapLoteToFirestore(lote: Lote): any {
     observaciones: lote.observaciones || '',
     ala: lote.ala || '',
     sector: lote.sector || '',
+    ubicacionAcopio: lote.ubicacionAcopio || '',
     ordenProcesoId: lote.ordenProcesoId || '',
-    numeroOrdenMovimiento: lote.numeroOrdenMovimiento || ''
+    numeroOrdenMovimiento: lote.numeroOrdenMovimiento || '',
+    silosOrigen: lote.silosOrigen || [],
+    siloOrigen: lote.siloOrigen || '',
+    origenesBolson: lote.origenesBolson || [],
+    numeroBolsonOrigen: lote.numeroBolsonOrigen || lote.bolsonOrigenNro || '',
+    bolsonOrigenNro: lote.bolsonOrigenNro || lote.numeroBolsonOrigen || '',
+    sectorBolsonOrigen: lote.sectorBolsonOrigen || ''
   };
 }
 

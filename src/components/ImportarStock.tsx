@@ -5,13 +5,15 @@
 
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Lote, MovimientoStock, TipoLoteType, TratamientoType, EstadoLoteType } from '../types';
+import { Lote, MovimientoStock, TipoLoteType, TratamientoType, EstadoLoteType, LoteLimitsConfig } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
-import { formatNumberArg } from '../utils/formatters';
-import { Upload, Download, CheckCircle, AlertTriangle, Play, HelpCircle, FileText } from 'lucide-react';
+import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
+import { formatKg, formatNumberArg } from '../utils/formatters';
+import { Upload, Download, CheckCircle, AlertTriangle, Play, HelpCircle, FileText, Layers3 } from 'lucide-react';
 
 interface ImportarStockProps {
   existingLotes: Lote[];
+  loteLimits?: LoteLimitsConfig;
   onImportConfirm: (lotesNuevos: Lote[], lotesActualizados: Lote[]) => void;
   onCancel: () => void;
 }
@@ -22,15 +24,25 @@ interface FilaPrevia {
   cliente: string;
   especie: string;
   variedad: string;
+  ordenProcesoId: string;
+  numeroOrdenMovimiento: string;
+  siloOrigen: string;
+  numeroBolsonOrigen: string;
+  sectorBolsonOrigen: string;
   tipo: string;
+  categoria: string;
   tratamiento: string;
   producto: string;
+  ubicacionAcopio: string;
+  estado: string;
   cantidadBolsas: number;
   kgPorBolsa: number;
   fechaIngreso: string;
   errores: string[];
   valida: boolean;
   existe: boolean;
+  acumuladoPrevioBolsas?: number;
+  acumuladoPrevioKg?: number;
 }
 
 interface ColumnMapping {
@@ -38,9 +50,17 @@ interface ColumnMapping {
   cliente: string;
   especie: string;
   variedad: string;
+  ordenProcesoId: string;
+  numeroOrdenMovimiento: string;
+  siloOrigen: string;
+  numeroBolsonOrigen: string;
+  sectorBolsonOrigen: string;
   tipo: string;
+  categoria: string;
   tratamiento: string;
   producto: string;
+  ubicacionAcopio: string;
+  estado: string;
   cantidadBolsas: string;
   kgPorBolsa: string;
   fechaIngreso: string;
@@ -48,9 +68,11 @@ interface ColumnMapping {
 
 export const ImportarStock: React.FC<ImportarStockProps> = ({
   existingLotes,
+  loteLimits,
   onImportConfirm,
   onCancel,
 }) => {
+  const activeLimits = loteLimits || getLoteLimits();
   const [dragActive, setDragActive] = useState(false);
   const [filasPrevias, setFilasPrevias] = useState<FilaPrevia[]>([]);
   const [archivoNombre, setArchivoNombre] = useState('');
@@ -65,48 +87,114 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
     cliente: '',
     especie: '',
     variedad: '',
+    ordenProcesoId: '',
+    numeroOrdenMovimiento: '',
+    siloOrigen: '',
+    numeroBolsonOrigen: '',
+    sectorBolsonOrigen: '',
     tipo: '',
+    categoria: '',
     tratamiento: '',
     producto: '',
+    ubicacionAcopio: '',
+    estado: '',
     cantidadBolsas: '',
     kgPorBolsa: '',
     fechaIngreso: '',
   });
   const [showMapping, setShowMapping] = useState(false);
 
-  // Generar y descargar la plantilla Excel ideal en caliente usando SheetJS
+  // Generar y descargar la plantilla Excel ideal con las 16 columnas oficiales
   const handleDescargarPlantilla = () => {
     const headers = [
-      ["Número de Lote", "Cliente", "Especie", "Variedad", "Tipo", "Tratamiento", "Producto", "Cantidad de Bolsas", "Kg por Bolsa", "Fecha de Ingreso"]
+      [
+        "Fecha de realizado",
+        "Especie",
+        "Variedad",
+        "Número de lote",
+        "N° Orden de Proceso / Movimiento",
+        "Silo de origen",
+        "N° de Bolsón de origen",
+        "Sector de Bolsón de origen",
+        "Stock bolsas",
+        "Kg por bolsa",
+        "Stock total",
+        "Tipo de lote",
+        "Categoría",
+        "Tratamiento",
+        "Ubicación acopio",
+        "Estado",
+        "Cliente"
+      ]
     ];
     const rows = [
-      ["LB-2026-0010", "Don Remigio S.A.", "Soja", "DM 46R18 GTS", "Semilla Fiscalizada", "Curasemilla, Inoculado", "Cruiser + Rizobio", 500, 40, "2026-07-09"],
-      ["LB-2026-0011", "La Constancia S.R.L.", "Trigo", "Baguette 620", "Semilla Fiscalizada", "Curasemilla", "Vitavax Flo", 250, 50, "2026-07-08"],
-      ["LB-2026-0002", "Sucesores de Pedro Iriarte", "Trigo", "Baguette 620", "Semilla Fiscalizada", "Sin tratar", "Ninguno", 100, 50, "2026-07-09"], // Lote Existente para probar suma
-      ["LB-2026-0012", "Serrano Agropecuaria", "Maíz", "DK 72-10", "Multiplicación", "Sin tratar", "Ninguno", 80, 30, "2026-07-09"],
-      ["LB-2026-0013", "Agropecuaria El Ombú", "Girasol", "SYN 3970 CL", "Semilla Común", "Curasemilla", "Maxim XL", 150, 25, "2026-07-07"]
+      [
+        "2026-07-09",
+        "Soja",
+        "DM 46R18 GTS",
+        "LB-2026-0010",
+        "OP-104",
+        "Silo 01",
+        "Bolsón 04",
+        "A",
+        20,
+        800,
+        16000,
+        "Final",
+        "Original",
+        "Sin Tratar",
+        "Ala A - Sector 1",
+        "Disponible",
+        "San Diego Semilla"
+      ],
+      [
+        "2026-07-08",
+        "Trigo",
+        "Baguette 620",
+        "LB-2026-0011",
+        "OP-105",
+        "Silo 02",
+        "Bolsón 02",
+        "B",
+        15,
+        800,
+        12000,
+        "Intermedio",
+        "Fundadora",
+        "Tratado",
+        "Ala B - Sector 2",
+        "Disponible",
+        "San Diego Semilla"
+      ]
     ];
 
     const data = [...headers, ...rows];
     const ws = XLSX.utils.aoa_to_sheet(data);
     
-    // Ajustar anchos de columna para que quede prolijo
+    // Ajustar anchos de columna para lectura clara
     ws['!cols'] = [
-      { wch: 15 }, // ID Lote
-      { wch: 25 }, // Cliente
+      { wch: 15 }, // Fecha
       { wch: 12 }, // Especie
-      { wch: 15 }, // Variedad
-      { wch: 20 }, // Tipo
-      { wch: 22 }, // Tratamiento
-      { wch: 15 }, // Producto
-      { wch: 18 }, // Bolsas
-      { wch: 15 }, // Kg Bolsa
-      { wch: 15 }  // Fecha
+      { wch: 16 }, // Variedad
+      { wch: 16 }, // N° Lote
+      { wch: 22 }, // Orden Proceso
+      { wch: 14 }, // Silo
+      { wch: 18 }, // Bolsón
+      { wch: 12 }, // Sector
+      { wch: 14 }, // Bolsas
+      { wch: 12 }, // Kg/bolsa
+      { wch: 14 }, // Total
+      { wch: 12 }, // Tipo
+      { wch: 14 }, // Categoria
+      { wch: 14 }, // Tratamiento
+      { wch: 18 }, // Ubicación
+      { wch: 12 }, // Estado
+      { wch: 20 }  // Cliente
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Lotes AgroAbacus");
-    XLSX.writeFile(wb, "plantilla_importar_lotes_barrancosa.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Plantilla Carga Lotes");
+    XLSX.writeFile(wb, "plantilla_carga_masiva_lotes.xlsx");
   };
 
   // Manejo de carga de archivos por click o arrastre
@@ -172,16 +260,24 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
 
         // Auto-build the mapping
         const newMapping: ColumnMapping = {
-          loteId: autoMatchColumn(rawHeaders, ["número de lote", "numero de lote", "lote", "id lote", "id"]),
+          loteId: autoMatchColumn(rawHeaders, ["número de lote", "numero de lote", "lote", "id lote", "id", "número lote"]),
           cliente: autoMatchColumn(rawHeaders, ["cliente", "productor", "comitente"]),
           especie: autoMatchColumn(rawHeaders, ["especie", "grano", "cultivo"]),
           variedad: autoMatchColumn(rawHeaders, ["variedad", "semilla"]),
-          tipo: autoMatchColumn(rawHeaders, ["tipo", "categoría", "categoria"]),
+          ordenProcesoId: autoMatchColumn(rawHeaders, ["orden de proceso / movimiento", "orden de proceso", "orden proceso", "op", "n° orden"]),
+          numeroOrdenMovimiento: autoMatchColumn(rawHeaders, ["n° orden movimiento", "orden movimiento", "om"]),
+          siloOrigen: autoMatchColumn(rawHeaders, ["silo de origen", "silo origen", "silo"]),
+          numeroBolsonOrigen: autoMatchColumn(rawHeaders, ["n° de bolsón de origen", "bolsón de origen", "bolson de origen", "bolsón", "bolson"]),
+          sectorBolsonOrigen: autoMatchColumn(rawHeaders, ["sector de bolsón de origen", "sector de bolsón", "sector bolsón", "sector bolson", "sector"]),
+          tipo: autoMatchColumn(rawHeaders, ["tipo de lote", "tipo"]),
+          categoria: autoMatchColumn(rawHeaders, ["categoría", "categoria", "clasificación"]),
           tratamiento: autoMatchColumn(rawHeaders, ["tratamiento", "curas", "procesos"]),
-          producto: autoMatchColumn(rawHeaders, ["producto", "quimico", "químico", "terápico", "terapico"]),
-          cantidadBolsas: autoMatchColumn(rawHeaders, ["cantidad de bolsas", "bolsas", "cantidad bolsas", "cantidad"]),
+          producto: autoMatchColumn(rawHeaders, ["producto", "quimico", "terápico", "terapico"]),
+          ubicacionAcopio: autoMatchColumn(rawHeaders, ["ubicación acopio", "ubicacion acopio", "ubicación", "ubicacion", "ala"]),
+          estado: autoMatchColumn(rawHeaders, ["estado", "condición", "condicion"]),
+          cantidadBolsas: autoMatchColumn(rawHeaders, ["stock bolsas", "cantidad de bolsas", "bolsas", "cantidad bolsas", "cantidad"]),
           kgPorBolsa: autoMatchColumn(rawHeaders, ["kg por bolsa", "kg/bolsa", "kilogramos por bolsa", "peso bolsa", "peso"]),
-          fechaIngreso: autoMatchColumn(rawHeaders, ["fecha de ingreso", "fecha ingreso", "fecha", "ingreso"]),
+          fechaIngreso: autoMatchColumn(rawHeaders, ["fecha de realizado", "fecha de ingreso", "fecha ingreso", "fecha", "ingreso"]),
         };
 
         setColumnMapping(newMapping);
@@ -195,7 +291,7 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
   };
 
   const handleConfirmMapping = () => {
-    // Validar columnas requeridas
+    // Validar columnas requeridas mínimas
     if (!columnMapping.loteId || !columnMapping.cliente || !columnMapping.especie) {
       setInfoMensaje('Por favor mapee las columnas obligatorias: Número de Lote, Cliente y Especie.');
       return;
@@ -206,12 +302,27 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
     const idxCliente = excelHeaders.indexOf(columnMapping.cliente);
     const idxEspecie = excelHeaders.indexOf(columnMapping.especie);
     const idxVariedad = columnMapping.variedad ? excelHeaders.indexOf(columnMapping.variedad) : -1;
+    const idxOp = columnMapping.ordenProcesoId ? excelHeaders.indexOf(columnMapping.ordenProcesoId) : -1;
+    const idxOm = columnMapping.numeroOrdenMovimiento ? excelHeaders.indexOf(columnMapping.numeroOrdenMovimiento) : -1;
+    const idxSilo = columnMapping.siloOrigen ? excelHeaders.indexOf(columnMapping.siloOrigen) : -1;
+    const idxBolson = columnMapping.numeroBolsonOrigen ? excelHeaders.indexOf(columnMapping.numeroBolsonOrigen) : -1;
+    const idxSectorBolson = columnMapping.sectorBolsonOrigen ? excelHeaders.indexOf(columnMapping.sectorBolsonOrigen) : -1;
     const idxTipo = columnMapping.tipo ? excelHeaders.indexOf(columnMapping.tipo) : -1;
+    const idxCategoria = columnMapping.categoria ? excelHeaders.indexOf(columnMapping.categoria) : -1;
     const idxTratamiento = columnMapping.tratamiento ? excelHeaders.indexOf(columnMapping.tratamiento) : -1;
     const idxProducto = columnMapping.producto ? excelHeaders.indexOf(columnMapping.producto) : -1;
+    const idxUbicacion = columnMapping.ubicacionAcopio ? excelHeaders.indexOf(columnMapping.ubicacionAcopio) : -1;
+    const idxEstado = columnMapping.estado ? excelHeaders.indexOf(columnMapping.estado) : -1;
     const idxBolsas = columnMapping.cantidadBolsas ? excelHeaders.indexOf(columnMapping.cantidadBolsas) : -1;
     const idxKgBolsa = columnMapping.kgPorBolsa ? excelHeaders.indexOf(columnMapping.kgPorBolsa) : -1;
     const idxFecha = columnMapping.fechaIngreso ? excelHeaders.indexOf(columnMapping.fechaIngreso) : -1;
+
+    // Mapa de acumulación progresiva por Lote durante la validación del Excel
+    const runningTallyMap = new Map<string, { bolsas: number; kg: number }>();
+    existingLotes.forEach(l => {
+      const key = (l.loteNro || l.id).trim().toLowerCase();
+      runningTallyMap.set(key, { bolsas: l.stockBolsas || 0, kg: l.stockKg || 0 });
+    });
 
     const filasProcesadas: FilaPrevia[] = [];
 
@@ -222,18 +333,26 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
       }
 
       const rawLoteId = idxLote !== -1 && row[idxLote] ? String(row[idxLote]).trim() : '';
-      const rawCliente = idxCliente !== -1 && row[idxCliente] ? String(row[idxCliente]).trim() : '';
+      const rawCliente = idxCliente !== -1 && row[idxCliente] ? String(row[idxCliente]).trim() : 'San Diego Semilla';
       const rawEspecie = idxEspecie !== -1 && row[idxEspecie] ? String(row[idxEspecie]).trim() : '';
       const rawVariedad = idxVariedad !== -1 && row[idxVariedad] ? String(row[idxVariedad]).trim() : 'Sin variedad';
-      const rawTipo = idxTipo !== -1 && row[idxTipo] ? String(row[idxTipo]).trim() : 'Semilla Fiscalizada';
-      const rawTratamiento = idxTratamiento !== -1 && row[idxTratamiento] ? String(row[idxTratamiento]).trim() : 'Sin tratar';
+      const rawOp = idxOp !== -1 && row[idxOp] ? String(row[idxOp]).trim() : '';
+      const rawOm = idxOm !== -1 && row[idxOm] ? String(row[idxOm]).trim() : '';
+      const rawSilo = idxSilo !== -1 && row[idxSilo] ? String(row[idxSilo]).trim() : '';
+      const rawBolson = idxBolson !== -1 && row[idxBolson] ? String(row[idxBolson]).trim() : '';
+      const rawSectorBolson = idxSectorBolson !== -1 && row[idxSectorBolson] ? String(row[idxSectorBolson]).trim() : '';
+      const rawTipo = idxTipo !== -1 && row[idxTipo] ? String(row[idxTipo]).trim() : 'Final';
+      const rawCategoria = idxCategoria !== -1 && row[idxCategoria] ? String(row[idxCategoria]).trim() : 'Original';
+      const rawTratamiento = idxTratamiento !== -1 && row[idxTratamiento] ? String(row[idxTratamiento]).trim() : 'Sin Tratar';
       let rawProducto = idxProducto !== -1 && row[idxProducto] ? String(row[idxProducto]).trim() : 'Ninguno';
       if (!rawTratamiento || rawTratamiento.toLowerCase().includes('sin')) {
         rawProducto = 'Ninguno';
       }
+      const rawUbicacion = idxUbicacion !== -1 && row[idxUbicacion] ? String(row[idxUbicacion]).trim() : 'Ala A - Sector 1';
+      const rawEstado = idxEstado !== -1 && row[idxEstado] ? String(row[idxEstado]).trim() : 'Disponible';
       
       const rawBolsas = idxBolsas !== -1 ? parseInt(row[idxBolsas], 10) : NaN;
-      const rawKgBolsa = idxKgBolsa !== -1 ? parseInt(row[idxKgBolsa], 10) : 40;
+      const rawKgBolsa = idxKgBolsa !== -1 ? parseInt(row[idxKgBolsa], 10) : activeLimits.kgPorBolsaDefault;
       
       let rawFecha = '';
       if (idxFecha !== -1 && row[idxFecha]) {
@@ -264,16 +383,33 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
         errores.push('Kg por bolsa inválido.');
       }
 
-      const tiposValidos = [ 'Primera Multiplicación', 'Original'];
-      let tipoFormateado = rawTipo;
-      if (!tiposValidos.some(t => t.toLowerCase() === rawTipo.toLowerCase())) {
-        errores.push(`Tipo de lote no admitido (Debe ser: ${tiposValidos.join(', ')}).`);
-      } else {
-        const encontrado = tiposValidos.find(t => t.toLowerCase() === rawTipo.toLowerCase());
-        if (encontrado) tipoFormateado = encontrado;
+      const loteKey = rawLoteId.toLowerCase();
+      const accum = runningTallyMap.get(loteKey) || { bolsas: 0, kg: 0 };
+      const rowBolsas = isNaN(rawBolsas) ? 0 : rawBolsas;
+      const rowKgBolsaVal = isNaN(rawKgBolsa) ? activeLimits.kgPorBolsaDefault : rawKgBolsa;
+      const rowKg = rowBolsas * rowKgBolsaVal;
+
+      // Validar Límites Máximos por Lote (Punto 5 y 6)
+      if (rawLoteId && !isNaN(rowBolsas) && !isNaN(rowKgBolsaVal)) {
+        const valResult = validateLoteLimits(accum.kg, accum.bolsas, rowKg, rowBolsas, activeLimits);
+        if (!valResult.allowed) {
+          errores.push(valResult.errorMessage || 'Excede el límite máximo por lote.');
+        }
       }
 
-      const existeLote = existingLotes.some(l => l.id.toLowerCase() === rawLoteId.toLowerCase());
+      const existeLote = existingLotes.some(
+        l => (l.loteNro || l.id).toLowerCase() === rawLoteId.toLowerCase() ||
+             l.id.toLowerCase() === `${rawCliente.replace(/\s+/g, '_')}_${rawLoteId}`.toLowerCase()
+      );
+
+      const isValidRow = errores.length === 0;
+
+      if (isValidRow && rawLoteId) {
+        runningTallyMap.set(loteKey, {
+          bolsas: accum.bolsas + rowBolsas,
+          kg: accum.kg + rowKg,
+        });
+      }
 
       filasProcesadas.push({
         numeroFila: i + 2, // Fila en excel (+1 por cabecera, +1 por índice 0)
@@ -281,15 +417,25 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
         cliente: rawCliente,
         especie: rawEspecie,
         variedad: rawVariedad,
-        tipo: tipoFormateado,
+        ordenProcesoId: rawOp,
+        numeroOrdenMovimiento: rawOm,
+        siloOrigen: rawSilo,
+        numeroBolsonOrigen: rawBolson,
+        sectorBolsonOrigen: rawSectorBolson,
+        tipo: rawTipo,
+        categoria: rawCategoria,
         tratamiento: rawTratamiento,
         producto: rawProducto,
+        ubicacionAcopio: rawUbicacion,
+        estado: rawEstado,
         cantidadBolsas: isNaN(rawBolsas) ? 0 : rawBolsas,
-        kgPorBolsa: isNaN(rawKgBolsa) ? 40 : rawKgBolsa,
+        kgPorBolsa: isNaN(rawKgBolsa) ? activeLimits.kgPorBolsaDefault : rawKgBolsa,
         fechaIngreso: rawFecha || new Date().toISOString().split('T')[0],
         errores,
-        valida: errores.length === 0,
-        existe: existeLote
+        valida: isValidRow,
+        existe: existeLote,
+        acumuladoPrevioBolsas: accum.bolsas,
+        acumuladoPrevioKg: accum.kg,
       });
     }
 
@@ -304,11 +450,10 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
       return;
     }
 
-    const nuevosLotes: Lote[] = [];
-    const actualizadosLotes: Lote[] = [];
+    const nuevosLotesMap = new Map<string, Lote>();
+    const actualizadosLotesMap = new Map<string, Lote>();
 
     validas.forEach(f => {
-      // Parsear tratamiento múltiple de Excel (separados por coma)
       const tratamientosArray: TratamientoType[] = f.tratamiento
         .split(',')
         .map(t => {
@@ -318,13 +463,21 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
         });
 
       const uniqueId = `${f.cliente.replace(/\s+/g, '_')}_${f.loteId}`;
-      const loteExistente = existingLotes.find(l => l.id.toLowerCase() === uniqueId.toLowerCase());
+      const loteKey = f.loteId.toLowerCase();
+
+      // Buscar si el lote ya existe en la base o si fue creado/actualizado previamente en esta misma importación
+      let loteExistente = actualizadosLotesMap.get(loteKey) || 
+                          nuevosLotesMap.get(loteKey) || 
+                          existingLotes.find(l => (l.loteNro || l.id).toLowerCase() === loteKey || l.id.toLowerCase() === uniqueId.toLowerCase());
+
+      const rowBolsas = f.cantidadBolsas;
+      const rowKgBolsa = f.kgPorBolsa || activeLimits.kgPorBolsaDefault;
+      const rowKg = rowBolsas * rowKgBolsa;
 
       if (loteExistente) {
-        // El lote existe, sumamos stock
-        const nuevasBolsas = loteExistente.stockBolsas + f.cantidadBolsas;
-        const pesoDefecto = f.kgPorBolsa || loteExistente.kgPorBolsa || 40;
-        const nuevosKg = loteExistente.stockKg + (f.cantidadBolsas * pesoDefecto);
+        // Lote existente: sumamos stock (acumulación Punto 5)
+        const nuevasBolsas = loteExistente.stockBolsas + rowBolsas;
+        const nuevosKg = loteExistente.stockKg + rowKg;
         
         let nuevoEstado: EstadoLoteType = loteExistente.estado;
         if (nuevasBolsas > 0 && loteExistente.estado === 'Agotado') {
@@ -335,35 +488,36 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
           id: `MOV-EXCEL-${Date.now()}-${Math.random()}`,
           fecha: f.fechaIngreso,
           tipo: 'Entrada por Excel',
-          cantidadBolsas: f.cantidadBolsas,
-          kgPorBolsa: pesoDefecto,
-          text_dummy: undefined, // Type safety helper
-          cantidadKg: f.cantidadBolsas * pesoDefecto,
+          cantidadBolsas: rowBolsas,
+          kgPorBolsa: rowKgBolsa,
+          cantidadKg: rowKg,
           detalle: `Importado de Excel (${archivoNombre})`
-        } as any;
+        };
 
         const loteActualizado: Lote = {
           ...loteExistente,
           stockBolsas: nuevasBolsas,
           stockKg: nuevosKg,
           estado: nuevoEstado,
-          historial: [movimiento, ...loteExistente.historial]
+          historial: [movimiento, ...(loteExistente.historial || [])]
         };
         
-        actualizadosLotes.push(loteActualizado);
+        if (existingLotes.some(l => (l.loteNro || l.id).toLowerCase() === loteKey || l.id.toLowerCase() === uniqueId.toLowerCase())) {
+          actualizadosLotesMap.set(loteKey, loteActualizado);
+        } else {
+          nuevosLotesMap.set(loteKey, loteActualizado);
+        }
       } else {
-        // Lote nuevo, lo creamos
-        const pesoDefecto = f.kgPorBolsa || 40;
-        const totalKg = f.cantidadBolsas * pesoDefecto;
-        const estadoInicial: EstadoLoteType = f.cantidadBolsas > 0 ? 'Disponible' : 'Agotado';
+        // Lote nuevo: lo creamos
+        const estadoInicial: EstadoLoteType = (f.estado as EstadoLoteType) || (rowBolsas > 0 ? 'Disponible' : 'Agotado');
 
         const movimientoInicial: MovimientoStock = {
           id: `MOV-EXCEL-${Date.now()}-${Math.random()}`,
           fecha: f.fechaIngreso,
           tipo: 'Entrada',
-          cantidadBolsas: f.cantidadBolsas,
-          kgPorBolsa: pesoDefecto,
-          cantidadKg: totalKg,
+          cantidadBolsas: rowBolsas,
+          kgPorBolsa: rowKgBolsa,
+          cantidadKg: rowKg,
           detalle: `Ingreso lote nuevo por importación Excel (${archivoNombre})`
         };
 
@@ -374,23 +528,30 @@ export const ImportarStock: React.FC<ImportarStockProps> = ({
           especie: f.especie,
           variedad: f.variedad,
           tipo: f.tipo as TipoLoteType,
-          categoria: (f as any).categoria || 'Original',
+          categoria: (f.categoria as any) || 'Original',
           tratamiento: tratamientosArray,
           producto: f.producto || 'Ninguno',
-          stockBolsas: f.cantidadBolsas,
-          kgPorBolsa: pesoDefecto,
-          stockKg: totalKg,
+          stockBolsas: rowBolsas,
+          kgPorBolsa: rowKgBolsa,
+          stockKg: rowKg,
           fechaIngreso: f.fechaIngreso,
           campaniaId: getCampaniaIdFromDate(f.fechaIngreso),
           estado: estadoInicial,
+          ordenProcesoId: f.ordenProcesoId || undefined,
+          numeroOrdenMovimiento: f.numeroOrdenMovimiento || undefined,
+          siloOrigen: f.siloOrigen || undefined,
+          numeroBolsonOrigen: f.numeroBolsonOrigen || undefined,
+          bolsonOrigenNro: f.numeroBolsonOrigen || undefined,
+          sectorBolsonOrigen: f.sectorBolsonOrigen || undefined,
+          ubicacionAcopio: f.ubicacionAcopio || undefined,
           historial: [movimientoInicial]
         };
 
-        nuevosLotes.push(nuevoLote);
+        nuevosLotesMap.set(loteKey, nuevoLote);
       }
     });
 
-    onImportConfirm(nuevosLotes, actualizadosLotes);
+    onImportConfirm(Array.from(nuevosLotesMap.values()), Array.from(actualizadosLotesMap.values()));
   };
 
   const fileInputClick = () => {

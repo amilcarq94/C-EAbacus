@@ -75,7 +75,7 @@ interface ProductionRecord {
   loteNro: string;
   fechaProduccion: string; // YYYY-MM-DD
   fechaHoraProduccion?: string; // YYYY-MM-DDTHH:mm
-  estadoRegistro: 'PRE-CARGA' | 'REALIZADO';
+  estadoRegistro: 'PRE-CARGA' | 'REALIZADO' | 'EN_CURSO';
   cliente: string;
   especie: string;
   variedad: string;

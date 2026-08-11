@@ -4,13 +4,15 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo, OrigenBolsonItem } from '../types';
+import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, EstadoRegistroLote, CategoriaType, OrdenProceso, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo, OrigenBolsonItem, LoteLimitsConfig, MovimientoStock } from '../types';
 import { generateLoteId, formatKg } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
+import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
 import { SilosSelector } from './SilosSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { ClienteSelect } from './ClienteSelect';
-import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info, Trash2, Layers } from 'lucide-react';
+import { Save, RotateCcw, AlertTriangle, Plus, Check, Calendar, Factory, Truck, Clock, CheckCircle2, CalendarDays, Info, Trash2, Layers, Layers3, Printer } from 'lucide-react';
+import { BatchPrintLotesModal } from './BatchPrintLotesModal';
 
 interface LoteFormProps {
   existingLotes: Lote[];
@@ -22,10 +24,21 @@ interface LoteFormProps {
   loteAEditar?: Lote | null;
   activeCampaniaId?: string;
   siloStocks?: Record<SiloId, number>;
+  loteLimits?: LoteLimitsConfig;
   onSave: (lote: Lote) => void;
   onCancel: () => void;
   onCreateOrdenProcesoClick?: () => void;
 }
+
+const getNowDateTimeLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
 export const LoteForm: React.FC<LoteFormProps> = ({
   existingLotes,
@@ -36,11 +49,13 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   especies,
   loteAEditar,
   siloStocks,
+  loteLimits,
   onSave,
   onCancel,
   onCreateOrdenProcesoClick,
 }) => {
   const isEditing = !!loteAEditar;
+  const activeLimits = loteLimits || getLoteLimits();
 
   // Estados del Formulario
   const [id, setId] = useState('');
@@ -53,13 +68,13 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [categoria, setCategoria] = useState<CategoriaType>('Original');
   const [tratamientos, setTratamientos] = useState<TratamientoType[]>(['Sin Tratar']);
   const [producto, setProducto] = useState('Ninguno');
-  const [stockBolsas, setStockBolsas] = useState<number>(100);
-  const [kgPorBolsa, setKgPorBolsa] = useState<number>(40);
-  const [stockKg, setStockKg] = useState<number>(4000);
+  const [stockBolsas, setStockBolsas] = useState<number>(20);
+  const [kgPorBolsa, setKgPorBolsa] = useState<number>(activeLimits.kgPorBolsaDefault || 800);
+  const [stockKg, setStockKg] = useState<number>(16000);
   const [fechaIngreso, setFechaIngreso] = useState(() => new Date().toISOString().split('T')[0]);
   const [estado, setEstado] = useState<EstadoLoteType>('Disponible');
-  const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('PRE-CARGA');
-  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>('');
+  const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('REALIZADO');
+  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => getNowDateTimeLocal());
   const [observaciones, setObservaciones] = useState('');
   const [ala, setAla] = useState('');
   const [sector, setSector] = useState('');
@@ -94,6 +109,41 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   };
 
   const [error, setError] = useState('');
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printingLoteObj, setPrintingLoteObj] = useState<Lote | null>(null);
+
+  const handlePrintCurrentLote = () => {
+    const currentLote: Lote = {
+      id: id || loteAEditar?.id || `LOTE-${Date.now()}`,
+      loteNro: loteNro || 'S/N',
+      cliente,
+      especie,
+      variedad: variedad || '—',
+      tipo,
+      categoria,
+      tratamiento: tratamientos,
+      producto,
+      stockBolsas,
+      kgPorBolsa,
+      stockKg,
+      fechaIngreso,
+      estado,
+      estadoRegistro,
+      fechaHoraProduccion,
+      observaciones,
+      ala,
+      sector,
+      ubicacionAcopio: ala && sector ? `Ala ${ala} - Sector ${sector}` : '',
+      ordenProcesoId,
+      numeroOrdenMovimiento,
+      silosOrigen,
+      origenesBolson,
+      historial: loteAEditar?.historial || [],
+      auditoria: loteAEditar?.auditoria || [],
+    };
+    setPrintingLoteObj(currentLote);
+    setShowPrintModal(true);
+  };
 
   // Filtrar órdenes de proceso para listar únicamente las que están "EN CURSO" (o la ya vinculada si se edita un lote)
   const ordenesEnCurso = useMemo(() => {
@@ -227,8 +277,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setStockKg(loteAEditar.stockKg);
       setFechaIngreso(loteAEditar.fechaIngreso);
       setEstado(loteAEditar.estado);
-      setEstadoRegistro(loteAEditar.estadoRegistro || 'PRE-CARGA');
-      setFechaHoraProduccion(loteAEditar.fechaHoraProduccion || '');
+      setEstadoRegistro(loteAEditar.estadoRegistro || 'REALIZADO');
+      setFechaHoraProduccion(loteAEditar.fechaHoraProduccion || getNowDateTimeLocal());
       setObservaciones(loteAEditar.observaciones || '');
       setAla(loteAEditar.ala || '');
       setSector(loteAEditar.sector || '');
@@ -251,8 +301,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       const allLoteNros = existingLotes.map(l => l.loteNro || l.id);
       const suggestedNro = generateLoteId(allLoteNros);
       setLoteNro(suggestedNro);
-      setEstadoRegistro('PRE-CARGA');
-      setFechaHoraProduccion('');
+      setEstadoRegistro('REALIZADO');
+      setFechaHoraProduccion(getNowDateTimeLocal());
       // ID es cliente + _ + loteNro, lo calcularemos al guardar o dinámicamente
       setId(`${cliente.replace(/\s+/g, '_')}_${suggestedNro}`);
       setObservaciones('');
@@ -342,6 +392,16 @@ export const LoteForm: React.FC<LoteFormProps> = ({
     }
   };
 
+  // Detectar si el N° de Lote ingresado ya existe en la base para acumulación automática
+  const existingLoteRepetido = useMemo(() => {
+    if (isEditing || !loteNro.trim()) return null;
+    const match = existingLotes.find(
+      l => l.loteNro?.trim().toLowerCase() === loteNro.trim().toLowerCase() ||
+           l.id.toLowerCase() === `${cliente.replace(/\s+/g, '_')}_${loteNro.trim()}`.toLowerCase()
+    );
+    return match || null;
+  }, [isEditing, loteNro, cliente, existingLotes]);
+
   const handleGuardar = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -409,15 +469,80 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       }
     }
 
-    const uniqueId = isEditing ? id : `${cliente.replace(/\s+/g, '_')}_${loteNro.trim()}`;
-
-    const calculatedCampania = getCampaniaIdFromDate(fechaIngreso);
-
     const origenesValidos = origenesBolson.filter(o => o.bolsonNro && o.bolsonNro.trim() !== '');
     const bolsonesNroConcat = origenesValidos.map(o => o.bolsonNro!.trim()).join(', ');
     const sectoresConcat = origenesValidos.map(o => (o.sector && o.sector.trim()) ? o.sector.trim() : '—').join(', ');
+    const ubicacionStr = ala && sector ? `Ala ${ala} - Sector ${sector}` : (ala || sector || 'Sin asignar');
 
-    // Crear el objeto lote completo
+    // Manejo de lote repetido (acumulación en modo Reporte Diario) o alta/edición
+    if (!isEditing && existingLoteRepetido) {
+      const currentKg = existingLoteRepetido.stockKg || 0;
+      const currentBolsas = existingLoteRepetido.stockBolsas || 0;
+      const addKg = stockKg;
+      const addBolsas = Number(stockBolsas);
+
+      // Validar límites máximos (Puntos 5, 6 y 7)
+      const valResult = validateLoteLimits(currentKg, currentBolsas, addKg, addBolsas, activeLimits);
+      if (!valResult.allowed) {
+        setError(valResult.errorMessage || 'Operación bloqueada por sobrepasar los límites de lote.');
+        return;
+      }
+
+      const totalBolsasAcumuladas = currentBolsas + addBolsas;
+      const totalKgAcumulados = currentKg + addKg;
+      const estadoAcumulado = totalBolsasAcumuladas > 0 && existingLoteRepetido.estado === 'Agotado' ? 'Disponible' : existingLoteRepetido.estado;
+
+      const nuevoMov: MovimientoStock = {
+        id: `MOV-${Date.now()}`,
+        fecha: fechaIngreso,
+        tipo: 'Entrada manual',
+        cantidadBolsas: addBolsas,
+        kgPorBolsa: Number(kgPorBolsa),
+        cantidadKg: addKg,
+        detalle: `Reporte Diario de Producción (${fechaHoraProduccion || fechaIngreso}) - OP #${ordenProcesoId || 'S/N'}`
+      };
+
+      const loteAcumulado: Lote = {
+        ...existingLoteRepetido,
+        stockBolsas: totalBolsasAcumuladas,
+        stockKg: totalKgAcumulados,
+        estado: estadoAcumulado,
+        // Mantener campos existentes salvo que se editen explícitamente en el formulario diario
+        especie,
+        variedad: variedad.trim() || existingLoteRepetido.variedad,
+        tipo,
+        categoria,
+        tratamiento: tratamientos,
+        producto: tratamientos.includes('Sin Tratar') ? 'Ninguno' : (producto.trim() || 'Ninguno'),
+        fechaIngreso,
+        fechaHoraProduccion: estadoRegistro === 'REALIZADO' ? (fechaHoraProduccion.trim() || undefined) : existingLoteRepetido.fechaHoraProduccion,
+        observaciones: observaciones.trim() || existingLoteRepetido.observaciones,
+        ala: ala || existingLoteRepetido.ala,
+        sector: sector || existingLoteRepetido.sector,
+        ubicacionAcopio: ubicacionStr || existingLoteRepetido.ubicacionAcopio,
+        ordenProcesoId: ordenProcesoId || existingLoteRepetido.ordenProcesoId,
+        numeroOrdenMovimiento: (selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined) || existingLoteRepetido.numeroOrdenMovimiento,
+        silosOrigen: silosOrigen.length > 0 ? silosOrigen : existingLoteRepetido.silosOrigen,
+        origenesBolson: origenesValidos.length > 0 ? origenesValidos : existingLoteRepetido.origenesBolson,
+        bolsonOrigenNro: bolsonesNroConcat || existingLoteRepetido.bolsonOrigenNro,
+        sectorBolsonOrigen: sectoresConcat || existingLoteRepetido.sectorBolsonOrigen,
+        historial: [nuevoMov, ...(existingLoteRepetido.historial || [])]
+      };
+
+      onSave(loteAcumulado);
+      return;
+    }
+
+    // Alta nueva o Edición directa desde el listado
+    const valResult = validateLoteLimits(0, 0, stockKg, Number(stockBolsas), activeLimits);
+    if (!valResult.allowed) {
+      setError(valResult.errorMessage || 'Operación bloqueada por sobrepasar los límites de lote.');
+      return;
+    }
+
+    const uniqueId = isEditing ? id : `${cliente.replace(/\s+/g, '_')}_${loteNro.trim()}`;
+    const calculatedCampania = getCampaniaIdFromDate(fechaIngreso);
+
     const loteGuardar: Lote = {
       id: uniqueId,
       loteNro: loteNro.trim(),
@@ -439,6 +564,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       observaciones: observaciones.trim(),
       ala: ala,
       sector: sector,
+      ubicacionAcopio: ubicacionStr,
       ordenProcesoId: ordenProcesoId,
       numeroOrdenMovimiento: selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined,
       silosOrigen: silosOrigen,
@@ -455,7 +581,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
           cantidadBolsas: Number(stockBolsas),
           kgPorBolsa: Number(kgPorBolsa),
           cantidadKg: stockKg,
-          detalle: 'Carga de stock inicial de lote'
+          detalle: 'Carga inicial de lote - Reporte de Producción'
         }
       ]
     };
@@ -467,10 +593,10 @@ export const LoteForm: React.FC<LoteFormProps> = ({
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8" id="lote-form-container">
       <div className="border-b border-gray-100 pb-4 mb-6">
         <span className="text-xs font-sans font-semibold tracking-widest text-[#C9922E] uppercase">
-          {isEditing ? 'EDICIÓN DE REGISTRO' : 'NUEVO ACOPIO EN PLANTA'}
+          {isEditing ? 'EDICIÓN DE REGISTRO DE LOTE' : 'PLANILLA DE REPORTE DE PRODUCCIÓN'}
         </span>
         <h3 className="font-serif text-2xl font-bold text-[#1A1A1A] mt-1">
-          {isEditing ? `Editar Lote: ${id}` : 'Registrar Lote de Semillas'}
+          {isEditing ? `Editar Lote: ${id}` : 'Hoja de Reporte de Producción - Alta de Lote'}
         </h3>
       </div>
 
@@ -524,7 +650,12 @@ export const LoteForm: React.FC<LoteFormProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setEstadoRegistro('REALIZADO')}
+                  onClick={() => {
+                    setEstadoRegistro('REALIZADO');
+                    if (!fechaHoraProduccion) {
+                      setFechaHoraProduccion(getNowDateTimeLocal());
+                    }
+                  }}
                   className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                     estadoRegistro === 'REALIZADO'
                       ? 'bg-emerald-500 text-slate-950 shadow-md font-extrabold'
@@ -771,6 +902,23 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               placeholder="Ej: 58FIN"
               required
             />
+
+            {existingLoteRepetido && (
+              <div className="mt-2 bg-amber-50 border border-amber-300 p-3 rounded-xl text-xs text-amber-900 space-y-1.5 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 font-bold text-amber-950">
+                  <Layers3 className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>⚡ Acumulación de Stock: Lote Repetido Detectado ({existingLoteRepetido.loteNro})</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-800">
+                  El lote ya existe en el sistema con <strong>{existingLoteRepetido.stockBolsas} bolsas</strong> ({formatKg(existingLoteRepetido.stockKg)}).
+                  La nueva carga ({stockBolsas} bolsas / {formatKg(stockKg)}) se <strong>acumulará</strong> al stock existente.
+                </p>
+                <div className="pt-1 border-t border-amber-200/80 flex flex-wrap items-center justify-between text-[11px] text-amber-900 font-semibold">
+                  <span>Resultado acumulado: <strong>{existingLoteRepetido.stockBolsas + Number(stockBolsas || 0)} bolsas</strong> ({formatKg(existingLoteRepetido.stockKg + stockKg)})</span>
+                  <span className="text-amber-700">Margen disponible: {Math.max(0, activeLimits.maxBolsasPorLote - existingLoteRepetido.stockBolsas)} bolsas ({formatKg(Math.max(0, activeLimits.maxKgPorLote - existingLoteRepetido.stockKg))})</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ID de Lote Único Interno (Lectura únicamente) */}
@@ -1060,24 +1208,41 @@ export const LoteForm: React.FC<LoteFormProps> = ({
         </div>
 
         {/* Acciones */}
-        <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-5">
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-5">
+          <button
+            type="button"
+            onClick={handlePrintCurrentLote}
+            className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold font-sans uppercase tracking-wider bg-slate-800 hover:bg-slate-900 text-white rounded-lg shadow-sm transition cursor-pointer"
+            title="Imprimir la Ficha Técnica de este lote sin guardar ni perder los cambios ingresados"
+          >
+            <Printer className="w-4 h-4 text-[#C9922E]" />
+            <span>Imprimir Ficha</span>
+          </button>
+
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 text-xs font-semibold font-sans uppercase tracking-wider text-gray-500 rounded-lg hover:bg-gray-100 transition"
+            className="px-5 py-2.5 text-xs font-semibold font-sans uppercase tracking-wider text-gray-500 rounded-lg hover:bg-gray-100 transition cursor-pointer"
           >
             Cancelar
           </button>
           
           <button
             type="submit"
-            className="flex items-center gap-2 px-6 py-2.5 text-xs font-semibold font-sans uppercase tracking-wider bg-[#00603C] hover:bg-[#254731] text-white rounded-lg shadow-md transition"
+            className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold font-sans uppercase tracking-wider bg-[#00603C] hover:bg-[#254731] text-white rounded-lg shadow-md transition cursor-pointer"
           >
             <Save className="w-4 h-4 text-[#C9922E]" />
             Guardar Lote
           </button>
         </div>
       </form>
+
+      {/* Modal de Impresión de Ficha */}
+      <BatchPrintLotesModal
+        isOpen={showPrintModal}
+        lotes={printingLoteObj ? [printingLoteObj] : []}
+        onClose={() => setShowPrintModal(false)}
+      />
     </div>
   );
 };

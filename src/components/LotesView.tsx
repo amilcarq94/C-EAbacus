@@ -5,10 +5,15 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Lote, EstadoLoteType, TipoLoteType, OrdenProceso, MovimientoSilo } from '../types';
+import { Lote, EstadoLoteType, TipoLoteType, OrdenProceso, MovimientoSilo, LoteLimitsConfig } from '../types';
 import { formatNumberArg, formatKg, formatDateStr } from '../utils/formatters';
-import { Search, Grid, List, Plus, Filter, Eye, Edit2, ArrowDownRight, Trash2, QrCode, Download, Lock, ShieldAlert, KeyRound, X, Flame, Warehouse, Layers, Info, SlidersHorizontal, Check, Pin, RotateCcw, ChevronDown, Package, Sprout, Clock, CheckCircle2, BarChart2, Building2, Tag, FlaskConical, PieChart, Wheat } from 'lucide-react';
+import { Search, Grid, List, Plus, Filter, Eye, Edit2, ArrowDownRight, Trash2, QrCode, Download, Lock, ShieldAlert, KeyRound, X, Flame, Warehouse, Layers, Info, SlidersHorizontal, Check, Pin, RotateCcw, ChevronDown, Package, Sprout, Clock, CheckCircle2, BarChart2, Building2, Tag, FlaskConical, PieChart, Wheat, Sliders, PackagePlus, Printer } from 'lucide-react';
+import { BatchPrintLotesModal } from './BatchPrintLotesModal';
 import { QrCodeModal } from './QrCodeModal';
+import { LoteLimitsConfigModal } from './LoteLimitsConfigModal';
+import { ProcesarLoteModal } from './ProcesarLoteModal';
+import { BulkEditLotesModal } from './BulkEditLotesModal';
+import { SiloId, BolsonCampo } from '../types';
 
 interface MultiSelectDropdownProps {
   id: string;
@@ -261,6 +266,12 @@ interface LotesViewProps {
   lotes: Lote[];
   ordenesProceso?: OrdenProceso[];
   movimientosSilo?: MovimientoSilo[];
+  siloStocks?: Record<SiloId, number>;
+  bolsones?: BolsonCampo[];
+  clientes?: string[];
+  especies?: string[];
+  loteLimits?: LoteLimitsConfig;
+  onUpdateLoteLimits?: (limits: LoteLimitsConfig) => void;
   onSelectLote: (lote: Lote) => void;
   onEditLote: (lote: Lote) => void;
   onAddLote: () => void;
@@ -270,12 +281,19 @@ interface LotesViewProps {
   currentUser: { nombre: string; rol: string };
   onWipeStocks: () => Promise<void>;
   onSaveLote?: (lote: Lote) => Promise<void>;
+  onBatchUpdateLotes?: (lotes: Lote[]) => Promise<void>;
 }
 
 export const LotesView: React.FC<LotesViewProps> = ({
   lotes,
   ordenesProceso,
   movimientosSilo,
+  siloStocks,
+  bolsones,
+  clientes,
+  especies,
+  loteLimits,
+  onUpdateLoteLimits,
   onSelectLote,
   onEditLote,
   onAddLote,
@@ -285,7 +303,14 @@ export const LotesView: React.FC<LotesViewProps> = ({
   currentUser,
   onWipeStocks,
   onSaveLote,
+  onBatchUpdateLotes,
 }) => {
+  const [showLimitsModal, setShowLimitsModal] = useState(false);
+  const [loteToProcess, setLoteToProcess] = useState<Lote | null>(null);
+  const [lotesToProcessBatch, setLotesToProcessBatch] = useState<Lote[]>([]);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [showTableBatchPrintModal, setShowTableBatchPrintModal] = useState(false);
+  const [tableBatchPrintLotes, setTableBatchPrintLotes] = useState<Lote[]>([]);
   // Constante para almacenamiento persistente del filtro fijado
   const PIN_STORAGE_KEY = 'agroabacus_pinned_lotes_filters_v2';
 
@@ -367,21 +392,17 @@ export const LotesView: React.FC<LotesViewProps> = ({
   // Estado para selección de múltiples lotes
   const [selectedLoteIds, setSelectedLoteIds] = useState<string[]>([]);
   
-  // Estado para tipo de vista (tarjetas, tabla o mapa de calor)
-  const [viewType, setViewType] = useState<'grid' | 'table' | 'heatmap'>('grid');
+  // Estado para tipo de vista (tarjetas, tabla o mapa de calor) - Por defecto vista tabla
+  const [viewType, setViewType] = useState<'grid' | 'table' | 'heatmap'>('table');
   const [selectedHeatmapCell, setSelectedHeatmapCell] = useState<{ ala: string; sector: string } | null>(null);
 
-  // Estado para las columnas visibles en la vista de tabla
+  // Estado para las columnas visibles en la vista de tabla (N° de lote, Cliente, Variedad, Cantidad de bolsas, Estado)
   const [visibleColumns, setVisibleColumns] = useState({
     loteId: true,
     cliente: true,
-    especieVariedad: true,
-    tipo: true,
-    tratamiento: true,
+    variedad: true,
     bolsas: true,
-    kilogramos: true,
     estado: true,
-    ubicacion: true,
   });
   const [showColumnSelector, setShowColumnSelector] = useState(false);
 
@@ -916,9 +937,88 @@ export const LotesView: React.FC<LotesViewProps> = ({
       };
     });
 
+    // Generar Hoja Resumen Consolidada por Especie y Variedad para Cierre Mensual Gerencial
+    interface ResumenGroup {
+      especie: string;
+      variedad: string;
+      cantidadLotes: number;
+      totalBolsas: number;
+      totalKg: number;
+    }
+
+    const summaryMap = new Map<string, ResumenGroup>();
+    let grandTotalBolsas = 0;
+    let grandTotalKg = 0;
+
+    lotesRealizados.forEach(l => {
+      const esp = l.especie || 'Sin especificar';
+      const varN = l.variedad || 'Sin variedad';
+      const key = `${esp}___${varN}`;
+
+      const bolsas = Number(l.stockBolsas) || 0;
+      const kg = Number(l.stockKg) || 0;
+
+      grandTotalBolsas += bolsas;
+      grandTotalKg += kg;
+
+      const existing = summaryMap.get(key);
+      if (existing) {
+        existing.cantidadLotes += 1;
+        existing.totalBolsas += bolsas;
+        existing.totalKg += kg;
+      } else {
+        summaryMap.set(key, {
+          especie: esp,
+          variedad: varN,
+          cantidadLotes: 1,
+          totalBolsas: bolsas,
+          totalKg: kg
+        });
+      }
+    });
+
+    const summarySorted = Array.from(summaryMap.values()).sort((a, b) => {
+      const cmpEsp = a.especie.localeCompare(b.especie);
+      if (cmpEsp !== 0) return cmpEsp;
+      return a.variedad.localeCompare(b.variedad);
+    });
+
+    const summaryRows = summarySorted.map(g => ({
+      'Especie': g.especie,
+      'Variedad': g.variedad,
+      'Cantidad de Lotes': g.cantidadLotes,
+      'Total Bolsas': g.totalBolsas,
+      'Total Kilogramos (Kg)': g.totalKg,
+      'Total Toneladas (Tn)': Number((g.totalKg / 1000).toFixed(2)),
+      'Participación (% Kg)': grandTotalKg > 0 ? `${((g.totalKg / grandTotalKg) * 100).toFixed(1)}%` : '0.0%'
+    }));
+
+    // Fila consolidada de Total General
+    summaryRows.push({
+      'Especie': 'TOTAL GENERAL',
+      'Variedad': '—',
+      'Cantidad de Lotes': lotesRealizados.length,
+      'Total Bolsas': grandTotalBolsas,
+      'Total Kilogramos (Kg)': grandTotalKg,
+      'Total Toneladas (Tn)': Number((grandTotalKg / 1000).toFixed(2)),
+      'Participación (% Kg)': '100.0%'
+    });
+
+    const summaryWorksheet = XLSX.utils.json_to_sheet(summaryRows);
+
+    // Configurar anchos de columna para la hoja resumen
+    const summaryKeys = Object.keys(summaryRows[0] || {});
+    summaryWorksheet['!cols'] = summaryKeys.map(key => {
+      const maxLen = Math.max(
+        key.length,
+        ...summaryRows.map(row => String((row as any)[key] ?? '').length)
+      );
+      return { wch: Math.min(Math.max(maxLen + 4, 15), 35) };
+    });
+
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
-    // Configurar anchos de columna para lectura clara
+    // Configurar anchos de columna para lectura clara de detalle
     const keys = Object.keys(dataToExport[0] || {});
     const colWidths = keys.map(key => {
       const maxLen = Math.max(
@@ -930,9 +1030,11 @@ export const LotesView: React.FC<LotesViewProps> = ({
     worksheet['!cols'] = colWidths;
 
     const workbook = XLSX.utils.book_new();
+    // La hoja resumen va al inicio para consulta gerencial inmediata
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Resumen Cierre');
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Lotes Realizados');
     
-    XLSX.writeFile(workbook, `Reporte_Lotes_Realizados_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `Reporte_Cierre_Lotes_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Exportar CSV delimitado por punto y coma (;) respetando las columnas
@@ -1162,6 +1264,15 @@ export const LotesView: React.FC<LotesViewProps> = ({
             <span>Borrar Stocks e Información</span>
           </button>
 
+          <button
+            onClick={() => setShowLimitsModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-white text-gray-700 hover:text-[#00603C] hover:bg-gray-50 border border-gray-200 rounded-lg transition cursor-pointer shadow-2xs"
+            title="Configurar límites máximos por lote (kg, bolsas, kg por bolsa)"
+          >
+            <Sliders className="w-4 h-4 text-[#C9922E]" />
+            <span>Límites Lote</span>
+          </button>
+
           <div className="flex items-center gap-1.5 bg-[#E3EFE7]/40 p-1 rounded-xl border border-[#00603C]/20">
             <button
               id="btn-exportar-lotes-excel"
@@ -1185,11 +1296,12 @@ export const LotesView: React.FC<LotesViewProps> = ({
           <button
             id="btn-nuevo-lote-alta"
             onClick={onAddLote}
-            className="flex items-center gap-2 px-5 py-2.5 text-xs font-semibold font-sans uppercase tracking-wider bg-[#00603C] text-white rounded-lg hover:bg-[#254731] transition shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 text-xs font-extrabold font-sans uppercase tracking-wider bg-gradient-to-r from-[#00603C] to-[#254731] text-white rounded-xl hover:brightness-110 transition shadow-md hover:shadow-lg cursor-pointer ring-2 ring-[#C9922E]/40"
+            title="Alta rápida de 1 o más lotes en Precarga"
           >
-            <Plus className="w-4.5 h-4.5 text-[#C9922E]" />
-            <span>Registrar Nuevo Lote</span>
-            <kbd className="hidden sm:inline-block ml-1 px-1 py-0.5 text-[9px] bg-[#254731] text-[#E3EFE7] rounded border border-[#254731] font-mono normal-case">Ctrl+N</kbd>
+            <PackagePlus className="w-5 h-5 text-amber-300" />
+            <span>Generar Lote</span>
+            <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[9px] bg-amber-400 text-slate-950 font-black rounded font-mono normal-case">Ctrl+N</kbd>
           </button>
         </div>
       </div>
@@ -1491,13 +1603,9 @@ export const LotesView: React.FC<LotesViewProps> = ({
                           onClick={() => setVisibleColumns({
                             loteId: true,
                             cliente: true,
-                            especieVariedad: true,
-                            tipo: true,
-                            tratamiento: true,
+                            variedad: true,
                             bolsas: true,
-                            kilogramos: true,
                             estado: true,
-                            ubicacion: true,
                           })}
                           className="text-[9px] font-black text-[#00603C] hover:underline cursor-pointer"
                         >
@@ -1506,15 +1614,11 @@ export const LotesView: React.FC<LotesViewProps> = ({
                       </div>
                       <div className="space-y-1.5 max-h-60 overflow-y-auto">
                         {[
-                          { key: 'loteId', label: 'ID Lote / Nro' },
+                          { key: 'loteId', label: 'N° de lote' },
                           { key: 'cliente', label: 'Cliente' },
-                          { key: 'especieVariedad', label: 'Especie / Variedad' },
-                          { key: 'tipo', label: 'Tipo' },
-                          { key: 'tratamiento', label: 'Tratamiento' },
-                          { key: 'bolsas', label: 'Bolsas (Stock)' },
-                          { key: 'kilogramos', label: 'Kilogramos (Stock)' },
+                          { key: 'variedad', label: 'Variedad' },
+                          { key: 'bolsas', label: 'Cantidad de bolsas' },
                           { key: 'estado', label: 'Estado' },
-                          { key: 'ubicacion', label: 'Sector de Acopio' },
                         ].map(({ key, label }) => (
                           <label 
                             key={key} 
@@ -2014,24 +2118,70 @@ export const LotesView: React.FC<LotesViewProps> = ({
 
       {/* Barra de Acciones de Selección Múltiple */}
       {selectedLoteIds.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-200">
-          <div className="flex items-center gap-2.5 text-xs font-bold text-red-800 uppercase tracking-wider">
-            <ShieldAlert className="w-5 h-5 text-red-600" />
+        <div className="bg-[#00603C]/10 border border-[#00603C]/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-200 shadow-md">
+          <div className="flex items-center gap-2.5 text-xs font-bold text-[#00603C] uppercase tracking-wider">
+            <Layers className="w-5 h-5 text-[#C9922E]" />
             <span>{selectedLoteIds.length} lotes seleccionados</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setSelectedLoteIds([])}
-              className="px-3.5 py-2 text-xs font-semibold font-sans uppercase tracking-wider text-gray-500 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+              onClick={() => {
+                const selectedObjects = lotes.filter(l => selectedLoteIds.includes(l.id));
+                setTableBatchPrintLotes(selectedObjects);
+                setShowTableBatchPrintModal(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition shadow-xs cursor-pointer"
+              title="Imprimir la Ficha Técnica Oficial de los lotes seleccionados con un solo clic"
             >
-              Despejar Selección
+              <Printer className="w-4 h-4 text-[#C9922E]" />
+              <span>Imprimir Fichas ({selectedLoteIds.length})</span>
             </button>
+
+            <button
+              onClick={() => setShowBulkEditModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg transition shadow-xs cursor-pointer"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-[#00603C]" />
+              <span>Edición Masiva</span>
+            </button>
+
+            {(() => {
+              const selectedPrecargaLotes = lotes.filter(
+                l => selectedLoteIds.includes(l.id) && l.estadoRegistro === 'PRE-CARGA'
+              );
+              if (selectedPrecargaLotes.length === 0) return null;
+
+              return (
+                <button
+                  onClick={() => {
+                    if (selectedPrecargaLotes.length === 1) {
+                      setLoteToProcess(selectedPrecargaLotes[0]);
+                    } else {
+                      setLotesToProcessBatch(selectedPrecargaLotes);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition shadow-xs cursor-pointer"
+                  title="Pasar lotes en Precarga seleccionados a estado Realizado indicando origen de silos y bolsones"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>Pasar a Realizado ({selectedPrecargaLotes.length})</span>
+                </button>
+              );
+            })()}
+
             <button
               onClick={handleBulkDelete}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold font-sans uppercase tracking-wider bg-red-600 hover:bg-red-700 text-white rounded-lg transition shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-red-600 hover:bg-red-700 text-white rounded-lg transition shadow-xs cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
-              <span>Eliminar Seleccionados</span>
+              <span>Eliminar</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedLoteIds([])}
+              className="px-3.5 py-2 text-xs font-semibold font-sans uppercase tracking-wider text-slate-500 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+            >
+              Deseleccionar
             </button>
           </div>
         </div>
@@ -2519,6 +2669,17 @@ export const LotesView: React.FC<LotesViewProps> = ({
                 </button>
 
                 <div className="flex gap-1.5">
+                  {l.estadoRegistro === 'PRE-CARGA' && (
+                    <button
+                      onClick={() => setLoteToProcess(l)}
+                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition text-xs flex items-center gap-1 font-bold cursor-pointer"
+                      title="Pasar a Realizado (Ingresar silos y bolsones de origen)"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>Realizar</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => onEditLote(l)}
                     className="p-2 text-gray-500 hover:text-[#00603C] rounded-lg hover:bg-[#E3EFE7] transition text-xs flex items-center gap-1"
@@ -2584,25 +2745,21 @@ export const LotesView: React.FC<LotesViewProps> = ({
                       className="rounded border-gray-300 text-white focus:ring-offset-0 focus:ring-0 h-4 w-4 cursor-pointer"
                     />
                   </th>
-                  {visibleColumns.loteId && <th className="py-3.5 px-4 font-semibold">Lote ID</th>}
-                  {visibleColumns.cliente && <th className="py-3.5 px-4 font-semibold">Cliente</th>}
-                  {visibleColumns.especieVariedad && <th className="py-3.5 px-4 font-semibold">Especie / Variedad</th>}
-                  {visibleColumns.tipo && <th className="py-3.5 px-4 font-semibold">Tipo</th>}
-                  {visibleColumns.tratamiento && <th className="py-3.5 px-4 font-semibold">Tratamiento</th>}
-                  {visibleColumns.bolsas && <th className="py-3.5 px-4 font-semibold text-right">Bolsas</th>}
-                  {visibleColumns.kilogramos && <th className="py-3.5 px-4 font-semibold text-right">Kilogramos</th>}
-                  {visibleColumns.estado && <th className="py-3.5 px-4 font-semibold text-center">Estado</th>}
-                  {visibleColumns.ubicacion && <th className="py-3.5 px-4 font-semibold text-center">Ubicación</th>}
-                  <th className="py-3.5 px-4 font-semibold text-center">Acciones</th>
+                  {visibleColumns.loteId && <th className="py-3.5 px-3.5 font-extrabold uppercase text-xs tracking-wider text-amber-300 whitespace-nowrap">N° de lote</th>}
+                  {visibleColumns.cliente && <th className="py-3.5 px-3.5 font-bold uppercase text-xs tracking-wider text-white whitespace-nowrap">Cliente</th>}
+                  {visibleColumns.variedad && <th className="py-3.5 px-3.5 font-bold uppercase text-xs tracking-wider text-white whitespace-nowrap">Variedad</th>}
+                  {visibleColumns.bolsas && <th className="py-3.5 px-3.5 font-bold uppercase text-xs tracking-wider text-white text-right whitespace-nowrap">Cantidad de bolsas</th>}
+                  {visibleColumns.estado && <th className="py-3.5 px-3.5 font-bold uppercase text-xs tracking-wider text-white text-center whitespace-nowrap">Estado</th>}
+                  <th className="py-3.5 px-3.5 font-bold uppercase text-xs tracking-wider text-white text-center whitespace-nowrap">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
                 {filteredLotes.map((l, index) => (
                   <tr
                     key={l.id}
-                    className={index % 2 === 0 ? 'bg-white' : 'bg-[#E3EFE7] bg-opacity-30'}
+                    className={index % 2 === 0 ? 'bg-white hover:bg-slate-50/80 transition-colors' : 'bg-[#E3EFE7]/30 hover:bg-[#E3EFE7]/60 transition-colors'}
                   >
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3 px-3 text-center">
                       <input
                         type="checkbox"
                         checked={selectedLoteIds.includes(l.id)}
@@ -2610,117 +2767,113 @@ export const LotesView: React.FC<LotesViewProps> = ({
                         className="rounded border-gray-300 text-[#00603C] focus:ring-[#00603C] h-4 w-4 cursor-pointer"
                       />
                     </td>
+                    {/* 1. N° de lote */}
                     {visibleColumns.loteId && (
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono font-black text-[#C9922E] text-base leading-none">LOTE: {l.loteNro}</span>
-                          {l.estadoRegistro === 'PRE-CARGA' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[9px] rounded-full" title="Pre-Carga: Lote planificado. NO descuenta stock de silos.">
-                              <Clock className="w-3 h-3 text-amber-600" />
-                              PRE-CARGA
+                      <td className="py-3 px-3.5">
+                        <div className="flex flex-col gap-1 items-start">
+                          {/* Badge de Número de Lote Rectangular Gris Oscuro */}
+                          <div className="inline-flex items-center justify-between gap-3 px-3.5 py-1.5 bg-slate-800 text-white rounded-lg border border-slate-700 ring-1 ring-amber-400/30 shadow-2xs min-w-[130px] sm:min-w-[150px]">
+                            <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest font-sans shrink-0">LOTE</span>
+                            <span className="text-base sm:text-lg font-black font-mono text-amber-300 tracking-wider">
+                              {l.loteNro || 'S/N'}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-[9px] rounded-full" title="Realizado: Producción ejecutada con Salida de Silo activa.">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              REALIZADO
+                          </div>
+
+                          {/* Badge de Estado de Registro (Pre-carga elimina al pasar a Realizado) e ID */}
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            {l.estadoRegistro === 'PRE-CARGA' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[9px] rounded-md shadow-2xs" title="Pre-Carga: Lote planificado. NO descuenta stock de silos.">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                PRE-CARGA
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-[9px] rounded-md shadow-2xs" title="Realizado: Producción ejecutada.">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                REALIZADO
+                              </span>
+                            )}
+                            <span className="font-mono text-[9px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                              ID: {l.id}
                             </span>
-                          )}
+                          </div>
                         </div>
-                        <div className="font-mono text-[9px] text-gray-500 font-semibold mt-1">ID: {l.id}</div>
-                        {l.ala && l.sector && (
-                          <div className="text-[10px] text-[#00603C] font-semibold mt-1">
-                            Ala {l.ala} · Sector {l.sector}
+                      </td>
+                    )}
+
+                    {/* 2. Cliente */}
+                    {visibleColumns.cliente && (
+                      <td className="py-3 px-3.5 font-bold text-slate-800 text-xs sm:text-sm whitespace-nowrap">
+                        {l.cliente || '—'}
+                      </td>
+                    )}
+
+                    {/* 3. Variedad */}
+                    {visibleColumns.variedad && (
+                      <td className="py-3 px-3.5">
+                        <div className="font-extrabold text-slate-900 text-xs sm:text-sm whitespace-nowrap">
+                          {l.variedad || '—'}
+                        </div>
+                        {l.especie && (
+                          <div className="text-[11px] font-semibold text-slate-500">
+                            {l.especie}
                           </div>
                         )}
                       </td>
                     )}
-                    {visibleColumns.cliente && <td className="py-3 px-4 font-semibold text-gray-800">{l.cliente}</td>}
-                    {visibleColumns.especieVariedad && (
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-gray-900">{l.especie}</div>
-                        <div className="text-[10px] text-gray-500">{l.variedad}</div>
-                      </td>
-                    )}
-                    {visibleColumns.tipo && <td className="py-3 px-4 text-gray-600">{l.tipo}</td>}
-                    {visibleColumns.tratamiento && (
-                      <td className="py-3 px-4 text-gray-500">
-                        <span className="block max-w-[150px] truncate" title={l.tratamiento.join(', ')}>
-                          {l.tratamiento.join(', ')}
-                          {l.producto !== 'Ninguno' && ` (${l.producto})`}
-                        </span>
-                      </td>
-                    )}
+
+                    {/* 4. Cantidad de bolsas */}
                     {visibleColumns.bolsas && (
-                      <td className="py-3 px-4 text-right font-bold text-gray-800">
-                        {formatNumberArg(l.stockBolsas, 0)}
+                      <td className="py-3 px-3.5 text-right">
+                        <div className="font-black text-slate-900 font-mono text-xs sm:text-sm whitespace-nowrap">
+                          {formatNumberArg(l.stockBolsas, 0)} u.
+                        </div>
+                        {l.stockKg > 0 && (
+                          <div className="text-[10px] font-mono text-[#00603C] font-semibold">
+                            {formatNumberArg(l.stockKg, 0)} kg
+                          </div>
+                        )}
                       </td>
                     )}
-                    {visibleColumns.kilogramos && (
-                      <td className="py-3 px-4 text-right font-mono text-[#00603C] font-semibold">
-                        {formatNumberArg(l.stockKg, 0)} kg
-                      </td>
-                    )}
+
+                    {/* 5. Estado */}
                     {visibleColumns.estado && (
-                      <td className="py-3 px-4 text-center">
-                        <span className={`inline-block px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full border ${getEstadoBadgeStyle(l.estado)}`}>
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                        <span className={`inline-block px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider rounded-full border ${getEstadoBadgeStyle(l.estado)}`}>
                           {l.estado}
                         </span>
                       </td>
                     )}
-                    {visibleColumns.ubicacion && (
-                      <td className="py-3 px-4 text-center">
-                        {l.ala && l.sector ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E3EFE7] text-[#00603C] font-mono font-bold text-xs border border-[#00603C]/15 shadow-2xs">
-                            <Warehouse className="w-3.5 h-3.5 text-[#C9922E]" />
-                            ALA {l.ala} · SECTOR {l.sector}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 text-gray-400 text-[10px] font-sans italic border border-gray-200/50">
-                            No asignado
-                          </span>
-                        )}
-                      </td>
-                    )}
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
+
+                    {/* 6. Acción */}
+                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1 sm:gap-1.5">
                         {l.estadoRegistro === 'PRE-CARGA' && (
                           <button
-                            onClick={async () => {
-                              if (window.confirm(`¿Confirmar producción del Lote ${l.loteNro}?\n\nAl cambiar a modo REALIZADO se activará la Salida de Silo correspondientes a la materia prima.`)) {
-                                const loteRealizado: Lote = {
-                                  ...l,
-                                  estadoRegistro: 'REALIZADO',
-                                  fechaHoraProduccion: l.fechaHoraProduccion || `${l.fechaIngreso || new Date().toISOString().split('T')[0]}T09:00`
-                                };
-                                if (onSaveLote) {
-                                  await onSaveLote(loteRealizado);
-                                }
-                              }
-                            }}
-                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
-                            title="Cambiar a REALIZADO y Activar Salida de Silos"
+                            onClick={() => setLoteToProcess(l)}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
+                            title="Pasar a Realizado (Ingresar silos, bolsones y sectores de origen)"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Realizar</span>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                            <span>Pasar a Realizado</span>
                           </button>
                         )}
                         <button
                           onClick={() => onSelectLote(l)}
-                          className="p-1 text-gray-500 hover:text-[#00603C] hover:bg-gray-100 rounded"
+                          className="p-1.5 text-slate-600 hover:text-[#00603C] hover:bg-slate-100 rounded-lg transition"
                           title="Ver Ficha Detalle"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => onEditLote(l)}
-                          className="p-1 text-gray-500 hover:text-[#C9922E] hover:bg-gray-100 rounded"
+                          className="p-1.5 text-slate-600 hover:text-[#C9922E] hover:bg-slate-100 rounded-lg transition"
                           title="Editar Lote"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setSelectedQrLote(l)}
-                          className="p-1 text-gray-500 hover:text-[#00603C] hover:bg-gray-100 rounded"
+                          className="p-1.5 text-slate-600 hover:text-[#00603C] hover:bg-slate-100 rounded-lg transition"
                           title="Generar QR"
                         >
                           <QrCode className="w-4 h-4 text-[#C9922E]" />
@@ -2728,16 +2881,16 @@ export const LotesView: React.FC<LotesViewProps> = ({
                         {l.stockBolsas > 0 && (
                           <button
                             onClick={() => onRegistrarSalidaLote(l)}
-                            className="p-1 text-gray-500 hover:text-green-700 hover:bg-gray-100 rounded"
-                            title="Despachar"
+                            className="p-1.5 text-slate-600 hover:text-green-700 hover:bg-slate-100 rounded-lg transition"
+                            title="Registrar Salida / Despacho"
                           >
-                            <ArrowDownRight className="w-4 h-4" />
+                            <ArrowDownRight className="w-4 h-4 text-emerald-600" />
                           </button>
                         )}
                         <button
                           onClick={() => setLoteToDelete(l)}
-                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
-                          title="Eliminar"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Eliminar Lote"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -2950,6 +3103,77 @@ export const LotesView: React.FC<LotesViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Configuración de Límites */}
+      {showLimitsModal && (
+        <LoteLimitsConfigModal
+          currentConfig={loteLimits}
+          onSave={(newLimits) => {
+            if (onUpdateLoteLimits) {
+              onUpdateLoteLimits(newLimits);
+            }
+            setShowLimitsModal(false);
+          }}
+          onClose={() => setShowLimitsModal(false)}
+        />
+      )}
+
+      {/* Modal Procesar Lote (Pasar a Realizado) */}
+      {(loteToProcess || lotesToProcessBatch.length > 0) && (
+        <ProcesarLoteModal
+          isOpen={Boolean(loteToProcess || lotesToProcessBatch.length > 0)}
+          lote={loteToProcess}
+          lotesToProcess={lotesToProcessBatch}
+          siloStocks={siloStocks}
+          movimientosSilo={movimientosSilo}
+          bolsones={bolsones}
+          loteLimits={loteLimits}
+          onConfirm={(resultado) => {
+            const updatedList = Array.isArray(resultado) ? resultado : [resultado];
+            if (onBatchUpdateLotes) {
+              onBatchUpdateLotes(updatedList);
+            } else if (onSaveLote) {
+              updatedList.forEach(l => onSaveLote(l));
+            }
+            setLoteToProcess(null);
+            setLotesToProcessBatch([]);
+            setSelectedLoteIds([]);
+          }}
+          onClose={() => {
+            setLoteToProcess(null);
+            setLotesToProcessBatch([]);
+          }}
+        />
+      )}
+
+      {/* Modal Edición Masiva */}
+      {showBulkEditModal && (
+        <BulkEditLotesModal
+          isOpen={showBulkEditModal}
+          selectedLotes={lotes.filter(l => selectedLoteIds.includes(l.id))}
+          clientes={clientes}
+          especies={especies}
+          onConfirm={(updatedLotes) => {
+            if (onBatchUpdateLotes) {
+              onBatchUpdateLotes(updatedLotes);
+            } else if (onSaveLote) {
+              updatedLotes.forEach(l => onSaveLote(l));
+            }
+            setShowBulkEditModal(false);
+            setSelectedLoteIds([]);
+          }}
+          onClose={() => setShowBulkEditModal(false)}
+        />
+      )}
+
+      {/* Modal Impresión Masiva desde Selección de Tabla */}
+      {showTableBatchPrintModal && (
+        <BatchPrintLotesModal
+          isOpen={showTableBatchPrintModal}
+          lotes={tableBatchPrintLotes}
+          onClose={() => setShowTableBatchPrintModal(false)}
+        />
       )}
     </div>
   );

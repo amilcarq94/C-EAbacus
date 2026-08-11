@@ -916,12 +916,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {(['Silo 1', 'Silo 2', 'Silo 3', 'Silo 4', 'Silo 5', 'Silo 6'] as SiloId[]).map((siloId) => {
             const stockSiloKg = activeSiloStocks[siloId] || 0;
-            const ingKg = (movimientosSilo || [])
-              .filter(m => m.siloId === siloId && m.tipo === 'INGRESO')
-              .reduce((a, b) => a + b.kg, 0);
-            const egKg = (movimientosSilo || [])
-              .filter(m => m.siloId === siloId && (m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')))
-              .reduce((a, b) => a + b.kg, 0);
+            let ingKg = 0;
+            let egKg = 0;
+
+            if (stockSiloKg > 0) {
+              const movsAsc = (movimientosSilo || [])
+                .filter((m) => m.siloId === siloId)
+                .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+              let currentBalance = 0;
+              let lastZeroIndex = -1;
+              movsAsc.forEach((m, idx) => {
+                if (m.tipo === 'INGRESO') {
+                  currentBalance += m.kg;
+                } else if (m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')) {
+                  currentBalance = Math.max(0, currentBalance - m.kg);
+                } else if (m.tipo === 'AJUSTE_ZERO') {
+                  currentBalance = 0;
+                }
+                if (currentBalance === 0) {
+                  lastZeroIndex = idx;
+                }
+              });
+
+              const movsBatchActual = movsAsc.slice(lastZeroIndex + 1);
+              ingKg = movsBatchActual.filter(m => m.tipo === 'INGRESO').reduce((a, b) => a + b.kg, 0);
+              egKg = movsBatchActual.filter(m => m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')).reduce((a, b) => a + b.kg, 0);
+            }
 
             const pct = Math.min(100, Math.round((stockSiloKg / CAPACIDAD_MAX_SILO) * 100));
             const isFullAlert = stockSiloKg >= CAPACIDAD_MAX_SILO * 0.95;

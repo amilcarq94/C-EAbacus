@@ -26,7 +26,7 @@ interface SilosSelectorProps {
 }
 
 export const SilosSelector: React.FC<SilosSelectorProps> = ({
-  silosSeleccionados,
+  silosSeleccionados = [],
   siloStocks = {
     'Silo 1': 0,
     'Silo 2': 0,
@@ -40,12 +40,13 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
   label = 'Silos de Origen (Extracción)',
   description = 'Seleccione de 1 a 3 silos de origen e indique la cantidad de kg extraídos de cada uno.',
 }) => {
-  const totalSilosKg = silosSeleccionados.reduce((acc, item) => acc + (Number(item.kg) || 0), 0);
+  const safeSilosSeleccionados = silosSeleccionados || [];
+  const totalSilosKg = safeSilosSeleccionados.reduce((acc, item) => acc + (Number(item.kg) || 0), 0);
 
   const handleAddSilo = () => {
-    if (silosSeleccionados.length >= 3) return;
+    if (safeSilosSeleccionados.length >= 3) return;
     // Encontrar el primer silo que aún no haya sido seleccionado
-    const yaUsados = silosSeleccionados.map((s) => s.siloId);
+    const yaUsados = safeSilosSeleccionados.map((s) => s.siloId);
     const disponible = SILOS_DISPONIBLES.find((s) => !yaUsados.includes(s)) || 'Silo 1';
 
     // Sugerir kg faltantes si hay un targetKg
@@ -54,30 +55,30 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
       kgSugeridos = targetKg - totalSilosKg;
     }
 
-    onChange([...silosSeleccionados, { siloId: disponible, kg: kgSugeridos, kgExtraidos: kgSugeridos }]);
+    onChange([...safeSilosSeleccionados, { siloId: disponible, kg: kgSugeridos, kgExtraidos: kgSugeridos }]);
   };
 
   const handleRemoveSilo = (index: number) => {
-    const copia = [...silosSeleccionados];
+    const copia = [...safeSilosSeleccionados];
     copia.splice(index, 1);
     onChange(copia);
   };
 
   const handleSiloChange = (index: number, newSiloId: SiloId) => {
-    const copia = [...silosSeleccionados];
+    const copia = [...safeSilosSeleccionados];
     copia[index] = { ...copia[index], siloId: newSiloId };
     onChange(copia);
   };
 
   const handleKgChange = (index: number, newKg: number) => {
-    const copia = [...silosSeleccionados];
+    const copia = [...safeSilosSeleccionados];
     const cantVal = Math.max(0, newKg);
     copia[index] = { ...copia[index], kg: cantVal, kgExtraidos: cantVal };
     onChange(copia);
   };
 
   // Silos ocupados para filtrar dropdowns (no permitir duplicados)
-  const silosUsados = silosSeleccionados.map((s) => s.siloId);
+  const silosUsados = safeSilosSeleccionados.map((s) => s.siloId);
 
   const coincideSuma = targetKg === undefined || targetKg === 0 || totalSilosKg === targetKg;
 
@@ -92,14 +93,14 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
           <p className="text-[11px] text-slate-500 mt-0.5">{description}</p>
         </div>
 
-        {silosSeleccionados.length < 3 && (
+        {safeSilosSeleccionados.length < 3 && (
           <button
             type="button"
             onClick={handleAddSilo}
             className="flex items-center gap-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition active:scale-95 shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Agregar Silo ({silosSeleccionados.length}/3)</span>
+            <span>Agregar Silo ({safeSilosSeleccionados.length}/3)</span>
           </button>
         )}
       </div>
