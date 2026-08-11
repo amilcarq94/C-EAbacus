@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import { SiloId, SiloExtraccion } from '../types';
+import { SiloId, SiloExtraccion, MovimientoSilo } from '../types';
+import { validateSiloLoteMatch } from '../utils/siloValidation';
 import { Plus, Trash2, AlertTriangle, CheckCircle2, Warehouse } from 'lucide-react';
 
 export const SILOS_DISPONIBLES: SiloId[] = [
@@ -19,6 +20,10 @@ export const SILOS_DISPONIBLES: SiloId[] = [
 interface SilosSelectorProps {
   silosSeleccionados: SiloExtraccion[];
   siloStocks?: Record<SiloId, number>;
+  movimientosSilo?: MovimientoSilo[];
+  loteCliente?: string;
+  loteEspecie?: string;
+  loteVariedad?: string;
   targetKg?: number;
   onChange: (silos: SiloExtraccion[]) => void;
   label?: string;
@@ -35,6 +40,10 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
     'Silo 5': 0,
     'Silo 6': 0,
   },
+  movimientosSilo = [],
+  loteCliente,
+  loteEspecie,
+  loteVariedad,
   targetKg,
   onChange,
   label = 'Silos de Origen (Extracción)',
@@ -165,13 +174,24 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
             const stockDisponible = siloStocks[item.siloId] || 0;
             const excedeStock = item.kg > stockDisponible;
 
+            const matchCheck = (loteCliente || loteEspecie || loteVariedad)
+              ? validateSiloLoteMatch(
+                  item.siloId,
+                  { cliente: loteCliente, especie: loteEspecie, variedad: loteVariedad },
+                  movimientosSilo
+                )
+              : { valid: true };
+
+            const isInvalidMatch = !matchCheck.valid;
+
             return (
               <div
                 key={index}
-                className={`p-3 rounded-xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                  excedeStock ? 'bg-red-50 border-red-300' : 'bg-white border-slate-200'
+                className={`p-3 rounded-xl border transition space-y-2 ${
+                  excedeStock || isInvalidMatch ? 'bg-red-50/90 border-red-300 shadow-2xs' : 'bg-white border-slate-200'
                 }`}
               >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 {/* Selector de Silo */}
                 <div className="w-full sm:w-56">
                   <label className="block text-xs font-black uppercase text-slate-700 tracking-wider mb-1">
@@ -249,6 +269,14 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
+                </div>
+
+                {isInvalidMatch && (
+                  <div className="bg-red-100 border border-red-300 text-red-800 text-[11px] p-2 rounded-lg flex items-center gap-2 font-medium">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span className="whitespace-pre-line">{matchCheck.errorMessage}</span>
+                  </div>
+                )}
               </div>
             );
           })}

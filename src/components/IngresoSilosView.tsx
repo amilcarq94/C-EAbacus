@@ -139,7 +139,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [depositoOrigen, setDepositoOrigen] = useState('Depósito Central');
   const [humedad, setHumedad] = useState<number | ''>(13.5);
 
-  // Estados de datos de chofer en Ingreso
+  // Estados de datos de chofer y flete en Ingreso
+  const [tipoTransporte, setTipoTransporte] = useState<'CHOFER' | 'FLETE'>('CHOFER');
+  const [fleteOpcion, setFleteOpcion] = useState<'Flete Montaner' | 'Flete Agro Abacus'>('Flete Montaner');
   const [selectedChoferId, setSelectedChoferId] = useState('');
   const [choferNombre, setChoferNombre] = useState('');
   const [choferCuit, setChoferCuit] = useState('');
@@ -197,6 +199,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   // Exportar Excel Completo de Movimientos de Silo
   const handleExportMovimientosExcel = () => {
     const dataToExport = (movimientosSilo || []).map((m) => {
+      const isFlete = m.tipoTransporte === 'FLETE' || m.chofer === 'Flete Montaner' || m.chofer === 'Flete Agro Abacus';
+      const choferDisplay = isFlete ? (m.chofer || m.transporte || 'Flete Montaner') : (m.chofer || '-');
+      const cuitDisplay = isFlete ? '-' : (m.cuit || '-');
+      const patentesDisplay = isFlete ? '-' : (m.patentes || '-');
+      const transporteDisplay = isFlete ? (m.transporte || m.chofer || 'Flete Montaner') : (m.transporte || '-');
+
       return {
         'Silo': m.siloId,
         'Fecha': m.fecha,
@@ -208,10 +216,10 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         'Origen': m.campoOrigen || m.depositoOrigen || '-',
         'Sector': m.bolsonOrigenSector || m.sector || '-',
         'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
-        'Chofer': m.chofer || '-',
-        'CUIT': m.cuit || '-',
-        'Patentes': m.patentes || '-',
-        'Transporte': m.transporte || '-',
+        'Chofer': choferDisplay,
+        'CUIT': cuitDisplay,
+        'Patentes': patentesDisplay,
+        'Transporte': transporteDisplay,
         'Tipo Movimiento': m.tipo === 'INGRESO' ? 'Ingreso' : m.tipo === 'EGRESO_MANUAL' ? `Salida Manual (${m.motivoManual || 'Manual'})` : m.tipo === 'EGRESO_LOTE' ? `Salida por Lote (${m.loteNro || ''})` : 'Egreso',
         'Descontaminación Varietal': m.descontaminacionVarietal ? 'Sí' : 'No',
         'Observaciones': m.observaciones || m.motivoZero || m.motivoAjuste || '-'
@@ -737,6 +745,11 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       return;
     }
 
+    const choferVal = tipoTransporte === 'FLETE' ? fleteOpcion : choferNombre.trim();
+    const cuitVal = tipoTransporte === 'FLETE' ? '' : choferCuit.trim();
+    const patentesVal = tipoTransporte === 'FLETE' ? '' : choferPatentes.trim();
+    const transporteVal = tipoTransporte === 'FLETE' ? fleteOpcion : (choferTransporte.trim() || 'Sin Transporte');
+
     const nuevoIngreso: MovimientoSilo = {
       id: `ING-SILO-${Date.now()}`,
       siloId: activeSilo,
@@ -753,13 +766,14 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       bolsonOrigenSector: bolsonOrigenSector.trim(),
       depositoOrigen: depositoOrigen.trim(),
       humedad: typeof humedad === 'number' ? humedad : 13.5,
-      chofer: choferNombre.trim(),
-      cuit: choferCuit.trim(),
-      patentes: choferPatentes.trim(),
-      transporte: choferTransporte.trim(),
+      tipoTransporte,
+      chofer: choferVal,
+      cuit: cuitVal,
+      patentes: patentesVal,
+      transporte: transporteVal,
     };
 
-    if (choferNombre.trim() && onSaveChofer) {
+    if (tipoTransporte === 'CHOFER' && choferNombre.trim() && onSaveChofer) {
       const candidateData = {
         nombre: choferNombre.trim(),
         cuit: choferCuit.trim(),
@@ -1758,96 +1772,146 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               />
             </div>
 
-            {/* Sección Chofer y Transporte (con Autocompletado e Importación desde Excel) */}
+            {/* Sección Chofer y Transporte (con Selector ON/OFF Chofer / Flete) */}
             <div className="sm:col-span-2 lg:col-span-4 p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-emerald-700" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Datos de Movimiento / Chofer y Transporte</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Datos de Movimiento / Transporte</span>
                 </div>
-                <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5">
-                  <Upload className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Importar Choferes Excel</span>
-                  <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUploadChoferes} className="hidden" />
-                </label>
+
+                <div className="flex items-center gap-2">
+                  {/* Botón ON/OFF Selector de Tipo de Transporte */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setTipoTransporte('CHOFER')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                        tipoTransporte === 'CHOFER'
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Chofer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTipoTransporte('FLETE')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                        tipoTransporte === 'FLETE'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Flete Montaner / Flete AA
+                    </button>
+                  </div>
+
+                  {tipoTransporte === 'CHOFER' && (
+                    <label className="cursor-pointer px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Importar Excel</span>
+                      <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUploadChoferes} className="hidden" />
+                    </label>
+                  )}
+                </div>
               </div>
 
-              {importNoticeChoferes && (
+              {importNoticeChoferes && tipoTransporte === 'CHOFER' && (
                 <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-lg">
                   {importNoticeChoferes}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Chofer Search Selector */}
-                <div>
-                  <ChoferSearchSelector
-                    choferes={choferes}
-                    selectedChoferNombre={choferNombre}
-                    onSelectChofer={(ch) => {
-                      setChoferNombre(ch.nombre);
-                      setChoferCuit(ch.cuit || '');
-                      setChoferPatentes(ch.patentes || '');
-                      setChoferTransporte(ch.transporte || '');
-                    }}
-                    onManualChange={(val) => setChoferNombre(val)}
-                    onSaveNewChofer={(data) => {
-                      if (data.nombre && onSaveChofer) {
-                        onSaveChofer({
-                          id: `CHOFER-${Date.now()}`,
-                          nombre: data.nombre,
-                          cuit: choferCuit.trim() || '—',
-                          patentes: choferPatentes.trim() || '—',
-                          transporte: choferTransporte.trim() || 'Sin Transporte'
-                        });
-                      }
-                    }}
-                    label="Chofer / Conductor"
-                  />
-                </div>
-
-                {/* CUIT Chofer */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                    CUIT / DNI Chofer
+              {tipoTransporte === 'FLETE' ? (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                  <label className="block text-xs font-bold uppercase text-amber-900">
+                    Seleccionar Empresa de Flete *
                   </label>
-                  <input
-                    type="text"
-                    placeholder="ej: 20-34567890-9"
-                    value={choferCuit}
-                    onChange={(e) => setChoferCuit(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
-                  />
+                  <select
+                    value={fleteOpcion}
+                    onChange={(e) => setFleteOpcion(e.target.value as 'Flete Montaner' | 'Flete Agro Abacus')}
+                    className="w-full sm:w-80 px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 shadow-2xs outline-none"
+                  >
+                    <option value="Flete Montaner">Flete Montaner</option>
+                    <option value="Flete Agro Abacus">Flete Agro Abacus</option>
+                  </select>
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    Modo Flete Seleccionado: No se requieren ni solicitan datos individuales del chofer (CUIT, patentes, etc.).
+                  </p>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Chofer Search Selector */}
+                  <div>
+                    <ChoferSearchSelector
+                      choferes={choferes}
+                      selectedChoferNombre={choferNombre}
+                      onSelectChofer={(ch) => {
+                        setChoferNombre(ch.nombre);
+                        setChoferCuit(ch.cuit || '');
+                        setChoferPatentes(ch.patentes || '');
+                        setChoferTransporte(ch.transporte || '');
+                      }}
+                      onManualChange={(val) => setChoferNombre(val)}
+                      onSaveNewChofer={(data) => {
+                        if (data.nombre && onSaveChofer) {
+                          onSaveChofer({
+                            id: `CHOFER-${Date.now()}`,
+                            nombre: data.nombre,
+                            cuit: choferCuit.trim() || '—',
+                            patentes: choferPatentes.trim() || '—',
+                            transporte: choferTransporte.trim() || 'Sin Transporte'
+                          });
+                        }
+                      }}
+                      label="Chofer / Conductor"
+                    />
+                  </div>
 
-                {/* Patente(s) */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                    Patente(s) Camión / Acoplado
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej: AA123BB / AC456DD"
-                    value={choferPatentes}
-                    onChange={(e) => setChoferPatentes(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
-                  />
-                </div>
+                  {/* CUIT Chofer */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      CUIT / DNI Chofer
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej: 20-34567890-9"
+                      value={choferCuit}
+                      onChange={(e) => setChoferCuit(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                    />
+                  </div>
 
-                {/* Empresa de Transporte */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                    Empresa / Transporte
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej: Transportes El Rapido..."
-                    value={choferTransporte}
-                    onChange={(e) => setChoferTransporte(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
-                  />
+                  {/* Patente(s) */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      Patente(s) Camión / Acoplado
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej: AA123BB / AC456DD"
+                      value={choferPatentes}
+                      onChange={(e) => setChoferPatentes(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Empresa de Transporte */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      Empresa / Transporte
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej: Transportes El Rapido..."
+                      value={choferTransporte}
+                      onChange={(e) => setChoferTransporte(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Botón Submit */}

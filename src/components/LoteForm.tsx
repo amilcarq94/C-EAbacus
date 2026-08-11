@@ -8,6 +8,7 @@ import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, Estad
 import { generateLoteId, formatKg } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
+import { validateSiloLoteMatch } from '../utils/siloValidation';
 import { SilosSelector } from './SilosSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { ClienteSelect } from './ClienteSelect';
@@ -450,6 +451,23 @@ export const LoteForm: React.FC<LoteFormProps> = ({
     if (estadoRegistro === 'REALIZADO' && !fechaHoraProduccion.trim()) {
       setError('Debe ingresar manualmente la Fecha y Hora de Producción para guardar en modo REALIZADO.');
       return;
+    }
+
+    // Validar coincidencia de datos (Cliente, Especie, Variedad) al vincular Silos de Origen
+    if (silosOrigen && silosOrigen.length > 0 && estadoRegistro === 'REALIZADO') {
+      for (const s of silosOrigen) {
+        if (s.siloId) {
+          const matchCheck = validateSiloLoteMatch(
+            s.siloId as SiloId,
+            { cliente, especie, variedad },
+            movimientosSilo
+          );
+          if (!matchCheck.valid) {
+            setError(matchCheck.errorMessage || `No se puede vincular el ${s.siloId} por diferencia en los orígenes vinculantes.`);
+            return;
+          }
+        }
+      }
     }
 
     // Validar que la suma de kilos/bolsas del lote no supere el stock disponible del/los silo(s) de origen seleccionado(s)
@@ -1186,6 +1204,10 @@ export const LoteForm: React.FC<LoteFormProps> = ({
             <SilosSelector
               silosSeleccionados={silosOrigen}
               siloStocks={siloStocks}
+              movimientosSilo={movimientosSilo}
+              loteCliente={cliente}
+              loteEspecie={especie}
+              loteVariedad={variedad}
               targetKg={stockKg}
               onChange={setSilosOrigen}
             />

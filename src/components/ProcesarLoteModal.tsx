@@ -8,6 +8,7 @@ import { Lote, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo, OrigenBolson
 import { formatKg } from '../utils/formatters';
 import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
 import { getBolsonesFiltradosPorSilo } from '../utils/siloBolsones';
+import { validateSiloLoteMatch } from '../utils/siloValidation';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { X, Check, CheckCircle2, Play, AlertTriangle, Building2, Package, Plus, Trash2, Warehouse, Layers, Scale } from 'lucide-react';
 
@@ -255,7 +256,22 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
       }
     }
 
-    // 2. Validación de Stock por Silo
+    // 2. Validación de coincidencia de orígenes (Cliente, Especie, Variedad) entre Silo y Lote
+    if (estadoResultado === 'REALIZADO') {
+      for (const [sId] of silosReqMap.entries()) {
+        const matchCheck = validateSiloLoteMatch(
+          sId,
+          { cliente: primaryLote.cliente, especie: primaryLote.especie, variedad: primaryLote.variedad },
+          movimientosSilo
+        );
+        if (!matchCheck.valid) {
+          setErrorMsg(matchCheck.errorMessage || `No se puede vincular el ${sId} por diferencia en los orígenes vinculantes (Cliente / Especie / Variedad).`);
+          return;
+        }
+      }
+    }
+
+    // 3. Validación de Stock por Silo
     for (const [sId, reqKg] of silosReqMap.entries()) {
       const dispKg = siloStocks[sId] || 0;
       if (reqKg > dispKg) {

@@ -151,6 +151,7 @@ export interface MovimientoSilo {
   humedad?: number; // Porcentaje de humedad manual (% ej: 13.5)
 
   // Campos de movimiento y transporte (Chofer, Patente, CUIT, Transporte):
+  tipoTransporte?: 'CHOFER' | 'FLETE';
   chofer?: string;
   cuit?: string;
   patentes?: string;
