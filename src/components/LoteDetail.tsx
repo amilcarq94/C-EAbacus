@@ -395,6 +395,10 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
               <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Tipo de Lote</span>
               <span className="text-xs font-semibold text-gray-700 block mt-0.5">{lote.tipo}</span>
             </div>
+            <div>
+              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">% Humedad del Lote</span>
+              <span className="text-xs font-bold text-gray-800 block mt-0.5">{lote.humedad !== undefined ? `${lote.humedad}%` : '13.5%'} <span className="text-[9px] font-normal text-gray-500">(Informativo)</span></span>
+            </div>
           </div>
 
           <div className="space-y-2 text-left">
@@ -718,6 +722,14 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
             <div className="border-t border-gray-50 pt-3">
               <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">Peso Promedio Bolsa</span>
               <span className="font-medium text-gray-700 block mt-0.5">{lote.kgPorBolsa || 40} kg por bolsa</span>
+            </div>
+
+            <div className="border-t border-gray-50 pt-3">
+              <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">% Humedad del Lote</span>
+              <span className="font-semibold text-gray-800 text-sm block mt-0.5">
+                {lote.humedad !== undefined ? `${lote.humedad}%` : '13.5%'}
+                <span className="text-[10px] text-gray-400 font-normal ml-1.5">(Dato Informativo)</span>
+              </span>
             </div>
 
             {/* Sección: Vinculación y Origen de Proceso / Silo / Bolsón */}

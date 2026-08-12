@@ -20,8 +20,7 @@ import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, Check
 import { GenerarLoteView } from './components/GenerarLoteView';
 import { QrCodeScanner } from './components/QrCodeScanner';
 import { DespachosSection } from './components/DespachosSection';
-import { DashboardProduccion } from './components/DashboardProduccion';
-import { DashboardCierreMensual } from './components/DashboardCierreMensual';
+import { DashboardReporteProduccion } from './components/DashboardReporteProduccion';
 import { OrdenesProcesoView } from './components/OrdenesProcesoView';
 import { IngresoSilosView } from './components/IngresoSilosView';
 import { ChoferesView } from './components/ChoferesView';
@@ -196,8 +195,8 @@ export default function App() {
   const tieneAlertaSilo95 = silosConAlerta95.length > 0;
 
   // 3. Control de Vistas
-  // 'dashboard' | 'dashboard-produccion' | 'cierre-mensual' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
-  const [activeView, setActiveView] = useState<'dashboard' | 'dashboard-produccion' | 'cierre-mensual' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('dashboard');
+  // 'dashboard' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
+  const [activeView, setActiveView] = useState<'dashboard' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('dashboard');
   const [loteSeleccionado, setLoteSeleccionado] = useState<Lote | null>(null);
   const [loteAEditar, setLoteAEditar] = useState<Lote | null>(null);
   const [preselectedLoteId, setPreselectedLoteId] = useState<string | undefined>(undefined);
@@ -1603,33 +1602,19 @@ export default function App() {
             Control
           </button>
 
-          {/* Tab Producción */}
+          {/* Tab Reporte de Producción */}
           <button
-            id="nav-tab-produccion"
-            onClick={() => navigateTo('dashboard-produccion')}
+            id="nav-tab-reporte-produccion"
+            onClick={() => navigateTo('reporte-produccion')}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
-              activeView === 'dashboard-produccion'
+              activeView === 'reporte-produccion'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Reporte de Producción: Rendimiento diario y lotes realizados"
           >
-            <Factory className="w-4 h-4" />
-            Producción
-          </button>
-
-          {/* Tab Cierre Mensual */}
-          <button
-            id="nav-tab-cierre-mensual"
-            onClick={() => navigateTo('cierre-mensual')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
-              activeView === 'cierre-mensual'
-                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title="Dashboard Cierre Mensual: Análisis gráfico por especie y variedad"
-          >
-            <BarChart3 className="w-4 h-4 text-amber-300" />
-            <span>Cierre Mensual</span>
+            <Factory className="w-4 h-4 text-amber-300" />
+            <span>Reporte de Producción</span>
           </button>
 
           {/* Tab Órdenes de Proceso */}
@@ -1831,16 +1816,7 @@ export default function App() {
         </div>
       </nav>
 
-      {/* 3. BANNER DE NOTIFICACIONES GLOBAL */}
-      {notificacion && (
-        <div className="fixed top-30 right-4 md:right-8 bg-white border-l-4 border-[#00603C] p-4 rounded-r-xl shadow-xl z-50 animate-in slide-in-from-right duration-300 max-w-sm border border-gray-100 flex items-start gap-3 print:hidden">
-          <CheckCircle className="w-5 h-5 text-[#00603C] shrink-0 mt-0.5" />
-          <div>
-            <span className="font-sans font-bold text-xs text-[#1A1A1A] uppercase tracking-wider block">Sistema de Planta</span>
-            <span className="text-xs text-gray-600 block mt-0.5">{notificacion}</span>
-          </div>
-        </div>
-      )}
+      {/* 3. BANNER DE NOTIFICACIONES GLOBAL DESACTIVADO */}
 
       {/* 4. ÁREA DE CONTENIDO */}
       <main className="flex-grow pt-32 pb-16 px-4 md:px-8 w-full max-w-7xl mx-auto relative z-10 print:pt-4 print:pb-4">
@@ -1890,20 +1866,13 @@ export default function App() {
               else if (view === 'ingreso-silos') navigateTo('ingreso-silos');
             }}
           />
-        ) : activeView === 'dashboard-produccion' ? (
-          <DashboardProduccion
+        ) : activeView === 'reporte-produccion' ? (
+          <DashboardReporteProduccion
             lotes={filteredLotesByCampania}
             ordenesProceso={filteredOrdenesProcesoByCampania}
             siloStocks={siloStocks}
-            movimientosSilo={movimientosSilo}
             onSelectLote={(l) => setLoteSeleccionado(l)}
             onNavigateToSilos={() => navigateTo('ingreso-silos')}
-          />
-        ) : activeView === 'cierre-mensual' ? (
-          <DashboardCierreMensual
-            lotes={filteredLotesByCampania}
-            siloStocks={siloStocks}
-            onNavigate={(view) => navigateTo(view as any)}
           />
         ) : activeView === 'generar-lote' ? (
           <GenerarLoteView

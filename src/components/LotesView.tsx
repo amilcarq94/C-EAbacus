@@ -13,6 +13,7 @@ import { QrCodeModal } from './QrCodeModal';
 import { LoteLimitsConfigModal } from './LoteLimitsConfigModal';
 import { ProcesarLoteModal } from './ProcesarLoteModal';
 import { BulkEditLotesModal } from './BulkEditLotesModal';
+import { TratarLoteModal } from './TratarLoteModal';
 import { SiloId, BolsonCampo } from '../types';
 
 interface MultiSelectDropdownProps {
@@ -308,9 +309,218 @@ export const LotesView: React.FC<LotesViewProps> = ({
   const [showLimitsModal, setShowLimitsModal] = useState(false);
   const [loteToProcess, setLoteToProcess] = useState<Lote | null>(null);
   const [lotesToProcessBatch, setLotesToProcessBatch] = useState<Lote[]>([]);
+  const [loteToTratar, setLoteToTratar] = useState<Lote | null>(null);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
   const [showTableBatchPrintModal, setShowTableBatchPrintModal] = useState(false);
   const [tableBatchPrintLotes, setTableBatchPrintLotes] = useState<Lote[]>([]);
+
+  const handleConfirmTratamiento = async ({
+    loteOriginal,
+    bolsasACurar,
+    fechaTratamiento,
+    numeroOrdenMovimiento,
+    productoQuimico,
+    loteExistenteT
+  }: {
+    loteOriginal: Lote;
+    bolsasACurar: number;
+    fechaTratamiento: string;
+    numeroOrdenMovimiento: string;
+    productoQuimico: string;
+    loteExistenteT?: Lote;
+  }) => {
+    const kgPorBolsa = loteOriginal.kgPorBolsa || 800;
+    const kgACurar = bolsasACurar * kgPorBolsa;
+    const bolsasTotalOriginal = loteOriginal.stockBolsas || 0;
+    const esCuradoTotal = bolsasACurar >= bolsasTotalOriginal;
+
+    if (loteExistenteT) {
+      const egresoMov = {
+        id: `MOV-EGR-TRAT-${Date.now()}`,
+        fecha: fechaTratamiento,
+        tipo: 'Salida' as const,
+        bolsas: bolsasACurar,
+        cantidadBolsas: bolsasACurar,
+        kgPorBolsa,
+        kg: kgACurar,
+        cantidadKg: kgACurar,
+        detalle: `Curado por OM ${numeroOrdenMovimiento} -> enviado a Lote ${loteExistenteT.loteNro}`
+      };
+
+      const nuevasBolsasOriginal = Math.max(0, loteOriginal.stockBolsas - bolsasACurar);
+      const nuevosKgOriginal = Math.max(0, loteOriginal.stockKg - kgACurar);
+      const nuevoEstadoOriginal = nuevasBolsasOriginal === 0 ? ('Agotado' as const) : loteOriginal.estado;
+
+      const loteOriginalActualizado: Lote = {
+        ...loteOriginal,
+        stockBolsas: nuevasBolsasOriginal,
+        stockKg: nuevosKgOriginal,
+        estado: nuevoEstadoOriginal,
+        historial: [egresoMov, ...(loteOriginal.historial || [])],
+        auditoria: [
+          {
+            id: `AUD-TRAT-${Date.now()}`,
+            fechaHora: new Date().toISOString(),
+            tipo: 'Edición',
+            usuario: currentUser.nombre,
+            descripcion: `Egreso por Curado de ${bolsasACurar} bolsas hacia Lote ${loteExistenteT.loteNro}. OM: ${numeroOrdenMovimiento}`
+          },
+          ...(loteOriginal.auditoria || [])
+        ]
+      };
+
+      const ingresoMov = {
+        id: `MOV-ING-TRAT-${Date.now()}`,
+        fecha: fechaTratamiento,
+        tipo: 'Entrada manual' as const,
+        bolsas: bolsasACurar,
+        cantidadBolsas: bolsasACurar,
+        kgPorBolsa,
+        kg: kgACurar,
+        cantidadKg: kgACurar,
+        detalle: `Ingreso por Curado desde Lote ${loteOriginal.loteNro} - OM: ${numeroOrdenMovimiento}`
+      };
+
+      const nuevasBolsasT = (loteExistenteT.stockBolsas || 0) + bolsasACurar;
+      const nuevosKgT = (loteExistenteT.stockKg || 0) + kgACurar;
+
+      const loteTActualizado: Lote = {
+        ...loteExistenteT,
+        stockBolsas: nuevasBolsasT,
+        stockKg: nuevosKgT,
+        estado: 'Disponible',
+        fechaTratamiento,
+        numeroOrdenMovimiento: numeroOrdenMovimiento || loteExistenteT.numeroOrdenMovimiento,
+        producto: productoQuimico || loteExistenteT.producto,
+        historial: [ingresoMov, ...(loteExistenteT.historial || [])],
+        auditoria: [
+          {
+            id: `AUD-ING-TRAT-${Date.now()}`,
+            fechaHora: new Date().toISOString(),
+            tipo: 'Edición',
+            usuario: currentUser.nombre,
+            descripcion: `Ingreso por Curado de ${bolsasACurar} bolsas desde Lote ${loteOriginal.loteNro}. OM: ${numeroOrdenMovimiento}`
+          },
+          ...(loteExistenteT.auditoria || [])
+        ]
+      };
+
+      if (onBatchUpdateLotes) {
+        await onBatchUpdateLotes([loteOriginalActualizado, loteTActualizado]);
+      } else if (onSaveLote) {
+        await onSaveLote(loteOriginalActualizado);
+        await onSaveLote(loteTActualizado);
+      }
+    } else {
+      if (esCuradoTotal) {
+        const nuevoNombreT = `${loteOriginal.loteNro}T`;
+        const docIdT = `${loteOriginal.cliente.replace(/\s+/g, '_')}_${nuevoNombreT}`;
+
+        const loteTratadoCompleto: Lote = {
+          ...loteOriginal,
+          id: docIdT,
+          loteNro: nuevoNombreT,
+          tratamiento: ['Tratado'],
+          estado: 'Disponible',
+          fechaTratamiento,
+          numeroOrdenMovimiento,
+          producto: productoQuimico || 'Maxim Quattro + Inoculante',
+          auditoria: [
+            {
+              id: `AUD-TRAT-TOTAL-${Date.now()}`,
+              fechaHora: new Date().toISOString(),
+              tipo: 'Edición',
+              usuario: currentUser.nombre,
+              descripcion: `Curado total. Lote renombrado a ${nuevoNombreT}. OM: ${numeroOrdenMovimiento}`
+            },
+            ...(loteOriginal.auditoria || [])
+          ]
+        };
+
+        if (onSaveLote) {
+          await onSaveLote(loteTratadoCompleto);
+        }
+      } else {
+        const bolsasRestantes = Math.max(0, bolsasTotalOriginal - bolsasACurar);
+        const kgRestantes = bolsasRestantes * kgPorBolsa;
+
+        const egresoParcialMov = {
+          id: `MOV-EGR-PARCIAL-${Date.now()}`,
+          fecha: fechaTratamiento,
+          tipo: 'Salida' as const,
+          bolsas: bolsasACurar,
+          cantidadBolsas: bolsasACurar,
+          kgPorBolsa,
+          kg: kgACurar,
+          cantidadKg: kgACurar,
+          detalle: `Desdoblamiento por Curado parcial (${bolsasACurar} b.) -> Lote ${loteOriginal.loteNro}T`
+        };
+
+        const loteOriginalRestante: Lote = {
+          ...loteOriginal,
+          stockBolsas: bolsasRestantes,
+          stockKg: kgRestantes,
+          estado: bolsasRestantes === 0 ? 'Agotado' : loteOriginal.estado,
+          historial: [egresoParcialMov, ...(loteOriginal.historial || [])],
+          auditoria: [
+            {
+              id: `AUD-DESDOBLE-${Date.now()}`,
+              fechaHora: new Date().toISOString(),
+              tipo: 'Edición',
+              usuario: currentUser.nombre,
+              descripcion: `Desdoblamiento por Curado de ${bolsasACurar} bolsas hacia Lote ${loteOriginal.loteNro}T. OM: ${numeroOrdenMovimiento}`
+            },
+            ...(loteOriginal.auditoria || [])
+          ]
+        };
+
+        const nuevoNombreT = `${loteOriginal.loteNro}T`;
+        const docIdT = `${loteOriginal.cliente.replace(/\s+/g, '_')}_${nuevoNombreT}`;
+
+        const ingresoMovT = {
+          id: `MOV-ING-NUEVO-T-${Date.now()}`,
+          fecha: fechaTratamiento,
+          tipo: 'Entrada manual' as const,
+          bolsas: bolsasACurar,
+          cantidadBolsas: bolsasACurar,
+          kgPorBolsa,
+          kg: kgACurar,
+          cantidadKg: kgACurar,
+          detalle: `Origen: Curado parcial de ${loteOriginal.loteNro} - OM: ${numeroOrdenMovimiento}`
+        };
+
+        const nuevoLoteT: Lote = {
+          ...loteOriginal,
+          id: docIdT,
+          loteNro: nuevoNombreT,
+          stockBolsas: bolsasACurar,
+          stockKg: kgACurar,
+          tratamiento: ['Tratado'],
+          producto: productoQuimico || 'Maxim Quattro + Inoculante',
+          estado: 'Disponible',
+          fechaTratamiento,
+          numeroOrdenMovimiento,
+          historial: [ingresoMovT],
+          auditoria: [
+            {
+              id: `AUD-CRE-T-${Date.now()}`,
+              fechaHora: new Date().toISOString(),
+              tipo: 'Creación',
+              usuario: currentUser.nombre,
+              descripcion: `Creación por Curado Parcial (${bolsasACurar} bolsas) desde Lote ${loteOriginal.loteNro}. OM: ${numeroOrdenMovimiento}`
+            }
+          ]
+        };
+
+        if (onBatchUpdateLotes) {
+          await onBatchUpdateLotes([loteOriginalRestante, nuevoLoteT]);
+        } else if (onSaveLote) {
+          await onSaveLote(loteOriginalRestante);
+          await onSaveLote(nuevoLoteT);
+        }
+      }
+    }
+  };
   // Constante para almacenamiento persistente del filtro fijado
   const PIN_STORAGE_KEY = 'agroabacus_pinned_lotes_filters_v2';
 
@@ -2680,6 +2890,17 @@ export const LotesView: React.FC<LotesViewProps> = ({
                     </button>
                   )}
 
+                  {!l.tratamiento.includes('Tratado') && l.stockBolsas > 0 && (
+                    <button
+                      onClick={() => setLoteToTratar(l)}
+                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-lg transition text-xs flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Curar / Tratar Semilla (Generar Lote T)"
+                    >
+                      <FlaskConical className="w-3.5 h-3.5" />
+                      <span>Curar</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => onEditLote(l)}
                     className="p-2 text-gray-500 hover:text-[#00603C] rounded-lg hover:bg-[#E3EFE7] transition text-xs flex items-center gap-1"
@@ -2855,6 +3076,16 @@ export const LotesView: React.FC<LotesViewProps> = ({
                           >
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
                             <span>Pasar a Realizado</span>
+                          </button>
+                        )}
+                        {!l.tratamiento.includes('Tratado') && l.stockBolsas > 0 && (
+                          <button
+                            onClick={() => setLoteToTratar(l)}
+                            className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-[10px] font-extrabold flex items-center gap-1 shadow-xs transition cursor-pointer"
+                            title="Curar / Tratar Semilla (Generar Lote T)"
+                          >
+                            <FlaskConical className="w-3.5 h-3.5" />
+                            <span>Curar</span>
                           </button>
                         )}
                         <button
@@ -3173,6 +3404,21 @@ export const LotesView: React.FC<LotesViewProps> = ({
           isOpen={showTableBatchPrintModal}
           lotes={tableBatchPrintLotes}
           onClose={() => setShowTableBatchPrintModal(false)}
+        />
+      )}
+
+      {/* Modal Tratar / Curar Semilla */}
+      {loteToTratar && (
+        <TratarLoteModal
+          isOpen={Boolean(loteToTratar)}
+          lote={loteToTratar}
+          allLotes={lotes}
+          ordenesProceso={ordenesProceso}
+          onClose={() => setLoteToTratar(null)}
+          onConfirmTratamiento={(params) => {
+            setLoteToTratar(null);
+            handleConfirmTratamiento(params);
+          }}
         />
       )}
     </div>

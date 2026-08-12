@@ -78,6 +78,7 @@ export interface Lote {
   sectorBolsonOrigen?: string; // Sector de bolsón de origen ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'Todos')
   origenesBolson?: OrigenBolsonItem[]; // Detalle dinámico de orígenes de bolsón con su sector
   ubicacionAcopio?: string; // Ubicación acopio (e.g., 'Ala A - Sector 1' o texto personalizado)
+  humedad?: number; // Porcentaje de humedad del lote (% ej: 13.5). Dato informativo, no modifica los kg.
 }
 
 export interface LoteLimitsConfig {
@@ -151,6 +152,7 @@ export interface MovimientoSilo {
   humedad?: number; // Porcentaje de humedad manual (% ej: 13.5)
 
   // Campos de movimiento y transporte (Chofer, Patente, CUIT, Transporte):
+  tipoTransporte?: 'CHOFER' | 'FLETE';
   chofer?: string;
   cuit?: string;
   patentes?: string;

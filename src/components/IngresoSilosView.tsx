@@ -10,6 +10,8 @@ import { SILOS_DISPONIBLES } from './SilosSelector';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { findExistingChofer, mergeChoferData } from '../utils/choferes';
+import { getSiloActiveData } from '../utils/siloValidation';
+import { formatKg } from '../utils/formatters';
 import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit } from 'lucide-react';
 import { ClienteSelect } from './ClienteSelect';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
@@ -139,7 +141,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [depositoOrigen, setDepositoOrigen] = useState('Depósito Central');
   const [humedad, setHumedad] = useState<number | ''>(13.5);
 
-  // Estados de datos de chofer en Ingreso
+  // Estados de datos de chofer y flete en Ingreso
+  const [tipoTransporte, setTipoTransporte] = useState<'CHOFER' | 'FLETE'>('CHOFER');
+  const [fleteOpcion, setFleteOpcion] = useState<'Flete Montaner' | 'Flete Agro Abacus'>('Flete Montaner');
   const [selectedChoferId, setSelectedChoferId] = useState('');
   const [choferNombre, setChoferNombre] = useState('');
   const [choferCuit, setChoferCuit] = useState('');
@@ -197,6 +201,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   // Exportar Excel Completo de Movimientos de Silo
   const handleExportMovimientosExcel = () => {
     const dataToExport = (movimientosSilo || []).map((m) => {
+      const isFlete = m.tipoTransporte === 'FLETE' || m.chofer === 'Flete Montaner' || m.chofer === 'Flete Agro Abacus';
+      const choferDisplay = isFlete ? (m.chofer || m.transporte || 'Flete Montaner') : (m.chofer || '-');
+      const cuitDisplay = isFlete ? '-' : (m.cuit || '-');
+      const patentesDisplay = isFlete ? '-' : (m.patentes || '-');
+      const transporteDisplay = isFlete ? (m.transporte || m.chofer || 'Flete Montaner') : (m.transporte || '-');
+
       return {
         'Silo': m.siloId,
         'Fecha': m.fecha,
@@ -208,10 +218,10 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         'Origen': m.campoOrigen || m.depositoOrigen || '-',
         'Sector': m.bolsonOrigenSector || m.sector || '-',
         'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
-        'Chofer': m.chofer || '-',
-        'CUIT': m.cuit || '-',
-        'Patentes': m.patentes || '-',
-        'Transporte': m.transporte || '-',
+        'Chofer': choferDisplay,
+        'CUIT': cuitDisplay,
+        'Patentes': patentesDisplay,
+        'Transporte': transporteDisplay,
         'Tipo Movimiento': m.tipo === 'INGRESO' ? 'Ingreso' : m.tipo === 'EGRESO_MANUAL' ? `Salida Manual (${m.motivoManual || 'Manual'})` : m.tipo === 'EGRESO_LOTE' ? `Salida por Lote (${m.loteNro || ''})` : 'Egreso',
         'Descontaminación Varietal': m.descontaminacionVarietal ? 'Sí' : 'No',
         'Observaciones': m.observaciones || m.motivoZero || m.motivoAjuste || '-'
@@ -240,9 +250,10 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
   // Estado para el Modal de Edición Manual de Movimientos de Silos
   const [movimientoAEditar, setMovimientoAEditar] = useState<MovimientoSilo | null>(null);
+  const [editTipoCategoria, setEditTipoCategoria] = useState<'INGRESO' | 'EGRESO'>('INGRESO');
+  const [editMotivoEgreso, setEditMotivoEgreso] = useState<'EGRESO_LOTE' | 'DESCARTE'>('EGRESO_LOTE');
   const [editSiloId, setEditSiloId] = useState<SiloId>('Silo 1');
   const [editFecha, setEditFecha] = useState('');
-  const [editTipo, setEditTipo] = useState<'INGRESO' | 'EGRESO_MANUAL' | 'EGRESO_OP' | 'EGRESO_LOTE' | 'AJUSTE_ZERO'>('INGRESO');
   const [editKg, setEditKg] = useState<number | ''>('');
   const [editCliente, setEditCliente] = useState('');
   const [editEspecie, setEditEspecie] = useState('');
@@ -267,7 +278,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     setMovimientoAEditar(mov);
     setEditSiloId(mov.siloId);
     setEditFecha(mov.fecha);
-    setEditTipo(mov.tipo || 'INGRESO');
+
+    const isIng = mov.tipo === 'INGRESO';
+    setEditTipoCategoria(isIng ? 'INGRESO' : 'EGRESO');
+
+    const isDescarte = mov.tipo === 'AJUSTE_ZERO' || mov.motivoManual === 'Descarte' || Boolean(mov.descontaminacionVarietal);
+    setEditMotivoEgreso(isDescarte ? 'DESCARTE' : 'EGRESO_LOTE');
+
     setEditKg(mov.kg);
     setEditCliente(mov.cliente || '');
     setEditEspecie(mov.especie || '');
@@ -292,45 +309,102 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const handleGuardarEdicionMovimiento = (e: React.FormEvent) => {
     e.preventDefault();
     if (!movimientoAEditar) return;
-    if (!editKg || Number(editKg) <= 0) {
-      alert('Los kilogramos deben ser mayor a 0.');
-      return;
-    }
 
-    const movEditado: MovimientoSilo = {
-      ...movimientoAEditar,
-      siloId: editSiloId,
-      fecha: editFecha,
-      tipo: editTipo,
-      kg: Number(editKg),
-      cliente: editCliente,
-      especie: editEspecie,
-      variedad: editVariedad,
-      categoria: editCategoria,
-      humedad: editHumedad !== '' ? Number(editHumedad) : undefined,
-      campoOrigen: editCampoOrigen,
-      bolsonOrigenNro: editBolsonOrigenNro,
-      bolsonOrigenSector: editBolsonOrigenSector,
-      depositoOrigen: editDepositoOrigen,
-      chofer: editChofer,
-      cuit: editCuit,
-      patentes: editPatentes,
-      transporte: editTransporte,
-      motivoManual: editMotivoManual,
-      descontaminacionVarietal: editDescontaminacionVarietal,
-      numeroOrdenProceso: editNumeroOrdenProceso,
-      ordenProcesoId: editNumeroOrdenProceso || movimientoAEditar.ordenProcesoId,
-      loteNro: editLoteNro,
-      loteId: editLoteNro || movimientoAEditar.loteId,
-      observaciones: editObservaciones,
-    };
+    if (editTipoCategoria === 'INGRESO') {
+      if (!editKg || Number(editKg) <= 0) {
+        alert('Los kilogramos del ingreso deben ser mayor a 0.');
+        return;
+      }
 
-    if (onEditarMovimientoSilo) {
-      onEditarMovimientoSilo(movEditado);
+      const movEditado: MovimientoSilo = {
+        ...movimientoAEditar,
+        siloId: editSiloId,
+        fecha: editFecha,
+        tipo: 'INGRESO',
+        kg: Number(editKg),
+        cliente: editCliente,
+        especie: editEspecie,
+        variedad: editVariedad,
+        categoria: editCategoria,
+        humedad: editHumedad !== '' ? Number(editHumedad) : undefined,
+        campoOrigen: editCampoOrigen,
+        bolsonOrigenNro: editBolsonOrigenNro,
+        bolsonOrigenSector: editBolsonOrigenSector,
+        depositoOrigen: editDepositoOrigen,
+        chofer: editChofer,
+        cuit: editCuit,
+        patentes: editPatentes,
+        transporte: editTransporte,
+        numeroOrdenProceso: editNumeroOrdenProceso,
+        ordenProcesoId: editNumeroOrdenProceso || movimientoAEditar.ordenProcesoId,
+        observaciones: editObservaciones,
+      };
+
+      if (onEditarMovimientoSilo) {
+        onEditarMovimientoSilo(movEditado);
+      }
+      setMovimientoAEditar(null);
+      setFormSuccess(`Ingreso ${movEditado.id} actualizado correctamente.`);
+      setTimeout(() => setFormSuccess(''), 4000);
+    } else {
+      // CASO EGRESO
+      if (editMotivoEgreso === 'EGRESO_LOTE') {
+        if (!editLoteNro.trim()) {
+          alert('Debe ingresar el N° de Lote para la Salida por Lote.');
+          return;
+        }
+        if (!editKg || Number(editKg) <= 0) {
+          alert('Debe ingresar los kilos descontados por el lote (debe ser mayor a 0).');
+          return;
+        }
+
+        const movEditado: MovimientoSilo = {
+          ...movimientoAEditar,
+          siloId: editSiloId,
+          fecha: editFecha,
+          tipo: 'EGRESO_LOTE',
+          kg: Number(editKg),
+          loteNro: editLoteNro.trim(),
+          loteId: editLoteNro.trim(),
+          motivoManual: 'Egreso por lote',
+          numeroOrdenProceso: editNumeroOrdenProceso,
+          ordenProcesoId: editNumeroOrdenProceso || movimientoAEditar.ordenProcesoId,
+          observaciones: editObservaciones,
+        };
+
+        if (onEditarMovimientoSilo) {
+          onEditarMovimientoSilo(movEditado);
+        }
+        setMovimientoAEditar(null);
+        setFormSuccess(`Egreso por Lote ${movEditado.id} actualizado correctamente.`);
+        setTimeout(() => setFormSuccess(''), 4000);
+      } else {
+        // DESCARTE: Lleva el stock remanente de ese silo a cero
+        const stockRemanente = getSiloActiveData(editSiloId, movimientosSilo).stockKg;
+        const kgDescarte = editKg && Number(editKg) > 0 ? Number(editKg) : (stockRemanente > 0 ? stockRemanente : (movimientoAEditar.kg || 0));
+
+        const movEditado: MovimientoSilo = {
+          ...movimientoAEditar,
+          siloId: editSiloId,
+          fecha: editFecha,
+          tipo: 'AJUSTE_ZERO',
+          kg: kgDescarte,
+          motivoManual: 'Descarte',
+          motivoZero: 'Descarte',
+          descontaminacionVarietal: true,
+          numeroOrdenProceso: editNumeroOrdenProceso,
+          ordenProcesoId: editNumeroOrdenProceso || movimientoAEditar.ordenProcesoId,
+          observaciones: editObservaciones,
+        };
+
+        if (onEditarMovimientoSilo) {
+          onEditarMovimientoSilo(movEditado);
+        }
+        setMovimientoAEditar(null);
+        setFormSuccess(`Descarte de ${editSiloId} guardado correctamente (Stock llevado a cero).`);
+        setTimeout(() => setFormSuccess(''), 4000);
+      }
     }
-    setMovimientoAEditar(null);
-    setFormSuccess(`Movimiento ${movEditado.id} actualizado correctamente.`);
-    setTimeout(() => setFormSuccess(''), 4000);
   };
 
   const handleConfirmEliminarMovimiento = () => {
@@ -737,6 +811,11 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       return;
     }
 
+    const choferVal = tipoTransporte === 'FLETE' ? fleteOpcion : choferNombre.trim();
+    const cuitVal = tipoTransporte === 'FLETE' ? '' : choferCuit.trim();
+    const patentesVal = tipoTransporte === 'FLETE' ? '' : choferPatentes.trim();
+    const transporteVal = tipoTransporte === 'FLETE' ? fleteOpcion : (choferTransporte.trim() || 'Sin Transporte');
+
     const nuevoIngreso: MovimientoSilo = {
       id: `ING-SILO-${Date.now()}`,
       siloId: activeSilo,
@@ -753,13 +832,14 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       bolsonOrigenSector: bolsonOrigenSector.trim(),
       depositoOrigen: depositoOrigen.trim(),
       humedad: typeof humedad === 'number' ? humedad : 13.5,
-      chofer: choferNombre.trim(),
-      cuit: choferCuit.trim(),
-      patentes: choferPatentes.trim(),
-      transporte: choferTransporte.trim(),
+      tipoTransporte,
+      chofer: choferVal,
+      cuit: cuitVal,
+      patentes: patentesVal,
+      transporte: transporteVal,
     };
 
-    if (choferNombre.trim() && onSaveChofer) {
+    if (tipoTransporte === 'CHOFER' && choferNombre.trim() && onSaveChofer) {
       const candidateData = {
         nombre: choferNombre.trim(),
         cuit: choferCuit.trim(),
@@ -1758,96 +1838,146 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               />
             </div>
 
-            {/* Sección Chofer y Transporte (con Autocompletado e Importación desde Excel) */}
+            {/* Sección Chofer y Transporte (con Selector ON/OFF Chofer / Flete) */}
             <div className="sm:col-span-2 lg:col-span-4 p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-emerald-700" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Datos de Movimiento / Chofer y Transporte</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Datos de Movimiento / Transporte</span>
                 </div>
-                <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5">
-                  <Upload className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Importar Choferes Excel</span>
-                  <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUploadChoferes} className="hidden" />
-                </label>
+
+                <div className="flex items-center gap-2">
+                  {/* Botón ON/OFF Selector de Tipo de Transporte */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setTipoTransporte('CHOFER')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                        tipoTransporte === 'CHOFER'
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Chofer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTipoTransporte('FLETE')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                        tipoTransporte === 'FLETE'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Flete Montaner / Flete AA
+                    </button>
+                  </div>
+
+                  {tipoTransporte === 'CHOFER' && (
+                    <label className="cursor-pointer px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Importar Excel</span>
+                      <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUploadChoferes} className="hidden" />
+                    </label>
+                  )}
+                </div>
               </div>
 
-              {importNoticeChoferes && (
+              {importNoticeChoferes && tipoTransporte === 'CHOFER' && (
                 <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-lg">
                   {importNoticeChoferes}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Chofer Search Selector */}
-                <div>
-                  <ChoferSearchSelector
-                    choferes={choferes}
-                    selectedChoferNombre={choferNombre}
-                    onSelectChofer={(ch) => {
-                      setChoferNombre(ch.nombre);
-                      setChoferCuit(ch.cuit || '');
-                      setChoferPatentes(ch.patentes || '');
-                      setChoferTransporte(ch.transporte || '');
-                    }}
-                    onManualChange={(val) => setChoferNombre(val)}
-                    onSaveNewChofer={(data) => {
-                      if (data.nombre && onSaveChofer) {
-                        onSaveChofer({
-                          id: `CHOFER-${Date.now()}`,
-                          nombre: data.nombre,
-                          cuit: choferCuit.trim() || '—',
-                          patentes: choferPatentes.trim() || '—',
-                          transporte: choferTransporte.trim() || 'Sin Transporte'
-                        });
-                      }
-                    }}
-                    label="Chofer / Conductor"
-                  />
-                </div>
-
-                {/* CUIT Chofer */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                    CUIT / DNI Chofer
+              {tipoTransporte === 'FLETE' ? (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                  <label className="block text-xs font-bold uppercase text-amber-900">
+                    Seleccionar Empresa de Flete *
                   </label>
-                  <input
-                    type="text"
-                    placeholder="ej: 20-34567890-9"
-                    value={choferCuit}
-                    onChange={(e) => setChoferCuit(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
-                  />
+                  <select
+                    value={fleteOpcion}
+                    onChange={(e) => setFleteOpcion(e.target.value as 'Flete Montaner' | 'Flete Agro Abacus')}
+                    className="w-full sm:w-80 px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 shadow-2xs outline-none"
+                  >
+                    <option value="Flete Montaner">Flete Montaner</option>
+                    <option value="Flete Agro Abacus">Flete Agro Abacus</option>
+                  </select>
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    Modo Flete Seleccionado: No se requieren ni solicitan datos individuales del chofer (CUIT, patentes, etc.).
+                  </p>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Chofer Search Selector */}
+                  <div>
+                    <ChoferSearchSelector
+                      choferes={choferes}
+                      selectedChoferNombre={choferNombre}
+                      onSelectChofer={(ch) => {
+                        setChoferNombre(ch.nombre);
+                        setChoferCuit(ch.cuit || '');
+                        setChoferPatentes(ch.patentes || '');
+                        setChoferTransporte(ch.transporte || '');
+                      }}
+                      onManualChange={(val) => setChoferNombre(val)}
+                      onSaveNewChofer={(data) => {
+                        if (data.nombre && onSaveChofer) {
+                          onSaveChofer({
+                            id: `CHOFER-${Date.now()}`,
+                            nombre: data.nombre,
+                            cuit: choferCuit.trim() || '—',
+                            patentes: choferPatentes.trim() || '—',
+                            transporte: choferTransporte.trim() || 'Sin Transporte'
+                          });
+                        }
+                      }}
+                      label="Chofer / Conductor"
+                    />
+                  </div>
 
-                {/* Patente(s) */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                    Patente(s) Camión / Acoplado
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej: AA123BB / AC456DD"
-                    value={choferPatentes}
-                    onChange={(e) => setChoferPatentes(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
-                  />
-                </div>
+                  {/* CUIT Chofer */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      CUIT / DNI Chofer
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej: 20-34567890-9"
+                      value={choferCuit}
+                      onChange={(e) => setChoferCuit(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                    />
+                  </div>
 
-                {/* Empresa de Transporte */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                    Empresa / Transporte
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej: Transportes El Rapido..."
-                    value={choferTransporte}
-                    onChange={(e) => setChoferTransporte(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
-                  />
+                  {/* Patente(s) */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      Patente(s) Camión / Acoplado
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej: AA123BB / AC456DD"
+                      value={choferPatentes}
+                      onChange={(e) => setChoferPatentes(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Empresa de Transporte */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      Empresa / Transporte
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej: Transportes El Rapido..."
+                      value={choferTransporte}
+                      onChange={(e) => setChoferTransporte(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Botón Submit */}
@@ -2426,233 +2556,396 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleGuardarEdicionMovimiento} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {/* Silo */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Silo *</label>
-                  <select
-                    value={editSiloId}
-                    onChange={(e) => setEditSiloId(e.target.value as SiloId)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  >
-                    {SILOS_DISPONIBLES.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Fecha */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Fecha *</label>
-                  <input
-                    type="date"
-                    value={editFecha}
-                    onChange={(e) => setEditFecha(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  />
-                </div>
-
-                {/* Tipo de Movimiento */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Tipo de Movimiento *</label>
-                  <select
-                    value={editTipo}
-                    onChange={(e) => setEditTipo(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  >
-                    <option value="INGRESO">INGRESO</option>
-                    <option value="EGRESO_MANUAL">SALIDA MANUAL</option>
-                    <option value="EGRESO_OP">EGRESO POR OP</option>
-                    <option value="EGRESO_LOTE">EGRESO POR LOTE</option>
-                    <option value="AJUSTE_ZERO">AJUSTE A CERO</option>
-                  </select>
-                </div>
-
-                {/* Kilogramos */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Kilogramos (kg) *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editKg}
-                    onChange={(e) => setEditKg(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                    required
-                  />
-                </div>
-
-                {/* Cliente */}
-                <div className="col-span-1 sm:col-span-2">
-                  <ClienteSelect
-                    value={editCliente}
-                    onChange={setEditCliente}
-                    label="Cliente *"
-                  />
-                </div>
-
-                {/* Especie */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Especie</label>
-                  <input
-                    type="text"
-                    value={editEspecie}
-                    onChange={(e) => setEditEspecie(e.target.value)}
-                    placeholder="Soja, Trigo..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Variedad */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Variedad</label>
-                  <input
-                    type="text"
-                    value={editVariedad}
-                    onChange={(e) => setEditVariedad(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Categoría */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Categoría</label>
-                  <input
-                    type="text"
-                    value={editCategoria}
-                    onChange={(e) => setEditCategoria(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Humedad */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">% Humedad</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={editHumedad}
-                    onChange={(e) => setEditHumedad(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Campo Origen */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Campo Origen</label>
-                  <input
-                    type="text"
-                    value={editCampoOrigen}
-                    onChange={(e) => setEditCampoOrigen(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Bolsón N° */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Bolsón N°</label>
-                  <input
-                    type="text"
-                    value={editBolsonOrigenNro}
-                    onChange={(e) => setEditBolsonOrigenNro(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Sector Bolsón */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Sector Bolsón</label>
-                  <input
-                    type="text"
-                    value={editBolsonOrigenSector}
-                    onChange={(e) => setEditBolsonOrigenSector(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Depósito Origen */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Depósito Origen</label>
-                  <input
-                    type="text"
-                    value={editDepositoOrigen}
-                    onChange={(e) => setEditDepositoOrigen(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Chofer */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Chofer</label>
-                  <input
-                    type="text"
-                    value={editChofer}
-                    onChange={(e) => setEditChofer(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* CUIT Chofer */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">CUIT Chofer</label>
-                  <input
-                    type="text"
-                    value={editCuit}
-                    onChange={(e) => setEditCuit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Patente(s) */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Patentes</label>
-                  <input
-                    type="text"
-                    value={editPatentes}
-                    onChange={(e) => setEditPatentes(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                  />
-                </div>
-
-                {/* Transporte */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Empresa Transporte</label>
-                  <input
-                    type="text"
-                    value={editTransporte}
-                    onChange={(e) => setEditTransporte(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Motivo Salida Manual */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Motivo (Salida Manual)</label>
-                  <input
-                    type="text"
-                    value={editMotivoManual}
-                    onChange={(e) => setEditMotivoManual(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                {/* Descontaminación Varietal */}
-                <div className="flex items-center gap-2 pt-4">
-                  <input
-                    type="checkbox"
-                    id="editDescontaminacion"
-                    checked={editDescontaminacionVarietal}
-                    onChange={(e) => setEditDescontaminacionVarietal(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                  />
-                  <label htmlFor="editDescontaminacion" className="text-xs font-bold text-slate-800 cursor-pointer">
-                    Descontaminación Varietal
-                  </label>
-                </div>
+            {/* Selector ON/OFF Ingreso vs Egreso */}
+            <div className="px-6 pt-4 pb-1">
+              <div className="bg-slate-100 p-1.5 rounded-xl border border-slate-200 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setEditTipoCategoria('INGRESO')}
+                  className={`flex-1 py-2 px-3 text-xs font-black uppercase tracking-wider rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                    editTipoCategoria === 'INGRESO'
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <ArrowDownRight className="w-4 h-4" />
+                  <span>Ingreso</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditTipoCategoria('EGRESO');
+                    if (editMotivoEgreso === 'DESCARTE') {
+                      const rem = getSiloActiveData(editSiloId, movimientosSilo).stockKg;
+                      if (rem > 0) setEditKg(rem);
+                    }
+                  }}
+                  className={`flex-1 py-2 px-3 text-xs font-black uppercase tracking-wider rounded-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+                    editTipoCategoria === 'EGRESO'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  <span>Egreso</span>
+                </button>
               </div>
+            </div>
+
+            <form onSubmit={handleGuardarEdicionMovimiento} className="p-6 pt-3 space-y-4 text-xs">
+              {/* CASO INGRESO */}
+              {editTipoCategoria === 'INGRESO' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {/* Silo */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Silo *</label>
+                    <select
+                      value={editSiloId}
+                      onChange={(e) => setEditSiloId(e.target.value as SiloId)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                    >
+                      {SILOS_DISPONIBLES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Fecha */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Fecha *</label>
+                    <input
+                      type="date"
+                      value={editFecha}
+                      onChange={(e) => setEditFecha(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Kilogramos */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Kilogramos (kg) *</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editKg}
+                      onChange={(e) => setEditKg(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Cliente */}
+                  <div className="col-span-1 sm:col-span-2">
+                    <ClienteSelect
+                      value={editCliente}
+                      onChange={setEditCliente}
+                      label="Cliente *"
+                    />
+                  </div>
+
+                  {/* Especie */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Especie</label>
+                    <input
+                      type="text"
+                      value={editEspecie}
+                      onChange={(e) => setEditEspecie(e.target.value)}
+                      placeholder="Soja, Trigo..."
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Variedad */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Variedad</label>
+                    <input
+                      type="text"
+                      value={editVariedad}
+                      onChange={(e) => setEditVariedad(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Categoría */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Categoría</label>
+                    <input
+                      type="text"
+                      value={editCategoria}
+                      onChange={(e) => setEditCategoria(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Humedad */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">% Humedad</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={editHumedad}
+                      onChange={(e) => setEditHumedad(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Campo Origen */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Campo Origen</label>
+                    <input
+                      type="text"
+                      value={editCampoOrigen}
+                      onChange={(e) => setEditCampoOrigen(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Bolsón N° */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Bolsón N°</label>
+                    <input
+                      type="text"
+                      value={editBolsonOrigenNro}
+                      onChange={(e) => setEditBolsonOrigenNro(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Sector Bolsón */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Sector Bolsón</label>
+                    <input
+                      type="text"
+                      value={editBolsonOrigenSector}
+                      onChange={(e) => setEditBolsonOrigenSector(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Depósito Origen */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Depósito Origen</label>
+                    <input
+                      type="text"
+                      value={editDepositoOrigen}
+                      onChange={(e) => setEditDepositoOrigen(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Chofer */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Chofer</label>
+                    <input
+                      type="text"
+                      value={editChofer}
+                      onChange={(e) => setEditChofer(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* CUIT Chofer */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">CUIT Chofer</label>
+                    <input
+                      type="text"
+                      value={editCuit}
+                      onChange={(e) => setEditCuit(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Patente(s) */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Patentes</label>
+                    <input
+                      type="text"
+                      value={editPatentes}
+                      onChange={(e) => setEditPatentes(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                    />
+                  </div>
+
+                  {/* Transporte */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Empresa Transporte</label>
+                    <input
+                      type="text"
+                      value={editTransporte}
+                      onChange={(e) => setEditTransporte(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Orden de Proceso - Dato Informativo */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      N° Orden de Proceso <span className="text-slate-400 font-normal lowercase">(solo informativo)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editNumeroOrdenProceso}
+                      onChange={(e) => setEditNumeroOrdenProceso(e.target.value)}
+                      placeholder="ej: OP-102"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-700 text-xs focus:ring-2 focus:ring-slate-400 outline-none"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* CASO EGRESO */
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Silo */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Silo *</label>
+                      <select
+                        value={editSiloId}
+                        onChange={(e) => {
+                          const newSilo = e.target.value as SiloId;
+                          setEditSiloId(newSilo);
+                          if (editMotivoEgreso === 'DESCARTE') {
+                            const rem = getSiloActiveData(newSilo, movimientosSilo).stockKg;
+                            if (rem > 0) setEditKg(rem);
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                        required
+                      >
+                        {SILOS_DISPONIBLES.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Fecha */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Fecha *</label>
+                      <input
+                        type="date"
+                        value={editFecha}
+                        onChange={(e) => setEditFecha(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Selector de Motivo de Egreso: Únicamente Egreso por Lote o Descarte */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 tracking-wider">
+                      Motivo de Egreso *
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditMotivoEgreso('EGRESO_LOTE')}
+                        className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
+                          editMotivoEgreso === 'EGRESO_LOTE'
+                            ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 font-medium'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                          editMotivoEgreso === 'EGRESO_LOTE' ? 'border-amber-600 bg-amber-600' : 'border-slate-400'
+                        }`}>
+                          {editMotivoEgreso === 'EGRESO_LOTE' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold">Egreso por lote</p>
+                          <p className="text-[10px] text-slate-500 font-normal">Requiere N° de Lote y Kilos descontados</p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditMotivoEgreso('DESCARTE');
+                          const rem = getSiloActiveData(editSiloId, movimientosSilo).stockKg;
+                          if (rem > 0) setEditKg(rem);
+                        }}
+                        className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
+                          editMotivoEgreso === 'DESCARTE'
+                            ? 'bg-red-50 border-red-400 text-red-950 font-bold shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 font-medium'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                          editMotivoEgreso === 'DESCARTE' ? 'border-red-600 bg-red-600' : 'border-slate-400'
+                        }`}>
+                          {editMotivoEgreso === 'DESCARTE' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-red-900">Descarte</p>
+                          <p className="text-[10px] text-red-700/80 font-normal">Lleva el stock remanente del silo a cero</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Campos según Motivo de Egreso */}
+                  {editMotivoEgreso === 'DESCARTE' ? (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1 text-red-900">
+                      <div className="flex items-center gap-1.5 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                        <span>Descarte / Limpieza de Silo</span>
+                      </div>
+                      <p className="text-[11px] text-red-800 font-medium">
+                        Lleva el stock remanente de {editSiloId} a cero ({formatKg(getSiloActiveData(editSiloId, movimientosSilo).stockKg)} kg).
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl">
+                      {/* N° de lote */}
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-900 mb-1">
+                          N° de Lote *
+                        </label>
+                        <input
+                          type="text"
+                          value={editLoteNro}
+                          onChange={(e) => setEditLoteNro(e.target.value)}
+                          placeholder="ej: LOT-2026-001"
+                          className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-bold font-mono text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                          required
+                        />
+                      </div>
+
+                      {/* Kilos totales descontados del silo por ese lote realizado */}
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-900 mb-1">
+                          Kilos totales descontados del silo *
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={editKg}
+                          onChange={(e) => setEditKg(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="ej: 25000"
+                          className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl font-bold font-mono text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Orden de Proceso - Dato solo Informativo */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">
+                      N° Orden de Proceso <span className="text-slate-400 font-normal lowercase">(solo informativo)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editNumeroOrdenProceso}
+                      onChange={(e) => setEditNumeroOrdenProceso(e.target.value)}
+                      placeholder="ej: OP-102"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-700 text-xs focus:ring-2 focus:ring-slate-400 outline-none"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-0.5">Dato informativo: no modifica stocks del silo.</p>
+                  </div>
+                </div>
+              )}
 
               {/* Observaciones */}
               <div>

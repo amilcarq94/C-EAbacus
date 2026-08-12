@@ -679,48 +679,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* Alerta de Stock Mínimo - Notificación Preventiva */}
-      {lotesPreventivosConThreshold.length > 0 && (
-        <div id="preventive-notification-banner" className="bg-amber-50 border-l-4 border-[#C9922E] p-4 rounded-xl shadow-sm flex gap-3 items-start animate-in fade-in slide-in-from-top duration-300 text-left">
-          <div className="p-1.5 bg-white rounded-lg text-[#C9922E] shrink-0">
-            <Bell className="w-5 h-5 animate-bounce text-[#C9922E]" />
-          </div>
-          <div className="flex-grow">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-sans font-bold text-amber-900 uppercase tracking-wider">
-                NOTIFICACIÓN PREVENTIVA: ACERCÁNDOSE A STOCK MÍNIMO
-              </span>
-              <span className="text-[9px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                {lotesPreventivosConThreshold.length} {lotesPreventivosConThreshold.length === 1 ? 'lote' : 'lotes'}
-              </span>
-            </div>
-            <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-              Los siguientes lotes de la planta están muy próximos al umbral de seguridad establecido por especie. Se aconseja tomar previsiones de reposición antes de procesar nuevas salidas de mercadería.
-            </p>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {lotesPreventivosConThreshold.map(({ lote, threshold }) => (
-                <div key={lote.id} className="bg-white/80 p-2 rounded-lg border border-amber-200/50 flex flex-col">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-mono font-bold text-gray-900">{lote.id}</span>
-                    <span className="text-[10px] font-bold text-amber-700 uppercase">{lote.especie}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] text-gray-500 mt-1.5">
-                    <span>Stock: <strong className="text-gray-800">{formatNumberArg(lote.stockKg, 0)} kg</strong></span>
-                    <span>Umbral: <strong>{formatNumberArg(threshold, 0)} kg</strong></span>
-                  </div>
-                  {/* Barra de progreso de cercanía al umbral */}
-                  <div className="w-full bg-amber-100 h-1 rounded-full mt-2 overflow-hidden">
-                    <div 
-                      className="bg-[#C9922E] h-full rounded-full" 
-                      style={{ width: `${Math.min(100, (threshold / lote.stockKg) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Tarjeta Destacada de Stock Consolidado en Toneladas */}
       <div id="kpi-consolidado-toneladas" className="bg-[#00603C] text-white p-6 md:p-8 rounded-2xl border border-[#004D30] shadow-xl hover:shadow-2xl transition-all duration-300 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6 text-left">

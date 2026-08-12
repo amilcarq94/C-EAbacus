@@ -8,6 +8,7 @@ import { Lote, EspecieType, TipoLoteType, TratamientoType, EstadoLoteType, Estad
 import { generateLoteId, formatKg } from '../utils/formatters';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
+import { validateSiloLoteMatch } from '../utils/siloValidation';
 import { SilosSelector } from './SilosSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { ClienteSelect } from './ClienteSelect';
@@ -30,14 +31,8 @@ interface LoteFormProps {
   onCreateOrdenProcesoClick?: () => void;
 }
 
-const getNowDateTimeLocal = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+const getTodayDateStr = () => {
+  return new Date().toISOString().split('T')[0];
 };
 
 export const LoteForm: React.FC<LoteFormProps> = ({
@@ -74,10 +69,12 @@ export const LoteForm: React.FC<LoteFormProps> = ({
   const [fechaIngreso, setFechaIngreso] = useState(() => new Date().toISOString().split('T')[0]);
   const [estado, setEstado] = useState<EstadoLoteType>('Disponible');
   const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('REALIZADO');
-  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => getNowDateTimeLocal());
+  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => getTodayDateStr());
   const [observaciones, setObservaciones] = useState('');
   const [ala, setAla] = useState('');
   const [sector, setSector] = useState('');
+  const [humedad, setHumedad] = useState<number | ''>(13.5);
+  const [fechaTratamiento, setFechaTratamiento] = useState<string>(() => loteAEditar?.fechaTratamiento || getTodayDateStr());
 
   // Estados de Orden de Proceso vinculada
   const [ordenProcesoId, setOrdenProcesoId] = useState('');
@@ -134,6 +131,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       ala,
       sector,
       ubicacionAcopio: ala && sector ? `Ala ${ala} - Sector ${sector}` : '',
+      humedad: humedad !== '' ? Number(humedad) : undefined,
       ordenProcesoId,
       numeroOrdenMovimiento,
       silosOrigen,
@@ -278,10 +276,11 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       setFechaIngreso(loteAEditar.fechaIngreso);
       setEstado(loteAEditar.estado);
       setEstadoRegistro(loteAEditar.estadoRegistro || 'REALIZADO');
-      setFechaHoraProduccion(loteAEditar.fechaHoraProduccion || getNowDateTimeLocal());
+      setFechaHoraProduccion(loteAEditar.fechaHoraProduccion ? loteAEditar.fechaHoraProduccion.split('T')[0] : getTodayDateStr());
       setObservaciones(loteAEditar.observaciones || '');
       setAla(loteAEditar.ala || '');
       setSector(loteAEditar.sector || '');
+      setHumedad(loteAEditar.humedad !== undefined ? loteAEditar.humedad : 13.5);
       setOrdenProcesoId(loteAEditar.ordenProcesoId || '');
       setNumeroOrdenMovimiento(loteAEditar.numeroOrdenMovimiento || '');
       setSilosOrigen(loteAEditar.silosOrigen || []);
@@ -302,7 +301,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       const suggestedNro = generateLoteId(allLoteNros);
       setLoteNro(suggestedNro);
       setEstadoRegistro('REALIZADO');
-      setFechaHoraProduccion(getNowDateTimeLocal());
+      setFechaHoraProduccion(getTodayDateStr());
       // ID es cliente + _ + loteNro, lo calcularemos al guardar o dinámicamente
       setId(`${cliente.replace(/\s+/g, '_')}_${suggestedNro}`);
       setObservaciones('');
@@ -452,6 +451,23 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       return;
     }
 
+    // Validar coincidencia de datos (Cliente, Especie, Variedad) al vincular Silos de Origen
+    if (silosOrigen && silosOrigen.length > 0 && estadoRegistro === 'REALIZADO') {
+      for (const s of silosOrigen) {
+        if (s.siloId) {
+          const matchCheck = validateSiloLoteMatch(
+            s.siloId as SiloId,
+            { cliente, especie, variedad },
+            movimientosSilo
+          );
+          if (!matchCheck.valid) {
+            setError(matchCheck.errorMessage || `No se puede vincular el ${s.siloId} por diferencia en los orígenes vinculantes.`);
+            return;
+          }
+        }
+      }
+    }
+
     // Validar que la suma de kilos/bolsas del lote no supere el stock disponible del/los silo(s) de origen seleccionado(s)
     if (silosOrigen && silosOrigen.length > 0 && siloStocks) {
       let stockSilosDisponible = 0;
@@ -520,6 +536,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
         ala: ala || existingLoteRepetido.ala,
         sector: sector || existingLoteRepetido.sector,
         ubicacionAcopio: ubicacionStr || existingLoteRepetido.ubicacionAcopio,
+        humedad: humedad !== '' ? Number(humedad) : existingLoteRepetido.humedad,
         ordenProcesoId: ordenProcesoId || existingLoteRepetido.ordenProcesoId,
         numeroOrdenMovimiento: (selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined) || existingLoteRepetido.numeroOrdenMovimiento,
         silosOrigen: silosOrigen.length > 0 ? silosOrigen : existingLoteRepetido.silosOrigen,
@@ -565,6 +582,8 @@ export const LoteForm: React.FC<LoteFormProps> = ({
       ala: ala,
       sector: sector,
       ubicacionAcopio: ubicacionStr,
+      humedad: humedad !== '' ? Number(humedad) : undefined,
+      fechaTratamiento: tratamientos.includes('Tratado') ? (fechaTratamiento || getTodayDateStr()) : undefined,
       ordenProcesoId: ordenProcesoId,
       numeroOrdenMovimiento: selectedOp?.tipoOrden === 'MOVIMIENTO' ? numeroOrdenMovimiento.trim() : undefined,
       silosOrigen: silosOrigen,
@@ -653,7 +672,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                   onClick={() => {
                     setEstadoRegistro('REALIZADO');
                     if (!fechaHoraProduccion) {
-                      setFechaHoraProduccion(getNowDateTimeLocal());
+                      setFechaHoraProduccion(getTodayDateStr());
                     }
                   }}
                   className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
@@ -668,22 +687,22 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               </div>
             </div>
 
-            {/* Fecha y Hora de Producción (Activa con REALIZADO) */}
+            {/* Fecha de Realización (Activa con REALIZADO) */}
             {estadoRegistro === 'REALIZADO' ? (
               <div className="bg-slate-800/90 p-3.5 rounded-xl border border-emerald-500/50 space-y-1 animate-in fade-in duration-200">
                 <label className="block text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
                   <CalendarDays className="w-4 h-4 text-emerald-400" />
-                  Fecha y Hora de Producción *
+                  Fecha de Realización *
                 </label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={fechaHoraProduccion}
                   onChange={(e) => setFechaHoraProduccion(e.target.value)}
                   required={estadoRegistro === 'REALIZADO'}
                   className="w-full px-3 py-2 bg-slate-950 text-white font-mono text-xs font-bold rounded-lg border border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                 />
                 <span className="text-[10px] text-slate-400 block">
-                  Esta fecha y hora alimentará los análisis de rendimiento y trazabilidad en el Dashboard de Producción.
+                  Esta fecha alimentará los análisis de rendimiento y volumen procesado en el Reporte de Producción.
                 </span>
               </div>
             ) : (
@@ -1120,6 +1139,24 @@ export const LoteForm: React.FC<LoteFormProps> = ({
             />
           </div>
 
+          {/* Fecha de Tratamiento (Si está Tratado) */}
+          {tratamientos.includes('Tratado') && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2 flex items-center justify-between">
+                <span>Fecha de Tratamiento</span>
+                <span className="text-[10px] font-bold text-[#00603C] bg-[#E3EFE7] px-2 py-0.5 rounded">
+                  Requerido
+                </span>
+              </label>
+              <input
+                type="date"
+                value={fechaTratamiento}
+                onChange={(e) => setFechaTratamiento(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white text-gray-800 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
+              />
+            </div>
+          )}
+
           {/* Estado de Lote */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2">
@@ -1136,6 +1173,32 @@ export const LoteForm: React.FC<LoteFormProps> = ({
               <option value="A Consumo">A Consumo (Púrpura)</option>
               <option value="Agotado">Agotado (Terracota)</option>
             </select>
+          </div>
+
+          {/* % Humedad del Lote (Informativo) */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-2 flex items-center justify-between">
+              <span>% Humedad del Lote</span>
+              <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Informativo
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={humedad}
+                onChange={(e) => setHumedad(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                placeholder="Ej: 13.5"
+                className="w-full px-4 py-2.5 bg-white text-gray-800 text-sm font-semibold rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
+              />
+              <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-bold">%</span>
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">
+              * Dato informativo. El % de humedad no modifica el peso total ni los kg del lote.
+            </p>
           </div>
 
           {/* Parámetros de Stock (Cálculo Dinámico) */}
@@ -1186,6 +1249,10 @@ export const LoteForm: React.FC<LoteFormProps> = ({
             <SilosSelector
               silosSeleccionados={silosOrigen}
               siloStocks={siloStocks}
+              movimientosSilo={movimientosSilo}
+              loteCliente={cliente}
+              loteEspecie={especie}
+              loteVariedad={variedad}
               targetKg={stockKg}
               onChange={setSilosOrigen}
             />

@@ -231,7 +231,8 @@ export function mapFirestoreToLote(id: string, data: any): Lote {
     origenesBolson: data.origenesBolson || [],
     numeroBolsonOrigen: data.numeroBolsonOrigen || data.bolsonOrigenNro || '',
     bolsonOrigenNro: data.bolsonOrigenNro || data.numeroBolsonOrigen || '',
-    sectorBolsonOrigen: data.sectorBolsonOrigen || ''
+    sectorBolsonOrigen: data.sectorBolsonOrigen || '',
+    humedad: data.humedad !== undefined ? Number(data.humedad) : undefined
   };
 }
 
@@ -265,6 +266,7 @@ export function mapLoteToFirestore(lote: Lote): any {
     ala: lote.ala || '',
     sector: lote.sector || '',
     ubicacionAcopio: lote.ubicacionAcopio || '',
+    humedad: lote.humedad !== undefined ? Number(lote.humedad) : null,
     ordenProcesoId: lote.ordenProcesoId || '',
     numeroOrdenMovimiento: lote.numeroOrdenMovimiento || '',
     silosOrigen: lote.silosOrigen || [],

@@ -8,6 +8,7 @@ import { Lote, SiloId, SiloExtraccion, MovimientoSilo, BolsonCampo, OrigenBolson
 import { formatKg } from '../utils/formatters';
 import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
 import { getBolsonesFiltradosPorSilo } from '../utils/siloBolsones';
+import { validateSiloLoteMatch } from '../utils/siloValidation';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { X, Check, CheckCircle2, Play, AlertTriangle, Building2, Package, Plus, Trash2, Warehouse, Layers, Scale } from 'lucide-react';
 
@@ -74,10 +75,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
   // Estados del modal
   const [estadoResultado, setEstadoResultado] = useState<EstadoRegistroLote>('REALIZADO');
   const [fechaRealizacion, setFechaRealizacion] = useState(() => new Date().toISOString().split('T')[0]);
-  const [horaRealizacion, setHoraRealizacion] = useState(() => {
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  });
 
   const [bolsasProducidas, setBolsasProducidas] = useState<number>(primaryLote.stockBolsas || 35);
   const [kgPorBolsa, setKgPorBolsa] = useState<number>(primaryLote.kgPorBolsa || activeLimits.kgPorBolsaDefault);
@@ -146,7 +143,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
     if (primaryLote) {
       const now = new Date();
       setFechaRealizacion(now.toISOString().split('T')[0]);
-      setHoraRealizacion(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
       const bProd = primaryLote.stockBolsas || 35;
       const kgB = primaryLote.kgPorBolsa || activeLimits.kgPorBolsaDefault;
       setBolsasProducidas(bProd);
@@ -232,10 +228,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
       setErrorMsg('Debe ingresar la fecha de realización.');
       return;
     }
-    if (!horaRealizacion) {
-      setErrorMsg('Debe ingresar la hora de realización.');
-      return;
-    }
 
     if (origenLineas.length === 0) {
       setErrorMsg('Debe definir al menos una fuente de origen.');
@@ -255,7 +247,22 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
       }
     }
 
-    // 2. Validación de Stock por Silo
+    // 2. Validación de coincidencia de orígenes (Cliente, Especie, Variedad) entre Silo y Lote
+    if (estadoResultado === 'REALIZADO') {
+      for (const [sId] of silosReqMap.entries()) {
+        const matchCheck = validateSiloLoteMatch(
+          sId,
+          { cliente: primaryLote.cliente, especie: primaryLote.especie, variedad: primaryLote.variedad },
+          movimientosSilo
+        );
+        if (!matchCheck.valid) {
+          setErrorMsg(matchCheck.errorMessage || `No se puede vincular el ${sId} por diferencia en los orígenes vinculantes (Cliente / Especie / Variedad).`);
+          return;
+        }
+      }
+    }
+
+    // 3. Validación de Stock por Silo
     for (const [sId, reqKg] of silosReqMap.entries()) {
       const dispKg = siloStocks[sId] || 0;
       if (reqKg > dispKg) {
@@ -279,7 +286,7 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
       }
     }
 
-    const fechaHoraStr = `${fechaRealizacion}T${horaRealizacion}`;
+    const fechaHoraStr = fechaRealizacion;
 
     // Construir estructuras finales
     const silosOrigenFinal: SiloExtraccion[] = Array.from(silosReqMap.entries()).map(([sId, reqKg]) => ({
@@ -427,8 +434,8 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
             </div>
           </div>
 
-          {/* 2. Fecha y Hora de Realización */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          {/* 2. Fecha de Realización */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
                 Fecha de Realización *
@@ -437,19 +444,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                 type="date"
                 value={fechaRealizacion}
                 onChange={(e) => setFechaRealizacion(e.target.value)}
-                required
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Hora de Realización *
-              </label>
-              <input
-                type="time"
-                value={horaRealizacion}
-                onChange={(e) => setHoraRealizacion(e.target.value)}
                 required
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
               />

@@ -43,10 +43,7 @@ export const BulkEditLotesModal: React.FC<BulkEditLotesModalProps> = ({
 
   // Valores a aplicar en lote
   const [estadoRegistro, setEstadoRegistro] = useState<EstadoRegistroLote>('REALIZADO');
-  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => {
-    const now = new Date();
-    return `${now.toISOString().split('T')[0]}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  });
+  const [fechaHoraProduccion, setFechaHoraProduccion] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [estado, setEstado] = useState<EstadoLoteType>('Disponible');
   const [categoria, setCategoria] = useState<CategoriaType>('Original');
   const [tipo, setTipo] = useState<TipoLoteType>('Final');
@@ -269,7 +266,7 @@ export const BulkEditLotesModal: React.FC<BulkEditLotesModalProps> = ({
               )}
             </div>
 
-            {/* Campo 2: Fecha / Hora de Producción */}
+            {/* Campo 2: Fecha de Realización */}
             <div className={`p-4 rounded-xl border transition ${fieldToggles.fechaHoraProduccion ? 'bg-amber-50/70 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
               <div className="flex items-center justify-between mb-2">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
@@ -279,7 +276,7 @@ export const BulkEditLotesModal: React.FC<BulkEditLotesModalProps> = ({
                     onChange={() => handleToggle('fechaHoraProduccion')}
                     className="w-4 h-4 text-[#00603C] rounded focus:ring-[#00603C]"
                   />
-                  <span>Fecha y Hora de Producción</span>
+                  <span>Fecha de Realización</span>
                 </label>
                 <span className="text-[10px] font-bold text-slate-400">
                   {fieldToggles.fechaHoraProduccion ? 'SE MODIFICARÁ' : 'Sin cambios'}
@@ -289,7 +286,7 @@ export const BulkEditLotesModal: React.FC<BulkEditLotesModalProps> = ({
               {fieldToggles.fechaHoraProduccion && (
                 <div className="mt-3 pt-2 border-t border-amber-200">
                   <input
-                    type="datetime-local"
+                    type="date"
                     value={fechaHoraProduccion}
                     onChange={(e) => setFechaHoraProduccion(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
