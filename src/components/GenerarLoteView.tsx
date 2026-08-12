@@ -131,12 +131,20 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
   };
 
   const handlePrintSelectedFichas = () => {
-    if (selectedDraftsToPrint.length === 0) return;
+    let draftsToUse = selectedDraftsToPrint;
+    
+    // Si no hay ninguno tildado explícitamente, seleccionamos todos por defecto
+    if (draftsToUse.length === 0) {
+      draftsToUse = draftLotes;
+      setDraftLotes(prev => prev.map(item => ({ ...item, printFicha: true })));
+    }
+
+    if (draftsToUse.length === 0) return;
 
     const fechaActual = new Date().toISOString().split('T')[0];
     const ubicacionStr = ala && sector ? `Ala ${ala} - Sector ${sector}` : '';
 
-    const lotesToPrint: Lote[] = selectedDraftsToPrint.map(draft => {
+    const lotesToPrint: Lote[] = draftsToUse.map(draft => {
       const stockKgCalculado = draft.stockBolsas * draft.kgPorBolsa;
       const normNro = draft.loteNro.trim() || 'S/N';
       return {
@@ -423,15 +431,29 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
           </div>
         </div>
 
-        {/* Action button: Volver sin guardar */}
-        <button
-          type="button"
-          onClick={onNavigateToLotes}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition border border-white/20 shrink-0 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Volver sin guardar</span>
-        </button>
+        {/* Action buttons: Imprimir Fichas / Volver sin guardar */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={handlePrintSelectedFichas}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-md cursor-pointer border border-amber-300"
+            title="Imprimir fichas técnicas seleccionadas"
+          >
+            <Printer className="w-4 h-4 text-slate-950" />
+            <span>
+              Imprimir Fichas ({selectedDraftsToPrint.length > 0 ? selectedDraftsToPrint.length : draftLotes.length})
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onNavigateToLotes}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition border border-white/20 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Volver sin guardar</span>
+          </button>
+        </div>
       </div>
 
       {/* Indicadores fijos */}
@@ -868,17 +890,12 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
             <button
               type="button"
               onClick={handlePrintSelectedFichas}
-              disabled={selectedDraftsToPrint.length === 0}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              title={
-                selectedDraftsToPrint.length === 0
-                  ? 'Marque al menos un checkbox "Imprimir ficha de lote" para habilitar'
-                  : `Imprimir ${selectedDraftsToPrint.length} ficha(s) seleccionada(s)`
-              }
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-md transition cursor-pointer"
+              title="Abrir vista de impresión para las fichas seleccionadas"
             >
               <Printer className="w-4 h-4 text-[#C9922E]" />
               <span>
-                Imprimir fichas seleccionadas ({selectedDraftsToPrint.length})
+                Imprimir fichas seleccionadas ({selectedDraftsToPrint.length > 0 ? selectedDraftsToPrint.length : draftLotes.length})
               </span>
             </button>
 
