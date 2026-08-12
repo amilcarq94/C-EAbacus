@@ -44,6 +44,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
   const [formTransporte, setFormTransporte] = useState('');
   const [formPatenteChasis, setFormPatenteChasis] = useState('');
   const [formPatenteAcoplado, setFormPatenteAcoplado] = useState('');
+  const [formTara, setFormTara] = useState<number | ''>('');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{
     nombre?: string;
@@ -51,6 +52,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
     transporte?: string;
     patenteChasis?: string;
     patenteAcoplado?: string;
+    tara?: string;
   }>({});
 
   // Import State
@@ -80,6 +82,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
     setFormTransporte('');
     setFormPatenteChasis('');
     setFormPatenteAcoplado('');
+    setFormTara('');
     setFormError('');
     setFieldErrors({});
     setShowModalAddEdit(true);
@@ -93,6 +96,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
     setFormTransporte(ch.transporte || '');
     setFormPatenteChasis(ch.patenteChasis || ch.patenteCamion || '');
     setFormPatenteAcoplado(ch.patenteAcoplado || '');
+    setFormTara(ch.tara !== undefined ? ch.tara : '');
     
     setFormError('');
     setFieldErrors({});
@@ -167,6 +171,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       patenteAcoplado: cleanAcoplado,
       patenteCamion: cleanChasis,
       patentes: `${cleanChasis} / ${cleanAcoplado}`,
+      tara: formTara !== '' && !isNaN(Number(formTara)) ? Number(formTara) : undefined,
     };
 
     try {
@@ -203,14 +208,16 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
         'CUIT': '20284910394',
         'Transporte': 'Transporte Expreso Pampa',
         'Patente chasis': 'AA123BB',
-        'Patente acoplado': 'CC456DD'
+        'Patente acoplado': 'CC456DD',
+        'Tara (kg)': 14500
       },
       {
         'Nombre': 'Juan Manuel Pérez',
         'CUIT': '20318492018',
         'Transporte': 'TransAgro',
         'Patente chasis': 'AB987CD',
-        'Patente acoplado': 'EF321GH'
+        'Patente acoplado': 'EF321GH',
+        'Tara (kg)': 15200
       }
     ];
 
@@ -220,7 +227,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       { wch: 18 }, // CUIT
       { wch: 32 }, // Transporte
       { wch: 18 }, // Patente chasis
-      { wch: 18 }  // Patente acoplado
+      { wch: 18 }, // Patente acoplado
+      { wch: 15 }  // Tara (kg)
     ];
 
     const wb = XLSX.utils.book_new();
@@ -241,7 +249,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       'CUIT': c.cuit || '—',
       'Transporte': c.transporte || '—',
       'Patente chasis': c.patenteChasis || c.patenteCamion || '—',
-      'Patente acoplado': c.patenteAcoplado || '—'
+      'Patente acoplado': c.patenteAcoplado || '—',
+      'Tara (kg)': c.tara !== undefined ? c.tara : '—'
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -251,7 +260,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
       { wch: 18 },
       { wch: 32 },
       { wch: 18 },
-      { wch: 18 }
+      { wch: 18 },
+      { wch: 15 }
     ];
 
     const wb = XLSX.utils.book_new();
@@ -302,6 +312,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
           const transporte = getVal(['transporte', 'empresa', 'razon social', 'flete']);
           const patenteChasis = getVal(['chasis', 'camion', 'camión', 'tractor']);
           const patenteAcoplado = getVal(['acoplado', 'remolque']);
+          const rawTara = getVal(['tara', 'peso tara']);
+          const parsedTara = rawTara ? parseFloat(rawTara.replace(/[^\d.]/g, '')) : undefined;
 
           if (nombre || cuit || transporte) {
             parsedChoferes.push({
@@ -311,7 +323,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
               patenteChasis: patenteChasis.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7),
               patenteAcoplado: patenteAcoplado.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7),
               patenteCamion: patenteChasis.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7),
-              patentes: patenteAcoplado ? `${patenteChasis} / ${patenteAcoplado}` : patenteChasis
+              patentes: patenteAcoplado ? `${patenteChasis} / ${patenteAcoplado}` : patenteChasis,
+              tara: parsedTara && !isNaN(parsedTara) ? parsedTara : undefined,
             });
           }
         });
@@ -351,7 +364,8 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
           patenteChasis: (item.patenteChasis || '').trim().toUpperCase(),
           patenteAcoplado: (item.patenteAcoplado || '').trim().toUpperCase(),
           patenteCamion: (item.patenteChasis || '').trim().toUpperCase(),
-          patentes: item.patenteAcoplado ? `${item.patenteChasis} / ${item.patenteAcoplado}` : (item.patenteChasis || '')
+          patentes: item.patenteAcoplado ? `${item.patenteChasis} / ${item.patenteAcoplado}` : (item.patenteChasis || ''),
+          tara: item.tara
         };
 
         const existing = findExistingChofer(candidateData, choferes);
@@ -559,6 +573,7 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                 <th className="py-3 px-4">Transporte</th>
                 <th className="py-3 px-4">Patente chasis</th>
                 <th className="py-3 px-4">Patente acoplado</th>
+                <th className="py-3 px-4">Tara (kg)</th>
                 <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
@@ -606,6 +621,16 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                       {c.patenteAcoplado ? (
                         <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200/80 font-bold uppercase">
                           {c.patenteAcoplado}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">—</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4 font-mono text-slate-800 font-semibold">
+                      {c.tara !== undefined && c.tara !== null ? (
+                        <span className="bg-emerald-50 text-emerald-900 px-2 py-0.5 rounded border border-emerald-200 font-bold">
+                          {c.tara.toLocaleString('es-AR')} kg
                         </span>
                       ) : (
                         <span className="text-slate-400 italic">—</span>
@@ -1028,6 +1053,33 @@ export const ChoferesView: React.FC<ChoferesViewProps> = ({ choferes = [], onUpd
                     6 o 7 caracteres alfanuméricos (ej: CC456DD o AA123BB).
                   </p>
                 )}
+              </div>
+
+              {/* 6. Tara del camión (kg) */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Tara del Camión (kg)</span>
+                  <span className="text-[10px] text-slate-400 normal-case font-medium">Peso en vacío</span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="ej: 14500"
+                    value={formTara}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormTara(val === '' ? '' : Math.max(0, Number(val)));
+                      if (fieldErrors.tara) setFieldErrors((prev) => ({ ...prev, tara: undefined }));
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none transition font-semibold"
+                  />
+                  <span className="absolute right-3 text-xs font-bold text-slate-400 pointer-events-none">kg</span>
+                </div>
+                <p className="text-slate-500 text-[11px] mt-1 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  Peso del vehículo en vacío. Se utilizará para calcular el Bruto en los reportes de Silos.
+                </p>
               </div>
 
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-2">

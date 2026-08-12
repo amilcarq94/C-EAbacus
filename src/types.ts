@@ -118,6 +118,7 @@ export interface Chofer {
   patenteAcoplado?: string;
   patenteCamion?: string;
   patentes?: string;
+  tara?: number; // Peso de la tara del camión en kg
 }
 
 export type SiloId = 'Silo 1' | 'Silo 2' | 'Silo 3' | 'Silo 4' | 'Silo 5' | 'Silo 6';
@@ -157,6 +158,8 @@ export interface MovimientoSilo {
   cuit?: string;
   patentes?: string;
   transporte?: string;
+  tara?: number; // Peso de la tara del camión (kg)
+  bruto?: number; // Peso bruto del camión (Tara + Kilos, kg)
 
   // Campos para EGRESO_MANUAL:
   motivoManual?: MotivoSalidaManual | string;
@@ -197,6 +200,8 @@ export interface SalidaRegistrada {
   envase: EnvaseType;
   kgPorBolsa: number; // Calculado de acuerdo al envase/lote
   totalKg: number;
+  taraCamion?: number; // Peso de la tara del camión (kg)
+  brutoCamion?: number; // Peso bruto del camión (Tara + Kilos, kg)
   choferFirma?: string; // Firma digital en formato base64 png
   remitoClienteAdjunto?: { nombre: string; data: string; type: string }; // Remito adjunto por el cliente
 }

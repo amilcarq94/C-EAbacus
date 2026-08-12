@@ -551,30 +551,41 @@ export const CHOFERES_INICIALES: Chofer[] = [
   {
     id: 'CHOFER-001',
     nombre: 'Carlos Gómez',
-    cuit: '20-28491039-4',
+    cuit: '20284910394',
     patentes: 'AA123BB / CC456DD',
-    transporte: 'Transporte Expreso Pampa'
+    transporte: 'Transporte Expreso Pampa',
+    patenteChasis: 'AA123BB',
+    patenteAcoplado: 'CC456DD',
+    tara: 14500
   },
   {
     id: 'CHOFER-002',
     nombre: 'Juan Manuel Pérez',
-    cuit: '20-31849201-8',
+    cuit: '20318492018',
     patentes: 'AB987CD / EF321GH',
-    transporte: 'TransAgro SRL'
+    transporte: 'TransAgro SRL',
+    patenteChasis: 'AB987CD',
+    patenteAcoplado: 'EF321GH',
+    tara: 15200
   },
   {
     id: 'CHOFER-003',
     nombre: 'Roberto Fernández',
-    cuit: '20-25948302-3',
+    cuit: '20259483023',
     patentes: 'AC456EF',
-    transporte: 'Logística del Campo'
+    transporte: 'Logística del Campo',
+    patenteChasis: 'AC456EF',
+    tara: 13800
   },
   {
     id: 'CHOFER-004',
     nombre: 'Marcelo Rodríguez',
-    cuit: '20-34928104-5',
+    cuit: '20349281045',
     patentes: 'AD789GH / JK123LM',
-    transporte: 'Transporte El Sur'
+    transporte: 'Transporte El Sur',
+    patenteChasis: 'AD789GH',
+    patenteAcoplado: 'JK123LM',
+    tara: 14800
   }
 ];
 

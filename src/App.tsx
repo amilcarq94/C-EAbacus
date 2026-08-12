@@ -2012,6 +2012,7 @@ export default function App() {
           <SalidasList
             salidas={filteredSalidasByCampania}
             lotes={filteredLotesByCampania}
+            choferes={choferes}
           />
         ) : null}
 

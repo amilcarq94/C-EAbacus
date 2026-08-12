@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { SalidaRegistrada, Lote } from '../types';
+import { SalidaRegistrada, Lote, Chofer } from '../types';
 import { formatNumberArg, formatDateStr } from '../utils/formatters';
 import { LogoSiloLoose } from './Logo';
 import { Search, Calendar, User, FileText, Printer, ArrowLeft, Paperclip, Download } from 'lucide-react';
@@ -13,9 +13,10 @@ import { Search, Calendar, User, FileText, Printer, ArrowLeft, Paperclip, Downlo
 interface SalidasListProps {
   salidas: SalidaRegistrada[];
   lotes: Lote[];
+  choferes?: Chofer[];
 }
 
-export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes }) => {
+export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes, choferes = [] }) => {
   // Estados para Filtros
   const [filterFecha, setFilterFecha] = useState('');
   const [filterCliente, setFilterCliente] = useState('');
@@ -49,6 +50,15 @@ export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes }) => {
         ? `ALA ${matchingLote.ala} · SECTOR ${matchingLote.sector}` 
         : '—';
 
+      const choferObj = choferes.find(
+        (c) => (c.nombre && s.choferNombre && c.nombre.trim().toLowerCase() === s.choferNombre.trim().toLowerCase()) ||
+               (c.cuit && s.choferDni && c.cuit.trim() === s.choferDni.trim())
+      );
+
+      const taraVal = s.taraCamion !== undefined ? s.taraCamion : (choferObj?.tara !== undefined ? choferObj.tara : 0);
+      const totalKgVal = s.totalKg || 0;
+      const brutoVal = s.brutoCamion !== undefined ? s.brutoCamion : (taraVal + totalKgVal);
+
       return {
         'N° REMITO': s.id,
         'FECHA': formatDateStr(s.fecha),
@@ -64,7 +74,9 @@ export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes }) => {
         'DNI CHOFER': s.choferDni || '—',
         'PATENTE CAMIÓN': s.patenteCamion || '—',
         'BOLSAS DESPACHADAS': s.cantidadBolsas,
-        'PESO TOTAL (KG)': s.totalKg
+        'BRUTO': brutoVal,
+        'TARA': taraVal,
+        'TOTAL DE KILOS INGRESADOS': totalKgVal
       };
     });
 
@@ -105,7 +117,9 @@ export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes }) => {
       'DNI CHOFER',
       'PATENTE CAMION',
       'BOLSAS DESPACHADAS',
-      'PESO TOTAL (KG)'
+      'BRUTO',
+      'TARA',
+      'TOTAL DE KILOS INGRESADOS'
     ];
 
     const rows = filteredSalidas.map(s => {
@@ -115,6 +129,15 @@ export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes }) => {
       const ubicacionStr = (matchingLote?.ala && matchingLote?.sector) 
         ? `ALA ${matchingLote.ala} · SECTOR ${matchingLote.sector}` 
         : '—';
+
+      const choferObj = choferes.find(
+        (c) => (c.nombre && s.choferNombre && c.nombre.trim().toLowerCase() === s.choferNombre.trim().toLowerCase()) ||
+               (c.cuit && s.choferDni && c.cuit.trim() === s.choferDni.trim())
+      );
+
+      const taraVal = s.taraCamion !== undefined ? s.taraCamion : (choferObj?.tara !== undefined ? choferObj.tara : 0);
+      const totalKgVal = s.totalKg || 0;
+      const brutoVal = s.brutoCamion !== undefined ? s.brutoCamion : (taraVal + totalKgVal);
 
       return [
         s.id,
@@ -131,7 +154,9 @@ export const SalidasList: React.FC<SalidasListProps> = ({ salidas, lotes }) => {
         s.choferDni || '—',
         s.patenteCamion || '—',
         s.cantidadBolsas,
-        s.totalKg
+        brutoVal,
+        taraVal,
+        totalKgVal
       ];
     });
 

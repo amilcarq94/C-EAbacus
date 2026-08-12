@@ -613,7 +613,7 @@ export const RegistrarSalida: React.FC<RegistrarSalidaProps> = ({
               <span className="block text-xs font-semibold uppercase tracking-wider text-[#C9922E]">
                 Datos del Chofer y Camión Transportista
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
                 <div>
                   <ChoferSearchSelector
                     choferes={choferes}
@@ -630,26 +630,30 @@ export const RegistrarSalida: React.FC<RegistrarSalidaProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">DNI / Documento Conductor *</label>
+                  <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1 h-[20px] flex items-center gap-1">
+                    <span>DNI / Documento Conductor *</span>
+                  </label>
                   <input
                     type="text"
                     id="input-chofer-dni"
                     value={choferDni}
                     onChange={(e) => setChoferDni(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C9922E]"
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C9922E] text-xs font-mono h-[38px]"
                     placeholder="Ej: 28.432.190"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1.5">Patente Camión / Acoplado *</label>
+                  <label className="block text-[10px] font-bold text-gray-700 uppercase tracking-wider mb-1 h-[20px] flex items-center gap-1">
+                    <span>Patente Camión / Acoplado *</span>
+                  </label>
                   <input
                     type="text"
                     id="input-camion-patente"
                     value={patenteCamion}
                     onChange={(e) => setPatenteCamion(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C9922E] uppercase font-mono"
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C9922E] uppercase font-mono text-xs h-[38px]"
                     placeholder="Ej: AE 321 OP"
                     required
                   />

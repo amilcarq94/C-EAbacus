@@ -12,7 +12,7 @@ import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { findExistingChofer, mergeChoferData } from '../utils/choferes';
 import { getSiloActiveData } from '../utils/siloValidation';
 import { formatKg } from '../utils/formatters';
-import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit } from 'lucide-react';
+import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit, CreditCard, Building2, Scale } from 'lucide-react';
 import { ClienteSelect } from './ClienteSelect';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
 import {
@@ -149,6 +149,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [choferCuit, setChoferCuit] = useState('');
   const [choferPatentes, setChoferPatentes] = useState('');
   const [choferTransporte, setChoferTransporte] = useState('');
+  const [choferTara, setChoferTara] = useState<number | ''>('');
 
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -207,21 +208,32 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       const patentesDisplay = isFlete ? '-' : (m.patentes || '-');
       const transporteDisplay = isFlete ? (m.transporte || m.chofer || 'Flete Montaner') : (m.transporte || '-');
 
+      const choferObj = (choferes || []).find(
+        (c) => (c.nombre && m.chofer && c.nombre.trim().toLowerCase() === m.chofer.trim().toLowerCase()) ||
+               (c.cuit && m.cuit && c.cuit.trim() === m.cuit.trim())
+      );
+
+      const taraVal = m.tara !== undefined ? m.tara : (choferObj?.tara !== undefined ? choferObj.tara : 0);
+      const kilosIngresados = m.kg || 0;
+      const brutoVal = m.bruto !== undefined ? m.bruto : (taraVal + kilosIngresados);
+
       return {
         'Silo': m.siloId,
         'Fecha': m.fecha,
         'Cliente': m.cliente || '-',
         'Especie': m.especie || '-',
         'Variedad': m.variedad || '-',
-        'Kilos': m.kg,
-        'N° Bolsón Origen': m.bolsonOrigenNro || '-',
-        'Origen': m.campoOrigen || m.depositoOrigen || '-',
-        'Sector': m.bolsonOrigenSector || m.sector || '-',
-        'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
         'Chofer': choferDisplay,
         'CUIT': cuitDisplay,
         'Patentes': patentesDisplay,
         'Transporte': transporteDisplay,
+        'Bruto': brutoVal,
+        'Tara': taraVal,
+        'Total de Kilos Ingresados': kilosIngresados,
+        'N° Bolsón Origen': m.bolsonOrigenNro || '-',
+        'Origen': m.campoOrigen || m.depositoOrigen || '-',
+        'Sector': m.bolsonOrigenSector || m.sector || '-',
+        'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
         'Tipo Movimiento': m.tipo === 'INGRESO' ? 'Ingreso' : m.tipo === 'EGRESO_MANUAL' ? `Salida Manual (${m.motivoManual || 'Manual'})` : m.tipo === 'EGRESO_LOTE' ? `Salida por Lote (${m.loteNro || ''})` : 'Egreso',
         'Descontaminación Varietal': m.descontaminacionVarietal ? 'Sí' : 'No',
         'Observaciones': m.observaciones || m.motivoZero || m.motivoAjuste || '-'
@@ -837,6 +849,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       cuit: cuitVal,
       patentes: patentesVal,
       transporte: transporteVal,
+      tara: typeof choferTara === 'number' ? choferTara : undefined,
+      bruto: typeof choferTara === 'number' ? (choferTara + kgNuevos) : undefined,
     };
 
     if (tipoTransporte === 'CHOFER' && choferNombre.trim() && onSaveChofer) {
@@ -845,6 +859,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         cuit: choferCuit.trim(),
         patentes: choferPatentes.trim(),
         transporte: choferTransporte.trim(),
+        tara: typeof choferTara === 'number' ? choferTara : undefined,
       };
       const existing = findExistingChofer(candidateData, choferes);
       const choferToSave = mergeChoferData(existing, candidateData);
@@ -863,6 +878,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     setChoferCuit('');
     setChoferPatentes('');
     setChoferTransporte('');
+    setChoferTara('');
     setTimeout(() => setFormSuccess(''), 4000);
   };
 
@@ -1839,11 +1855,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             </div>
 
             {/* Sección Chofer y Transporte (con Selector ON/OFF Chofer / Flete) */}
-            <div className="sm:col-span-2 lg:col-span-4 p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
+            <div className="sm:col-span-2 lg:col-span-4 p-4 bg-white border border-slate-200 rounded-xl space-y-3.5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-emerald-700" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Datos de Movimiento / Transporte</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Datos de Movimiento / Transporte
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1852,18 +1870,18 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setTipoTransporte('CHOFER')}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition ${
                         tipoTransporte === 'CHOFER'
                           ? 'bg-emerald-700 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      Chofer
+                      Chofer Conductor
                     </button>
                     <button
                       type="button"
                       onClick={() => setTipoTransporte('FLETE')}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition ${
                         tipoTransporte === 'FLETE'
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
@@ -1874,7 +1892,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   </div>
 
                   {tipoTransporte === 'CHOFER' && (
-                    <label className="cursor-pointer px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1">
+                    <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5">
                       <Upload className="w-3.5 h-3.5 text-slate-600" />
                       <span>Importar Excel</span>
                       <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUploadChoferes} className="hidden" />
@@ -1884,20 +1902,22 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               </div>
 
               {importNoticeChoferes && tipoTransporte === 'CHOFER' && (
-                <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-lg">
-                  {importNoticeChoferes}
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-lg flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{importNoticeChoferes}</span>
                 </div>
               )}
 
               {tipoTransporte === 'FLETE' ? (
-                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
-                  <label className="block text-xs font-bold uppercase text-amber-900">
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-amber-700" />
                     Seleccionar Empresa de Flete *
                   </label>
                   <select
                     value={fleteOpcion}
                     onChange={(e) => setFleteOpcion(e.target.value as 'Flete Montaner' | 'Flete Agro Abacus')}
-                    className="w-full sm:w-80 px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 shadow-2xs outline-none"
+                    className="w-full sm:w-80 px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 shadow-2xs outline-none h-[38px]"
                   >
                     <option value="Flete Montaner">Flete Montaner</option>
                     <option value="Flete Agro Abacus">Flete Agro Abacus</option>
@@ -1907,7 +1927,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
                   {/* Chofer Search Selector */}
                   <div>
                     <ChoferSearchSelector
@@ -1918,6 +1938,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                         setChoferCuit(ch.cuit || '');
                         setChoferPatentes(ch.patentes || '');
                         setChoferTransporte(ch.transporte || '');
+                        if (ch.tara !== undefined) setChoferTara(ch.tara);
                       }}
                       onManualChange={(val) => setChoferNombre(val)}
                       onSaveNewChofer={(data) => {
@@ -1927,7 +1948,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                             nombre: data.nombre,
                             cuit: choferCuit.trim() || '—',
                             patentes: choferPatentes.trim() || '—',
-                            transporte: choferTransporte.trim() || 'Sin Transporte'
+                            transporte: choferTransporte.trim() || 'Sin Transporte',
+                            tara: typeof choferTara === 'number' ? choferTara : undefined
                           });
                         }
                       }}
@@ -1937,44 +1959,65 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
                   {/* CUIT Chofer */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      CUIT / DNI Chofer
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1 h-[20px]">
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>CUIT / DNI Chofer</span>
                     </label>
                     <input
                       type="text"
                       placeholder="ej: 20-34567890-9"
                       value={choferCuit}
                       onChange={(e) => setChoferCuit(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px]"
                     />
                   </div>
 
                   {/* Patente(s) */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Patente(s) Camión / Acoplado
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1 h-[20px]">
+                      <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Patente Camión / Acoplado</span>
                     </label>
                     <input
                       type="text"
                       placeholder="ej: AA123BB / AC456DD"
                       value={choferPatentes}
                       onChange={(e) => setChoferPatentes(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px]"
                     />
                   </div>
 
                   {/* Empresa de Transporte */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Empresa / Transporte
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1 h-[20px]">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Empresa / Transporte</span>
                     </label>
                     <input
                       type="text"
                       placeholder="ej: Transportes El Rapido..."
                       value={choferTransporte}
                       onChange={(e) => setChoferTransporte(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px]"
                     />
+                  </div>
+
+                  {/* Tara del Camión */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1 h-[20px]">
+                      <Scale className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Tara Camión (kg)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        placeholder="ej: 14500"
+                        value={choferTara}
+                        onChange={(e) => setChoferTara(e.target.value !== '' ? Number(e.target.value) : '')}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px] pr-8"
+                      />
+                      <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 font-mono">kg</span>
+                    </div>
                   </div>
                 </div>
               )}
