@@ -131,20 +131,17 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
   };
 
   const handlePrintSelectedFichas = () => {
-    let draftsToUse = selectedDraftsToPrint;
-    
-    // Si no hay ninguno tildado explícitamente, seleccionamos todos por defecto
-    if (draftsToUse.length === 0) {
-      draftsToUse = draftLotes;
-      setDraftLotes(prev => prev.map(item => ({ ...item, printFicha: true })));
-    }
+    setErrorMsg('');
 
-    if (draftsToUse.length === 0) return;
+    if (selectedDraftsToPrint.length === 0) {
+      setErrorMsg('No hay fichas seleccionadas para imprimir. Por favor, tilde el casillero "Imprimir ficha de lote" en los lotes deseados.');
+      return;
+    }
 
     const fechaActual = new Date().toISOString().split('T')[0];
     const ubicacionStr = ala && sector ? `Ala ${ala} - Sector ${sector}` : '';
 
-    const lotesToPrint: Lote[] = draftsToUse.map(draft => {
+    const lotesToPrint: Lote[] = selectedDraftsToPrint.map(draft => {
       const stockKgCalculado = draft.stockBolsas * draft.kgPorBolsa;
       const normNro = draft.loteNro.trim() || 'S/N';
       return {
@@ -458,7 +455,7 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
           >
             <Printer className="w-4 h-4 text-slate-950" />
             <span>
-              Imprimir Fichas ({selectedDraftsToPrint.length > 0 ? selectedDraftsToPrint.length : draftLotes.length})
+              Imprimir Fichas ({selectedDraftsToPrint.length})
             </span>
           </button>
 
@@ -911,7 +908,7 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
             >
               <Printer className="w-4 h-4 text-[#C9922E]" />
               <span>
-                Imprimir fichas seleccionadas ({selectedDraftsToPrint.length > 0 ? selectedDraftsToPrint.length : draftLotes.length})
+                Imprimir fichas seleccionadas ({selectedDraftsToPrint.length})
               </span>
             </button>
 
