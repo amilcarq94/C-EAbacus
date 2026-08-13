@@ -736,45 +736,45 @@ export const DashboardReporteProduccion: React.FC<DashboardReporteProduccionProp
           </div>
 
           {/* SELECTOR DE SUB-REPORTES (TABS PRINCIPALES) */}
-          <div className="flex bg-slate-950/40 p-1.5 rounded-2xl border border-white/10 backdrop-blur-md shadow-inner shrink-0">
+          <div className="flex flex-wrap sm:flex-nowrap bg-slate-950/40 p-1.5 rounded-2xl border border-white/10 backdrop-blur-md shadow-inner shrink-0 w-full sm:w-auto gap-1">
             
             {/* Opción 1: Reporte de Clasificación */}
             <button
               onClick={() => setActiveSubReporte('clasificacion')}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
                 activeSubReporte === 'clasificacion'
                   ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black shadow-lg scale-[1.02]'
                   : 'text-emerald-100 hover:text-white hover:bg-white/10'
               }`}
             >
               <Boxes className="w-4 h-4" />
-              <span>Reporte de Clasificación</span>
+              <span>Clasificación</span>
             </button>
 
             {/* Opción 2: Reporte de Curado */}
             <button
               onClick={() => setActiveSubReporte('curado')}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
                 activeSubReporte === 'curado'
                   ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black shadow-lg scale-[1.02]'
                   : 'text-emerald-100 hover:text-white hover:bg-white/10'
               }`}
             >
               <FlaskConical className="w-4 h-4" />
-              <span>Reporte de Curado</span>
+              <span>Curado</span>
             </button>
 
             {/* Opción 3: Cumplimiento de Objetivos */}
             <button
               onClick={() => setActiveSubReporte('cumplimiento')}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 cursor-pointer ${
                 activeSubReporte === 'cumplimiento'
                   ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black shadow-lg scale-[1.02]'
                   : 'text-emerald-100 hover:text-white hover:bg-white/10'
               }`}
             >
               <Target className="w-4 h-4" />
-              <span>Cumplimiento de Objetivos</span>
+              <span>Cumplimiento</span>
             </button>
 
           </div>

@@ -1641,28 +1641,28 @@ export default function App() {
       </header>
 
       {/* 2. MENÚ DE NAVEGACIÓN TABULAR */}
-      <nav className="fixed top-16 left-0 right-0 h-12 bg-[#00603C] border-b border-[#254731] px-4 md:px-8 flex items-center overflow-x-auto z-40 shadow-inner scrollbar-none print:hidden">
-        <div className="flex gap-1 md:gap-2 w-full max-w-7xl mx-auto">
+      <nav className="fixed top-16 left-0 right-0 h-12 bg-[#00603C] border-b border-[#254731] px-2 sm:px-4 md:px-8 flex items-center overflow-x-auto z-40 shadow-inner scrollbar-none print:hidden">
+        <div className="flex gap-1 md:gap-2 w-full max-w-7xl mx-auto items-center flex-nowrap shrink-0">
           
           {/* Tab Dashboard */}
           <button
             id="nav-tab-dashboard"
             onClick={() => navigateTo('dashboard')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
               activeView === 'dashboard'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
-            Control
+            <span>Control</span>
           </button>
 
           {/* Tab Reporte de Producción */}
           <button
             id="nav-tab-reporte-produccion"
             onClick={() => navigateTo('reporte-produccion')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
               activeView === 'reporte-produccion'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
@@ -1677,21 +1677,21 @@ export default function App() {
           <button
             id="nav-tab-ordenes-proceso"
             onClick={() => navigateTo('ordenes-proceso')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
               activeView === 'ordenes-proceso'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <ClipboardList className="w-4 h-4" />
-            Órdenes de Proceso
+            <span>Órdenes de Proceso</span>
           </button>
 
           {/* Tab Ingreso a Silos */}
           <button
             id="nav-tab-ingreso-silos"
             onClick={() => navigateTo('ingreso-silos')}
-            className={`relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`shrink-0 whitespace-nowrap relative flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
               activeView === 'ingreso-silos'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
                 : tieneAlertaSilo95
@@ -1737,7 +1737,7 @@ export default function App() {
             aria-current={(activeView === 'lotes' || loteSeleccionado) ? 'page' : undefined}
             aria-label={`Pestaña Lotes. Gestión de inventario y clasificación de semillas${criticalLotesCount > 0 ? `. Alerta: ${criticalLotesCount} lotes con stock crítico` : ''}`}
             onClick={handleLotesClick}
-            className={`group relative flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 active:opacity-85 active:z-20 active:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C9922E] focus:ring-offset-2 focus:ring-offset-[#00603C] ${
+            className={`shrink-0 whitespace-nowrap group relative flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 active:opacity-85 active:z-20 active:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C9922E] focus:ring-offset-2 focus:ring-offset-[#00603C] ${
               activeView === 'lotes' || loteSeleccionado
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-md font-bold z-10'
                 : 'text-white hover:bg-white/10'
@@ -1803,7 +1803,7 @@ export default function App() {
           <button
             id="nav-tab-generar-lote"
             onClick={() => navigateTo('generar-lote')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-300 ${
               activeView === 'generar-lote'
                 ? 'bg-amber-400 text-slate-950 font-black shadow-[0_0_16px_rgba(251,191,36,0.8)] ring-2 ring-amber-300'
                 : 'bg-amber-500/20 text-amber-300 hover:bg-amber-400 hover:text-slate-950 border border-amber-400/40'
@@ -1813,38 +1813,40 @@ export default function App() {
             <PackagePlus className="w-4 h-4" />
             <span>Generar Lote</span>
           </button>
+          
+          {/* Tab Despachos */}
           <button
             id="nav-tab-despachos"
             onClick={() => navigateTo('despachos')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
               activeView === 'despachos'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <ClipboardCheck className="w-4 h-4" />
-            Despachos
+            <span>Despachos</span>
           </button>
 
           {/* Tab Historial Salidas */}
           <button
             id="nav-tab-historial-salidas"
             onClick={() => navigateTo('salidas-registradas')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
               activeView === 'salidas-registradas'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
                 : 'text-white hover:bg-white/10'
             }`}
           >
             <History className="w-4 h-4" />
-            Historial Salidas
+            <span>Historial Salidas</span>
           </button>
 
           {/* Tab Data Bases (Choferes y Bolsones) */}
           <button
             id="nav-tab-choferes"
             onClick={() => navigateTo('choferes')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
               activeView === 'choferes'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
                 : 'text-white hover:bg-white/10'
@@ -1858,7 +1860,7 @@ export default function App() {
           <button
             id="nav-tab-importar"
             onClick={() => navigateTo('importar')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
               activeView === 'importar'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
                 : 'text-white hover:bg-white/10'
@@ -1875,7 +1877,7 @@ export default function App() {
       {/* 3. BANNER DE NOTIFICACIONES GLOBAL DESACTIVADO */}
 
       {/* 4. ÁREA DE CONTENIDO */}
-      <main className="flex-grow pt-32 pb-16 px-4 md:px-8 w-full max-w-7xl mx-auto relative z-10 print:pt-4 print:pb-4">
+      <main className="flex-grow pt-32 pb-16 px-3 sm:px-4 md:px-8 w-full max-w-7xl mx-auto relative z-10 print:pt-4 print:pb-4">
         
         {/* RUTA DE COMPONENTES SEGÚN VISTA ACTIVA */}
         {loteSeleccionado ? (

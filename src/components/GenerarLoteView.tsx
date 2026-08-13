@@ -445,24 +445,24 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
           </div>
         </div>
 
-        {/* Action buttons: Imprimir Fichas / Volver sin guardar */}
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        {/* Action buttons: Aceptar e Imprimir / Volver sin guardar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 w-full sm:w-auto">
           <button
             type="button"
             onClick={handlePrintSelectedFichas}
-            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-md cursor-pointer border border-amber-300"
-            title="Imprimir fichas técnicas seleccionadas"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition shadow-md cursor-pointer border border-amber-300"
+            title="Imprimir únicamente la Ficha Técnica de los lotes con el checkbox marcado"
           >
             <Printer className="w-4 h-4 text-slate-950" />
             <span>
-              Imprimir Fichas ({selectedDraftsToPrint.length})
+              Aceptar e Imprimir ({selectedDraftsToPrint.length})
             </span>
           </button>
 
           <button
             type="button"
             onClick={onNavigateToLotes}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition border border-white/20 cursor-pointer"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition border border-white/20 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Volver sin guardar</span>
@@ -903,12 +903,12 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
             <button
               type="button"
               onClick={handlePrintSelectedFichas}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-md transition cursor-pointer"
-              title="Abrir vista de impresión para las fichas seleccionadas"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-md transition cursor-pointer border border-amber-300"
+              title="Imprimir únicamente la Ficha Técnica de los lotes con el checkbox marcado"
             >
-              <Printer className="w-4 h-4 text-[#C9922E]" />
+              <Printer className="w-4 h-4 text-slate-950" />
               <span>
-                Imprimir fichas seleccionadas ({selectedDraftsToPrint.length})
+                Aceptar e Imprimir ({selectedDraftsToPrint.length})
               </span>
             </button>
 

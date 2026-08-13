@@ -99,18 +99,24 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
       ? `Sector ${lote.sector}`
       : 'Sin ubicar');
 
-  // QR Payload
+  // Código QR de Trazabilidad Oficial Completa del Lote
   const qrPayload = JSON.stringify({
-    lote: lote.loteNro,
-    cliente: lote.cliente,
-    especie: lote.especie,
-    variedad: lote.variedad,
-    categoria: lote.categoria,
-    tipo: lote.tipo,
-    bolsas: lote.stockBolsas,
-    kg: lote.stockKg,
-    orden: ordenProcesoMovimientoDisplay,
-    bolson: bolsonOrigenDisplay,
+    empresa: 'AGRO ABACUS S.A. - PLANTA CLASIFICADORA LA BARRANCOSA',
+    loteNro: lote.loteNro || 'S/N',
+    cliente: lote.cliente || 'Sin Cliente',
+    especie: especieDisplay,
+    variedad: variedadDisplay,
+    categoria: categoriaDisplay,
+    tipo: tipoLoteDisplay,
+    tratamiento: tratamientoDisplay,
+    fechaRealizado: fechaRealizadoDisplay,
+    ordenProcesoMovimiento: ordenProcesoMovimientoDisplay,
+    bolsonOrigen: bolsonOrigenDisplay,
+    sectorBolsonOrigen: sectorBolsonOrigenDisplay,
+    stockBolsas: lote.stockBolsas || 0,
+    kgPorBolsa: lote.kgPorBolsa || (lote.stockBolsas > 0 ? Math.round(lote.stockKg / lote.stockBolsas) : 1000),
+    stockKgTotal: lote.stockKg || 0,
+    ubicacionAcopio: ubicacionAcopioDisplay,
     id: lote.id,
   });
 
