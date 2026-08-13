@@ -1196,6 +1196,39 @@ export default function App() {
     }
   };
 
+  const handleRegistrarIngresosMultipleSilo = async (movimientos: MovimientoSilo[]) => {
+    try {
+      const batch = writeBatch(db);
+      let totalKg = 0;
+      const siloTarget = movimientos[0]?.siloId || 'Silo';
+
+      for (const mov of movimientos) {
+        const docRef = doc(db, 'movimientos_silo', mov.id);
+        batch.set(docRef, mov);
+        totalKg += mov.kg;
+
+        const targetBolson = (mov.bolsonOrigenId ? bolsones.find(b => b.id === mov.bolsonOrigenId) : null)
+          || (mov.bolsonOrigenNro ? bolsones.find(b => b.numeroBolson.toLowerCase().trim() === mov.bolsonOrigenNro.toLowerCase().trim()) : null);
+
+        if (targetBolson) {
+          const nuevasSalidas = (targetBolson.salidasKg || 0) + mov.kg;
+          const nuevoStock = Math.max(0, (targetBolson.entradasKg || 0) - nuevasSalidas);
+          const bolsonRef = doc(db, 'bolsones_campo', targetBolson.id);
+          batch.update(bolsonRef, {
+            salidasKg: nuevasSalidas,
+            stockKg: nuevoStock
+          });
+        }
+      }
+
+      await batch.commit();
+      showNotification(`Carga múltiple exitosa: ${movimientos.length} camiones (${totalKg.toLocaleString('es-AR')} kg) ingresados a ${siloTarget}.`);
+    } catch (e) {
+      console.error('Error al registrar carga múltiple en silos:', e);
+      showNotification('Error al registrar carga múltiple de camiones en silo.');
+    }
+  };
+
   const handleRegistrarSalidaManualSilo = async (movimiento: MovimientoSilo) => {
     try {
       const docRef = doc(db, 'movimientos_silo', movimiento.id);
@@ -1966,6 +1999,7 @@ export default function App() {
             choferes={choferes}
             bolsones={bolsones}
             onRegistrarIngreso={handleRegistrarIngresoSilo}
+            onRegistrarIngresosMultiple={handleRegistrarIngresosMultipleSilo}
             onRegistrarSalidaManual={handleRegistrarSalidaManualSilo}
             onSaveChofer={handleSaveChofer}
             onImportChoferes={handleImportChoferes}

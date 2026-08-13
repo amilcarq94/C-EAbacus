@@ -148,111 +148,42 @@ export const LoteForm: React.FC<LoteFormProps> = ({
     return ordenesProceso.filter(op => op.estado === 'EN CURSO' || (loteAEditar && op.id === loteAEditar.ordenProcesoId));
   }, [ordenesProceso, loteAEditar]);
 
-  // Bolsones disponibles filtrados estrictamente por el/los Silo(s) de Origen (Extracción) seleccionados con stock > 0
-  const bolsonesFiltradosPorSilo = useMemo(() => {
-    const selectedSiloIds = (silosOrigen || []).map(s => s.siloId).filter(Boolean);
-    
-    if (selectedSiloIds.length === 0) {
-      return []; // Sin silos de origen seleccionados aún
-    }
+  // Bolsones disponibles para selección informativa (no restringe vinculación de silos)
+  const bolsonesDisponibles = useMemo(() => {
+    const bolsonMap = new Map<string, BolsonCampo>();
 
-    // 1. Obtener movimientos de tipo INGRESO para los silos de origen seleccionados (posteriores al último AJUSTE_ZERO o bal=0)
-    const bolsonNrosValidos = new Set<string>();
-    const bolsonIdsValidos = new Set<string>();
-    const bolsonMapExtra = new Map<string, BolsonCampo>();
-
-    selectedSiloIds.forEach(siloId => {
-      const movsSilo = (movimientosSilo || [])
-        .filter(m => m.siloId === siloId)
-        .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (a.id || '').localeCompare(b.id || ''));
-
-      // Verificar el balance acumulado del silo para localizar el inicio de la carga activa del silo
-      let currentBal = 0;
-      let lastZeroIdx = -1;
-      movsSilo.forEach((m, idx) => {
-        if (m.tipo === 'INGRESO') {
-          currentBal += m.kg;
-        } else if (m.tipo === 'EGRESO_OP' || (m.tipo as string).startsWith('EGRESO')) {
-          currentBal = Math.max(0, currentBal - m.kg);
-        } else if (m.tipo === 'AJUSTE_ZERO') {
-          currentBal = 0;
-        }
-        if (currentBal === 0) {
-          lastZeroIdx = idx;
-        }
-      });
-
-      // Si el stock actual del silo es 0, no hay bolsones activos con stock > 0 en este silo
-      if (currentBal <= 0) {
-        return;
+    // 1. Bolsones de la base de datos
+    (bolsones || []).forEach(b => {
+      if (b.numeroBolson) {
+        bolsonMap.set(b.numeroBolson.trim().toLowerCase(), b);
       }
-
-      // Movimientos de la carga activa posterior al último punto de stock 0 o AJUSTE_ZERO
-      const activeBatchMovs = lastZeroIdx >= 0 ? movsSilo.slice(lastZeroIdx + 1) : movsSilo;
-
-      activeBatchMovs.forEach(m => {
-        if (m.tipo === 'INGRESO') {
-          if (m.bolsonOrigenId) {
-            bolsonIdsValidos.add(m.bolsonOrigenId);
-          }
-          if (m.bolsonOrigenNro && m.bolsonOrigenNro.trim()) {
-            const normNro = m.bolsonOrigenNro.trim().toLowerCase();
-            bolsonNrosValidos.add(normNro);
-
-            if (!bolsonMapExtra.has(normNro)) {
-              bolsonMapExtra.set(normNro, {
-                id: m.bolsonOrigenId || `MOV-BOLSON-${m.bolsonOrigenNro}`,
-                campania: '2025/2026',
-                numeroBolson: m.bolsonOrigenNro,
-                cliente: m.cliente || cliente || 'San Diego Semillas',
-                cultivo: m.especie || 'Soja',
-                variedad: m.variedad || '-',
-                categoria: m.categoria || 'Original',
-                campo: m.campoOrigen || '-',
-                zona: m.bolsonOrigenSector || '-',
-                entradasKg: m.kg || 0,
-                salidasKg: 0,
-                stockKg: m.kg || 0
-              });
-            }
-          }
-        }
-      });
     });
 
-    // 2. Filtrar bolsones para incluir únicamente aquellos con stock en el silo > 0 (sin incluir histórico consumido)
-    const matchedFromProp = bolsones.filter(b => {
-      const normNro = (b.numeroBolson || '').trim().toLowerCase();
-      const isMatchBySilo = (b.id && bolsonIdsValidos.has(b.id)) || (normNro && bolsonNrosValidos.has(normNro));
-      if (!isMatchBySilo) return false;
-
-      const currentStock = b.stockKg !== undefined ? b.stockKg : ((b.entradasKg || 0) - (b.salidasKg || 0));
-      
-      const isCurrentlySelectedInEditing = loteAEditar && (
-        (b.id && b.id === loteAEditar.bolsonOrigenId) ||
-        (b.numeroBolson && loteAEditar.numeroBolsonOrigen && b.numeroBolson.toLowerCase() === loteAEditar.numeroBolsonOrigen.toLowerCase())
-      );
-
-      return currentStock > 0 || isCurrentlySelectedInEditing;
-    });
-
-    const matchedNros = new Set(matchedFromProp.map(b => b.numeroBolson.trim().toLowerCase()));
-    const extraList: BolsonCampo[] = [];
-    bolsonMapExtra.forEach((item, normNro) => {
-      if (!matchedNros.has(normNro)) {
-        const itemStock = item.stockKg !== undefined ? item.stockKg : ((item.entradasKg || 0) - (item.salidasKg || 0));
-        const isCurrentlySelectedInEditing = loteAEditar && (
-          (item.id && item.id === loteAEditar.bolsonOrigenId) ||
-          (item.numeroBolson && loteAEditar.numeroBolsonOrigen && item.numeroBolson.toLowerCase() === loteAEditar.numeroBolsonOrigen.toLowerCase())
-        );
-        if (itemStock > 0 || isCurrentlySelectedInEditing) {
-          extraList.push(item);
+    // 2. Bolsones presentes en movimientos de silos
+    (movimientosSilo || []).forEach(m => {
+      if (m.bolsonOrigenNro && m.bolsonOrigenNro.trim()) {
+        const norm = m.bolsonOrigenNro.trim().toLowerCase();
+        if (!bolsonMap.has(norm)) {
+          bolsonMap.set(norm, {
+            id: m.bolsonOrigenId || `MOV-BOLSON-${m.bolsonOrigenNro}`,
+            campania: '2025/2026',
+            numeroBolson: m.bolsonOrigenNro,
+            cliente: m.cliente || cliente || 'San Diego Semillas',
+            cultivo: m.especie || 'Soja',
+            variedad: m.variedad || '-',
+            categoria: m.categoria || 'Original',
+            campo: m.campoOrigen || '-',
+            zona: m.bolsonOrigenSector || '-',
+            entradasKg: m.kg || 0,
+            salidasKg: 0,
+            stockKg: m.kg || 0
+          });
         }
       }
     });
 
-    return [...matchedFromProp, ...extraList];
-  }, [silosOrigen, movimientosSilo, bolsones, cliente, loteAEditar]);
+    return Array.from(bolsonMap.values());
+  }, [bolsones, movimientosSilo, cliente]);
 
   // Inicializar o cargar lote a editar
   useEffect(() => {
@@ -812,10 +743,10 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                   <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white/90 p-3 rounded-xl border border-emerald-200/80 shadow-2xs">
                     <div className="md:col-span-7">
                       <label className="block text-[11px] font-bold text-emerald-950 uppercase tracking-wider mb-1">
-                        Bolsón de Origen {origenesBolson.length > 1 ? `#${idx + 1}` : ''}
+                        Bolsón de Origen {origenesBolson.length > 1 ? `#${idx + 1}` : ''} <span className="text-gray-400 font-normal lowercase">(informativo)</span>
                       </label>
                       <BolsonSearchSelector
-                        bolsones={bolsonesFiltradosPorSilo}
+                        bolsones={bolsonesDisponibles}
                         selectedBolsonId={origen.bolsonId}
                         selectedBolsonNro={origen.bolsonNro}
                         onSelectBolson={(bolson) => {
@@ -837,13 +768,7 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                           }
                         }}
                         label=""
-                        placeholder={
-                          silosOrigen.length === 0
-                            ? "Seleccione primero el Silo de Origen abajo..."
-                            : bolsonesFiltradosPorSilo.length === 0
-                            ? "Sin bolsones registrados para este Silo"
-                            : "Buscar bolsón por N°, cliente, cultivo, variedad..."
-                        }
+                        placeholder="Buscar bolsón por N°, cliente, cultivo, variedad..."
                       />
                     </div>
 
@@ -885,23 +810,15 @@ export const LoteForm: React.FC<LoteFormProps> = ({
                 ))}
               </div>
 
-              {silosOrigen.length === 0 ? (
-                <p className="text-[11px] text-amber-800 bg-amber-50/90 p-2 rounded-lg border border-amber-200 mt-1 flex items-center gap-1.5 font-medium">
-                  <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>
-                    Para seleccionar el Bolsón de Origen, primero elija el <strong>Silo de Origen (Extracción)</strong> en la sección inferior. Las opciones quedan predefinidas y filtradas por el silo seleccionado.
-                  </span>
-                </p>
-              ) : (
-                <div className="mt-1 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-600 font-medium">
-                    Filtrado por Silo(s): <strong className="text-slate-800 font-mono">{silosOrigen.map(s => s.siloId).join(', ')}</strong> ({bolsonesFiltradosPorSilo.length} bolsón(es) de origen hallado(s))
-                  </span>
-                  <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200 shadow-2xs">
-                    Sin afectación de stock
-                  </span>
-                </div>
-              )}
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="text-slate-600 font-medium flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Dato informativo de trazabilidad. No descuenta stock ni restringe la vinculación a Silos (solo deben coincidir <strong>Cliente</strong> y <strong>Variedad</strong>).</span>
+                </span>
+                <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full font-bold border border-emerald-200 shadow-2xs">
+                  {origenesBolson.filter(o => o.bolsonNro).length} bolsón(es) asignado(s)
+                </span>
+              </div>
             </div>
           </div>
         </div>

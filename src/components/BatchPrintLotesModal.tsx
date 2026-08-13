@@ -89,19 +89,38 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
           }
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm 8mm 10mm;
+            margin: 8mm 8mm 8mm 8mm;
           }
-          header, nav, footer, button, .print\\:hidden, #nav-tab-dashboard, #nav-tab-lotes, #nav-tab-despachos, #nav-tab-historial-salidas, #nav-tab-importar, #lotes-stats-summary-bar {
+          body > *:not(.batch-print-modal-container) {
             display: none !important;
+          }
+          header, nav, aside, footer, button, .print\\:hidden, #nav-tab-dashboard, #nav-tab-lotes, #nav-tab-despachos, #nav-tab-historial-salidas, #nav-tab-importar, #lotes-stats-summary-bar {
+            display: none !important;
+          }
+          .batch-print-modal-container {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            display: block !important;
+            overflow: visible !important;
           }
           .batch-print-page-break {
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            height: 275mm !important;
             max-height: 275mm !important;
             overflow: hidden !important;
             box-sizing: border-box !important;
+            margin-bottom: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
           }
           .batch-print-page-break:last-child {
             page-break-after: auto !important;

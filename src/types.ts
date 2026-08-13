@@ -21,10 +21,49 @@ export type EstadoRegistroLote = 'PRE-CARGA' | 'REALIZADO' | 'EN_CURSO';
 export interface AuditLogEntry {
   id: string;
   fechaHora: string; // Formato ISO 8601
-  tipo: 'Stock' | 'Edición' | 'Creación';
-  usuario: string; // ej: "Operario de Planta"
+  tipo: 'Stock' | 'Edición' | 'Creación' | 'Descarte' | 'Limpieza' | 'Ajuste a Cero' | 'Escaneo QR' | 'Eliminación' | 'Arqueo Físico' | string;
+  usuario: string; // ej: "Malcon Baez"
+  rol?: string; // ej: "Jefe de Planta", "Operario"
+  modulo?: 'LOTES' | 'SILOS' | 'BOLSONES' | 'DESPACHOS' | 'ORDENES_PROCESO' | 'SISTEMA' | string;
+  entidadId?: string; // ej: Lote ID o Silo ID
   descripcion: string;
+  campoModificado?: string; // ej: "stockKg", "variedad", "humedad"
+  valorAnterior?: string | number;
+  valorNuevo?: string | number;
   detalles?: string; // detalla los cambios o justificación
+}
+
+export interface DiscrepanciaStock {
+  id: string;
+  fechaHora: string;
+  siloId?: SiloId | string;
+  loteId?: string;
+  bolsonId?: string;
+  tipoEntidad: 'SILO' | 'LOTE' | 'BOLSON';
+  nombreEntidad: string;
+  stockTeoricoKg: number;
+  stockFisicoKg: number;
+  diferenciaKg: number; // teorico - fisico
+  porcentajeMerma: number; // (diferencia / teorico) * 100
+  estado: 'EXACTO' | 'TOLERABLE' | 'CRITICO';
+  observaciones?: string;
+  relevador: string;
+  rolRelevador?: string;
+  ajustadoEnSistema?: boolean;
+}
+
+export interface SiloAlertConfig {
+  porcentajeAlerta: number; // Ej: 85 (%)
+  notificarEmail: boolean;
+  emailDestino: string;
+}
+
+export interface OfflinePendingIngreso {
+  id: string;
+  timestamp: number;
+  movimiento: MovimientoSilo;
+  estado: 'PENDIENTE' | 'SINCRONIZANDO' | 'ERROR';
+  errorMsg?: string;
 }
 
 export interface MovimientoStock {

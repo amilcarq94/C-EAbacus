@@ -12,8 +12,11 @@ import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { findExistingChofer, mergeChoferData } from '../utils/choferes';
 import { getSiloActiveData } from '../utils/siloValidation';
 import { formatKg } from '../utils/formatters';
-import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit, CreditCard, Building2, Scale } from 'lucide-react';
+import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit, CreditCard, Building2, Scale, Layers, Grid3X3 } from 'lucide-react';
 import { ClienteSelect } from './ClienteSelect';
+import { CargaMultipleCamionesForm } from './CargaMultipleCamionesForm';
+import { FichaTecnicaSiloModal } from './FichaTecnicaSiloModal';
+import { GrillaSeisSilosModal } from './GrillaSeisSilosModal';
 import { verifyAutorizadorPassword } from '../utils/despachantes';
 import {
   ResponsiveContainer,
@@ -94,6 +97,7 @@ interface IngresoSilosViewProps {
   choferes?: Chofer[];
   bolsones?: BolsonCampo[];
   onRegistrarIngreso: (movimiento: MovimientoSilo) => void;
+  onRegistrarIngresosMultiple?: (movimientos: MovimientoSilo[]) => void;
   onRegistrarSalidaManual?: (movimiento: MovimientoSilo) => void;
   onSaveChofer?: (chofer: Chofer) => void;
   onImportChoferes?: (choferes: Chofer[]) => void;
@@ -111,6 +115,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   choferes = [],
   bolsones = [],
   onRegistrarIngreso,
+  onRegistrarIngresosMultiple,
   onRegistrarSalidaManual,
   onSaveChofer,
   onImportChoferes,
@@ -121,6 +126,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 }) => {
   // Silo activo seleccionado (Silo 1 a Silo 6)
   const [activeSilo, setActiveSilo] = useState<SiloId>('Silo 1');
+
+  // Modo de ingreso: Individual (1 camión) o Carga Múltiple de Camiones
+  const [modoIngreso, setModoIngreso] = useState<'INDIVIDUAL' | 'MULTIPLE'>('INDIVIDUAL');
 
   // Estado del Formulario de Ingreso
   const [fecha, setFecha] = useState(() => new Date().toISOString().split('T')[0]);
@@ -155,13 +163,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [formSuccess, setFormSuccess] = useState('');
   const [exportNoticeMsg, setExportNoticeMsg] = useState('');
 
-  // Estado para el Modal de Ficha Técnica de Silo
+  // Estado para el Modal de Ficha Técnica de Silo y Grilla de 6 Silos
   const [fichaModalSilo, setFichaModalSilo] = useState<SiloId | null>(null);
-  const [fichaModalMode, setFichaModalMode] = useState<'digital' | 'impresion'>('digital');
+  const [showGrillaSeisSilos, setShowGrillaSeisSilos] = useState(false);
 
-  const openFichaModal = (siloId: SiloId, mode: 'digital' | 'impresion' = 'digital') => {
+  const openFichaModal = (siloId: SiloId) => {
     setFichaModalSilo(siloId);
-    setFichaModalMode(mode);
   };
 
   // Estado para el Modal de Salidas Manuales de Silo
@@ -1303,9 +1310,21 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
       {/* Selectores de Pestañas / Secciones por Silo (Silo 1 a Silo 6) */}
       <div>
-        <div className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2.5 flex items-center gap-1.5">
-          <Warehouse className="w-4 h-4 text-emerald-700" />
-          <span>Seleccionar Silo (Visualización de Estado y Operaciones)</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+          <div className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <Warehouse className="w-4 h-4 text-emerald-700" />
+            <span>Seleccionar Silo (Visualización de Estado y Operaciones)</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowGrillaSeisSilos(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#005E38] hover:bg-[#004D2E] text-white text-xs font-bold rounded-xl shadow-2xs transition active:scale-95 cursor-pointer self-start sm:self-auto"
+            title="Imprimir las 6 Fichas Técnicas de Silo en una única hoja A4 (Grilla 2x3)"
+          >
+            <Grid3X3 className="w-3.5 h-3.5" />
+            <span>Imprimir 6 Silos (Hoja A4)</span>
+          </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1322,13 +1341,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 role="button"
                 tabIndex={0}
                 onClick={() => {
-                  openSiloDrawer(siloId);
+                  setActiveSilo(siloId);
                   setFormError('');
                   setFormSuccess('');
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
-                    openSiloDrawer(siloId);
+                    setActiveSilo(siloId);
                     setFormError('');
                     setFormSuccess('');
                   }
@@ -1420,12 +1439,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openFichaModal(siloId, 'digital');
+                        openFichaModal(siloId);
                       }}
                       className={`flex items-center gap-1 hover:underline ${
                         isSelected ? 'text-emerald-300' : 'text-emerald-700'
                       }`}
-                      title="Ver Ficha Digital"
+                      title="Ver Ficha Técnica"
                     >
                       <Eye className="w-3 h-3" /> Ficha
                     </button>
@@ -1533,21 +1552,21 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             </button>
 
             <button
-              onClick={() => openFichaModal(activeSilo, 'digital')}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
-              title="Ver Ficha Técnica Completa del Silo"
+              onClick={() => openFichaModal(activeSilo)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+              title="Ver Ficha Técnica Oficial del Silo"
             >
               <Eye className="w-4 h-4 text-emerald-300" />
               <span>Ver Ficha</span>
             </button>
 
             <button
-              onClick={() => openFichaModal(activeSilo, 'impresion')}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
-              title="Vista de Impresión para Ficha de Silo (A4 - 1 Hoja)"
+              onClick={() => setShowGrillaSeisSilos(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#005E38] hover:bg-[#004D2E] text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+              title="Imprimir las 6 Fichas Técnicas de Silo en una única hoja A4 (Grilla 2x3)"
             >
-              <Printer className="w-4 h-4 text-emerald-400" />
-              <span>Vista de Impresión</span>
+              <Grid3X3 className="w-4 h-4 text-emerald-300" />
+              <span>Imprimir 6 Silos (A4)</span>
             </button>
 
             <button
@@ -1636,31 +1655,92 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
         {/* Formulario de Ingreso a este Silo */}
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-              <Plus className="w-4 h-4 text-emerald-600" />
-              Nuevo Ingreso de Mercadería a <strong className="text-slate-900 font-serif">{activeSilo}</strong>
-            </h3>
-            <span className="text-[10px] text-slate-500">
-              * El silo de destino queda fijado como <strong className="text-slate-800">{activeSilo}</strong>
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 text-emerald-600" />
+                Nuevo Ingreso de Mercadería a <strong className="text-slate-900 font-serif">{activeSilo}</strong>
+              </h3>
+              <span className="text-[10px] text-slate-500">
+                * El silo de destino queda fijado como <strong className="text-slate-800">{activeSilo}</strong>
+              </span>
+            </div>
+
+            {/* Selector de Modo: Individual vs Carga Múltiple */}
+            <div className="flex items-center bg-slate-200/80 p-1 rounded-xl shadow-inner gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setModoIngreso('INDIVIDUAL');
+                  setFormError('');
+                  setFormSuccess('');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  modoIngreso === 'INDIVIDUAL'
+                    ? 'bg-white text-emerald-900 shadow-2xs font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                <span>Ingreso Individual (1 Camión)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModoIngreso('MULTIPLE');
+                  setFormError('');
+                  setFormSuccess('');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  modoIngreso === 'MULTIPLE'
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-2xs ring-1 ring-amber-300'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Carga Múltiple de Camiones</span>
+              </button>
+            </div>
           </div>
 
-          {formError && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-medium flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
-              <span>{formError}</span>
-            </div>
-          )}
+          {modoIngreso === 'MULTIPLE' ? (
+            <CargaMultipleCamionesForm
+              activeSilo={activeSilo}
+              currentSiloStock={currentSiloStock}
+              capacidadMaxSilo={CAPACIDAD_MAX_SILO}
+              clientes={clientes}
+              especies={especies}
+              choferes={choferes}
+              bolsones={bolsones}
+              currentUser={currentUser}
+              onSaveChofer={onSaveChofer}
+              onSubmitCargaMultiple={(movs) => {
+                if (onRegistrarIngresosMultiple) {
+                  onRegistrarIngresosMultiple(movs);
+                } else {
+                  movs.forEach(m => onRegistrarIngreso(m));
+                }
+              }}
+              onPrintFicha={() => openFichaModal(activeSilo)}
+              onDownloadPng={() => openFichaModal(activeSilo)}
+            />
+          ) : (
+            <>
+              {formError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>{formError}</span>
+                </div>
+              )}
 
-          {formSuccess && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>{formSuccess}</span>
-            </div>
-          )}
+              {formSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{formSuccess}</span>
+                </div>
+              )}
 
-          <form onSubmit={handleSubmitIngreso} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              <form onSubmit={handleSubmitIngreso} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             {/* Fecha */}
             <div>
               <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
@@ -2023,17 +2103,45 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               )}
             </div>
 
-            {/* Botón Submit */}
-            <div className="sm:col-span-2 lg:col-span-4 flex justify-end pt-2">
-              <button
-                type="submit"
-                className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95 flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Registrar Ingreso a {activeSilo}</span>
-              </button>
+            {/* Botón Submit y Acciones de Ficha */}
+            <div className="sm:col-span-2 lg:col-span-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+              <span className="text-[11px] text-slate-500 font-medium">
+                * Verifique los datos de ingreso antes de registrar la operación en {activeSilo}.
+              </span>
+
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <button
+                  type="button"
+                  onClick={() => openFichaModal(activeSilo)}
+                  className="px-3.5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-2xs border border-slate-300 cursor-pointer active:scale-95"
+                  title="Imprimir Ficha Técnica de Silo"
+                >
+                  <Printer className="w-4 h-4 text-emerald-700" />
+                  <span>Imprimir Ficha</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openFichaModal(activeSilo)}
+                  className="px-3.5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-2xs border border-slate-300 cursor-pointer active:scale-95"
+                  title="Descargar Ficha en formato PNG"
+                >
+                  <Download className="w-4 h-4 text-emerald-700" />
+                  <span>Descargar (PNG)</span>
+                </button>
+
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95 flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Registrar Ingreso a {activeSilo}</span>
+                </button>
+              </div>
             </div>
           </form>
+          </>
+          )}
         </div>
 
         {/* Histórico de Movimientos del Silo */}
@@ -3021,166 +3129,21 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
           </div>
         </div>
       )}
-      {fichaModalSilo && (() => {
-        const ficha = getSiloFichaData(fichaModalSilo);
+      {/* Modal Ficha Técnica Oficial de Silo (Individual) */}
+      {fichaModalSilo && (
+        <FichaTecnicaSiloModal
+          ficha={getSiloFichaData(fichaModalSilo)}
+          onClose={() => setFichaModalSilo(null)}
+        />
+      )}
 
-        // Formatear título del Header "SILO (N°)"
-        const siloTitle = ficha.siloId.trim().toUpperCase().startsWith('SILO')
-          ? ficha.siloId.trim().toUpperCase()
-          : `SILO ${ficha.siloId.trim().toUpperCase()}`;
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-4 overflow-auto">
-            
-            {/* Estilos CSS para Impresión Oficial A4 a escala 70% */}
-            <style>{`
-              @media print {
-                @page {
-                  size: A4 portrait;
-                  margin: 10mm;
-                }
-                html, body {
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                  background: #ffffff !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                }
-                body * {
-                  visibility: hidden !important;
-                }
-                #ficha-silo-printable, #ficha-silo-printable * {
-                  visibility: visible !important;
-                }
-                #ficha-silo-printable {
-                  position: absolute !important;
-                  left: 0 !important;
-                  top: 0 !important;
-                  width: 100% !important;
-                  max-width: 180mm !important;
-                  transform: scale(0.70);
-                  transform-origin: top left;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  box-sizing: border-box !important;
-                  background: #ffffff !important;
-                  page-break-before: avoid !important;
-                  page-break-after: avoid !important;
-                  page-break-inside: avoid !important;
-                  box-shadow: none !important;
-                  border: 1px solid #cbd5e1 !important;
-                }
-              }
-            `}</style>
-
-            {/* Contenedor Modal de Pantalla */}
-            <div className="flex flex-col items-center gap-4 max-h-[95vh]">
-              
-              {/* Barra de Acciones Superior (imprimir/cerrar) */}
-              <div className="flex items-center justify-between w-full max-w-[480px] bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-lg border border-slate-800 print:hidden">
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Ficha de Silo</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="px-3.5 py-1.5 bg-[#005e38] hover:bg-[#004d2e] text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Imprimir</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFichaModalSilo(null)}
-                    className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition cursor-pointer"
-                    title="Cerrar"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* TARJETA DE FICHA DE SILO (TAMAÑO FIJO, NO RESPONSIVE, 100% VISIBLE EN PANTALLA) */}
-              <div
-                id="ficha-silo-printable"
-                className="w-[480px] min-h-[580px] bg-white rounded-2xl border border-slate-300 shadow-2xl overflow-hidden flex flex-col text-left font-sans"
-              >
-                {/* Header verde #005e38, título "SILO (N°)" en blanco, negrita, fuente grande, sin subtítulo */}
-                <div className="bg-[#005e38] text-white px-8 py-6 text-left shrink-0">
-                  <h2 className="text-3xl font-black text-white tracking-tight uppercase">
-                    {siloTitle}
-                  </h2>
-                </div>
-
-                {/* Bloque de datos alineado a la izquierda, con margen interno uniforme respecto al borde de la ficha */}
-                <div className="p-8 flex flex-col justify-between flex-1 space-y-6">
-                  
-                  {/* Cliente y Especie arriba del bloque */}
-                  <div className="space-y-4">
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                        Cliente
-                      </span>
-                      <div className="text-2xl font-bold text-slate-900 leading-tight">
-                        {ficha.cliente}
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                        Especie
-                      </span>
-                      <div className="text-2xl font-bold text-[#005e38] leading-tight">
-                        {ficha.especie}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Categoría, Kg en stock y Humedad agrupados en el medio, cada uno en su línea */}
-                  <div className="space-y-4 py-1">
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                        Categoría
-                      </span>
-                      <div className="text-base font-medium text-slate-800">
-                        {ficha.categoria}
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                        Kg en stock
-                      </span>
-                      <div className="text-base font-bold text-slate-900 font-mono">
-                        {ficha.stockKg.toLocaleString('es-AR')} kg
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                        Humedad
-                      </span>
-                      <div className="text-base font-medium text-slate-800 font-mono">
-                        {ficha.humedad}%
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Fecha de stock al pie, separada del resto con una línea divisoria sutil */}
-                  <div className="pt-4 border-t border-slate-200 mt-auto">
-                    <div className="text-xs text-slate-500 font-normal">
-                      Fecha de stock: <span className="font-mono text-slate-700 font-medium">{ficha.ultimoMovimiento}</span>
-                    </div>
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </div>
-        );
-      })()}
+      {/* Modal Grilla de 6 Fichas Técnicas en 1 Hoja A4 */}
+      {showGrillaSeisSilos && (
+        <GrillaSeisSilosModal
+          fichas={SILOS_DISPONIBLES.map((s) => getSiloFichaData(s))}
+          onClose={() => setShowGrillaSeisSilos(false)}
+        />
+      )}
 
       {/* PANEL LATERAL (DRAWER) - HISTORIAL DETALLADO DE MOVIMIENTOS DEL SILO */}
       {drawerSilo && (() => {
@@ -3556,7 +3519,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    openFichaModal(drawerSilo, 'digital');
+                    openFichaModal(drawerSilo);
                   }}
                   className="flex items-center gap-1.5 px-3 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
                 >
