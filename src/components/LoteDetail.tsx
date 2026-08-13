@@ -12,6 +12,7 @@ import { ArrowLeft, ArrowUpRight, ArrowDownRight, Printer, Plus, AlertCircle, Tr
 import { QRCodeCanvas } from 'qrcode.react';
 import { QrCodeModal } from './QrCodeModal';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
+import { FichaTecnicaOficialCard } from './FichaTecnicaOficialCard';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const CustomLineTooltip = ({ active, payload }: any) => {
@@ -238,7 +239,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
   };
 
   if (isPrintingMode) {
-    // Vista limpia para imprimir (oculta controles innecesarios y optimiza para A4)
+    // Vista limpia para imprimir (Ficha Oficial de Lote y Trazabilidad - Plantilla A4 Fija)
     return (
       <div className="min-h-screen bg-gray-50 py-6 px-4 print:p-0 print:bg-white print:min-h-0">
         {/* Barra de Acciones de Impresión - Visible en pantalla, Oculta al imprimir */}
@@ -269,9 +270,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
           </div>
         </div>
 
-        {/* Contenedor del Reporte Oficial */}
-        <div className="bg-white p-6 md:p-8 max-w-4xl mx-auto border-2 border-[#00603C] rounded-xl relative text-[#1A1A1A] font-sans print-a4-card">
-        {/* Inyectamos estilos CSS directos para asegurar que imprima fondos a color y quepa en una hoja A4 */}
+        {/* Estilos CSS Específicos para Impresión A4 de Hoja Única */}
         <style>{`
           @media print {
             body, html {
@@ -283,267 +282,32 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
             }
             @page {
               size: A4 portrait;
-              margin: 6mm 10mm 6mm 10mm;
+              margin: 8mm 10mm 8mm 10mm;
             }
-            header, nav, footer, button, .print\\:hidden, #nav-tab-dashboard, #nav-tab-lotes, #nav-tab-despachos, #nav-tab-historial-salidas, #nav-tab-importar {
+            header, nav, footer, button, .print\\:hidden, #nav-tab-dashboard, #nav-tab-lotes, #nav-tab-despachos, #nav-tab-historial-salidas, #nav-tab-importar, #lotes-stats-summary-bar {
               display: none !important;
             }
-            #root, main {
-              margin: 0 !important;
-              padding: 0 !important;
-              width: 100% !important;
-              max-width: none !important;
-            }
-            .print-a4-card {
-              border: 2px solid #00603C !important;
-              border-radius: 12px !important;
-              padding: 24px !important;
-              margin: 0 auto !important;
-              width: 100% !important;
+            .batch-print-page-break {
+              page-break-after: always !important;
+              break-after: page !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
               max-height: 275mm !important;
               overflow: hidden !important;
               box-sizing: border-box !important;
-              box-shadow: none !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
             }
-            /* Forzar fondos en navegadores antiguos */
-            .force-bg-green {
-              background-color: #00603C !important;
-              color: #ffffff !important;
-            }
-            .force-bg-light {
-              background-color: #E3EFE7 !important;
+            .batch-print-page-break:last-child {
+              page-break-after: auto !important;
+              break-after: auto !important;
             }
           }
         `}</style>
 
-        {/* Sello de Marca de agua de fondo */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-[0.04] pointer-events-none">
-          <LogoSiloLoose size={360} color="#00603C" />
+        {/* Contenedor del Reporte Oficial Definitivo */}
+        <div className="max-w-4xl mx-auto print:max-w-none print:w-full">
+          <FichaTecnicaOficialCard lote={lote} />
         </div>
-
-        {/* Header de impresión */}
-        <div className="flex justify-between items-center border-b border-[#00603C] pb-3 mb-4">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <LogoSiloLoose size={36} color="#00603C" />
-              <div className="text-left">
-                <h1 className="font-serif text-lg font-bold text-[#00603C] tracking-wide uppercase">
-                  AGRO ABACUS S.A.
-                </h1>
-                <p className="text-[9px] font-semibold tracking-widest text-[#C9922E] uppercase">
-                  ESTANCIA LA BARRANCOSA — PLANTA CLASIFICADORA
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="text-right font-mono text-gray-500 text-[9px] leading-tight">
-            <p className="font-bold text-[#00603C] uppercase tracking-wider text-[10px]">Ficha Técnica Oficial</p>
-            <p className="mt-0.5">ID REGISTRO: {lote.id}</p>
-            <p>Impreso: {new Date().toLocaleDateString('es-AR')}</p>
-          </div>
-        </div>
-
-        {/* Título de la Ficha */}
-        <div className="text-center mb-4">
-          <h2 className="font-serif text-lg font-bold uppercase tracking-wider text-[#00603C] border-b border-[#C9922E] pb-1 inline-block">
-            Ficha Oficial de Lote y Trazabilidad
-          </h2>
-        </div>
-
-        {/* BANNER A LO ANCHO DE LA HOJA - NRO DE LOTE Y CLIENTE COMITENTE */}
-        <div className="mb-4 border-2 border-[#00603C] rounded-xl overflow-hidden shadow-sm bg-white">
-          {/* LOTE BANNER - FULL WIDTH */}
-          <div className="bg-[#00603C] force-bg-green text-white px-6 py-3.5 text-center border-b-2 border-[#C9922E]">
-            <span className="text-[10px] font-bold tracking-widest text-[#E3EFE7] block uppercase mb-0.5">
-              N° DE LOTE DE PLANTA CLASIFICADORA
-            </span>
-            <span className="text-7xl md:text-8xl font-mono font-black tracking-tighter leading-none block">
-              {lote.loteNro}
-            </span>
-          </div>
-          {/* CLIENTE COMITENTE BANNER - FULL WIDTH */}
-          <div className="bg-[#E3EFE7] bg-opacity-40 force-bg-light text-[#1A1A1A] px-6 py-3 text-center">
-            <span className="text-[9px] font-black tracking-widest text-[#C9922E] block uppercase mb-0.5">
-              CLIENTE COMITENTE
-            </span>
-            <span className="text-3xl md:text-4xl font-black text-[#00603C] tracking-tight block uppercase leading-tight">
-              {lote.cliente}
-            </span>
-          </div>
-        </div>
-
-        {/* Datos Principales */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 bg-[#E3EFE7] bg-opacity-10 force-bg-light/10 p-4 rounded-xl border border-gray-100">
-          <div className="space-y-2 text-left">
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Grano / Especie</span>
-              <span className="text-sm font-bold text-[#00603C] block mt-0.5">{lote.especie}</span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Variedad Sembrada</span>
-              <span className="text-xs font-bold text-gray-800 block mt-0.5">{lote.variedad}</span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Categoría</span>
-              <span className="text-xs font-bold text-[#00603C] block mt-0.5 uppercase">{lote.categoria || 'Sin especificar'}</span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Tipo de Lote</span>
-              <span className="text-xs font-semibold text-gray-700 block mt-0.5">{lote.tipo}</span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">% Humedad del Lote</span>
-              <span className="text-xs font-bold text-gray-800 block mt-0.5">{lote.humedad !== undefined ? `${lote.humedad}%` : '13.5%'} <span className="text-[9px] font-normal text-gray-500">(Informativo)</span></span>
-            </div>
-          </div>
-
-          <div className="space-y-2 text-left">
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Fecha de Ingreso</span>
-              <span className="text-xs font-medium text-gray-800 block mt-0.5">{formatDateStr(lote.fechaIngreso)}</span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Sector de Acopio</span>
-              <span className="text-xs font-bold text-[#00603C] block mt-0.5">
-                {lote.ala && lote.sector ? `ALA: ${lote.ala} / SECTOR: ${lote.sector}` : 'No especificado'}
-              </span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Tratamiento Aplicado</span>
-              <span className="text-xs font-medium text-gray-800 block mt-0.5">{lote.tratamiento.join(' + ') || 'Ninguno'}</span>
-            </div>
-            <div>
-              <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider leading-none">Químicos / Productos</span>
-              <span className="text-xs font-medium text-gray-800 block mt-0.5">{lote.producto || 'Ninguno'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Vincular Orden y Bolsón en Impresión */}
-        <div className="grid grid-cols-2 gap-3 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-200 text-left text-xs">
-          <div>
-            <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider">N° Orden de Proceso / Mov</span>
-            <span className="font-mono font-bold text-[#00603C] text-sm block mt-0.5">{ordenProcesoMovimientoDisplay}</span>
-          </div>
-          <div>
-            <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider">N° Bolsón Origen</span>
-            <span className="font-mono font-bold text-gray-800 text-sm block mt-0.5">{bolsonOrigenDisplay}</span>
-          </div>
-        </div>
-
-        {/* Código QR de Consulta Digital Centrado y Aumentado */}
-        <div className="flex flex-col items-center justify-center my-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm max-w-sm mx-auto text-center">
-          <span className="text-[10px] font-black text-[#00603C] uppercase tracking-widest mb-1.5 block">
-            Consulta Digital QR Oficial
-          </span>
-          <div className="bg-white p-2.5 border-2 border-[#00603C] rounded-2xl shadow-md mb-2 flex items-center justify-center">
-            <QRCodeCanvas
-              value={`${window.location.origin}${window.location.pathname}?lote=${lote.id}`}
-              size={180}
-              bgColor="#ffffff"
-              fgColor="#00603C"
-              level="H"
-            />
-          </div>
-          <span className="text-[8px] font-bold text-[#C9922E] uppercase tracking-widest block mb-0.5">
-            Escaneá el código QR
-          </span>
-          <span className="text-[8px] text-gray-400 font-medium leading-tight block max-w-[220px]">
-            Acceso instantáneo a trazabilidad en vivo y estado de stock online
-          </span>
-        </div>
-
-        {/* Saldos de Stock Destacados */}
-        <div className="grid grid-cols-2 gap-4 mb-4 text-center border-y border-[#00603C] py-3.5">
-          <div className="border-r border-gray-200">
-            <span className="text-[10px] uppercase text-gray-500 font-semibold tracking-wider block">Stock Total en Bolsas</span>
-            <span className="font-serif text-xl font-bold text-[#00603C] mt-0.5 block">
-              {formatNumberArg(lote.stockBolsas, 0)} b.
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] uppercase text-gray-500 font-semibold tracking-wider block">Stock Equivalente (Kg)</span>
-            <span className="font-serif text-xl font-bold text-[#C9922E] mt-0.5 block">
-              {formatNumberArg(lote.stockKg, 0)} kg
-            </span>
-          </div>
-        </div>
-
-        {/* Observaciones en Impresión */}
-        {lote.observaciones && (
-          <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-left">
-            <span className="text-[9px] font-bold text-[#C9922E] uppercase block tracking-wider mb-0.5">
-              Observaciones / Notas de Calidad del Lote
-            </span>
-            <p className="text-[11px] text-gray-700 italic font-sans whitespace-pre-wrap leading-relaxed">
-              {lote.observaciones}
-            </p>
-          </div>
-        )}
-
-        {/* Historial Corto para Impresión */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-1.5">
-            <h3 className="font-serif text-xs font-bold text-[#00603C] uppercase tracking-wider">
-              Historial de Movimientos de Trazabilidad
-            </h3>
-            {lote.historial.length > 4 && (
-              <span className="text-[8px] text-gray-400 italic">
-                Mostrando últimos 4 de {lote.historial.length} movimientos
-              </span>
-            )}
-          </div>
-          <table className="w-full text-[11px] text-left">
-            <thead>
-              <tr className="border-b border-gray-300 font-bold text-gray-600">
-                <th className="py-1">Fecha</th>
-                <th className="py-1">Tipo de Movimiento</th>
-                <th className="py-1 text-right">Bolsas</th>
-                <th className="py-1 text-right">Kilogramos</th>
-                <th className="py-1 pl-3">Detalle / Justificación</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {lote.historial.slice(0, 4).map((m) => (
-                <tr key={m.id} className="text-gray-700">
-                  <td className="py-1 font-medium">{formatDateStr(m.fecha)}</td>
-                  <td className="py-1 font-semibold">
-                    <span className={m.tipo.includes('Entrada') ? 'text-[#00603C]' : 'text-[#A0522D]'}>
-                      {m.tipo}
-                    </span>
-                  </td>
-                  <td className="py-1 text-right font-bold">{m.cantidadBolsas}</td>
-                  <td className="py-1 text-right font-mono">{formatNumberArg(m.cantidadKg, 0)} kg</td>
-                  <td className="py-1 pl-3 text-gray-500 italic max-w-[200px] truncate">{m.detalle}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Firmas de Control */}
-        <div className="grid grid-cols-2 gap-8 mt-6 text-center text-[10px]">
-          <div>
-            <div className="border-t border-gray-300 w-2/3 mx-auto pt-1.5">
-              <p className="font-semibold text-gray-700">Firma Encargado de Planta</p>
-              <p className="text-gray-400 text-[8px]">Agro Abacus S.A.</p>
-            </div>
-          </div>
-          <div>
-            <div className="border-t border-gray-300 w-2/3 mx-auto pt-1.5">
-              <p className="font-semibold text-gray-700">Firma de Recepción / Conductor</p>
-              <p className="text-gray-400 text-[8px]">La Barrancosa</p>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-center text-[8px] text-gray-400 mt-5 italic">
-          Documento oficial de control interno. Agro Abacus S.A. — Estancia La Barrancosa. Autorizado para libre exportación e impresión por todos los usuarios del sistema.
-        </p>
       </div>
-    </div>
     );
   }
 
