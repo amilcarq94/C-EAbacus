@@ -23,7 +23,10 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
 }) => {
   useEffect(() => {
     if (isOpen && lotes.length > 0) {
-      // Opcional: auto-disparar print tras abrir o dejar que el usuario haga clic
+      const timer = setTimeout(() => {
+        window.print();
+      }, 350);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, lotes]);
 
@@ -34,7 +37,7 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto p-2 sm:p-6 animate-in fade-in duration-200 print:p-0 print:bg-white print:static print:inset-auto print:z-auto">
+    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto p-2 sm:p-6 animate-in fade-in duration-200 print:p-0 print:bg-white print:static print:inset-auto print:z-auto batch-print-modal-container">
       {/* Barra Superior de Acciones (Oculta al Imprimir) */}
       <div className="w-full max-w-4xl bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sticky top-2 z-50 print:hidden">
         <div className="flex items-center gap-3">
@@ -96,6 +99,12 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
           .batch-print-page-break {
             page-break-after: always !important;
             break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .batch-print-page-break:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
           .batch-print-card {
             border: 2px solid #00603C !important;

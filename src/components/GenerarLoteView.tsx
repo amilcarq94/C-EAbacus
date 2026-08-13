@@ -420,7 +420,7 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
+      <div className="space-y-6 print:hidden">
       {/* Header Banner - High Visibility Access */}
       <div className="bg-gradient-to-r from-emerald-950 via-[#00603C] to-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -930,6 +930,7 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
         </div>
 
       </form>
+      </div>
 
       {/* Modal de Impresión Masiva de Fichas en Precarga */}
       <BatchPrintLotesModal

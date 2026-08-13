@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react';
 import { OrdenProceso, Lote, EstadoOrdenProceso, TipoOrdenProceso, SiloId, MovimientoSilo } from '../types';
 import { OrdenProcesoGauge } from './OrdenProcesoGauge';
 import { OrdenProcesoModal, getKgPorEnvase } from './OrdenProcesoModal';
+import { EditarCumplimientoModal } from './EditarCumplimientoModal';
 import {
   Factory,
   Truck,
@@ -17,6 +18,7 @@ import {
   Clock,
   CircleDashed,
   Edit,
+  Sliders,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -60,6 +62,7 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
   const [showModal, setShowModal] = useState(false);
   const [modalInitialType, setModalInitialType] = useState<TipoOrdenProceso>('PRODUCCION');
   const [ordenAEditar, setOrdenAEditar] = useState<OrdenProceso | null>(null);
+  const [ordenCumplimientoAEditar, setOrdenCumplimientoAEditar] = useState<OrdenProceso | null>(null);
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -534,12 +537,21 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
                 <div className="p-5 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                   
                   {/* Gauge Progress */}
-                  <div className="flex justify-center py-2 sm:py-0">
+                  <div className="flex flex-col items-center justify-center py-2 sm:py-0">
                     <OrdenProcesoGauge
                       hechos={orden.hechos}
                       bbPedidos={orden.bbPedidos}
                       size={110}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setOrdenCumplimientoAEditar(orden)}
+                      className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#00603C] hover:text-white bg-emerald-50 hover:bg-[#00603C] px-3 py-1 rounded-xl border border-emerald-200 transition-all cursor-pointer shadow-2xs group"
+                      title="Editar manualmente el porcentaje de cumplimiento y bolsas vinculadas"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-[#00603C] group-hover:text-amber-300 transition-colors" />
+                      <span>Editar Avance</span>
+                    </button>
                   </div>
 
                   {/* Order Specs */}
@@ -830,6 +842,15 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
                       <td className="py-3 px-4 text-center">
                         <div className="font-black text-sm text-slate-900">{pct}%</div>
                         <div className="text-[10px] text-slate-500">{orden.hechos} / {orden.bbPedidos} BB</div>
+                        <button
+                          type="button"
+                          onClick={() => setOrdenCumplimientoAEditar(orden)}
+                          className="mt-1 text-[10px] font-bold text-[#00603C] hover:text-emerald-900 hover:underline inline-flex items-center gap-1 cursor-pointer bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                          title="Editar cumplimiento de objetivos y bolsas vinculadas"
+                        >
+                          <Sliders className="w-2.5 h-2.5 text-[#00603C]" />
+                          <span>Editar</span>
+                        </button>
                       </td>
 
                       <td className="py-3 px-4">
@@ -1029,6 +1050,19 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
             setShowModal(false);
           }}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {/* Modal for Editar Dashboard de Cumplimiento / Avance */}
+      {ordenCumplimientoAEditar && (
+        <EditarCumplimientoModal
+          isOpen={!!ordenCumplimientoAEditar}
+          orden={ordenCumplimientoAEditar}
+          onSave={(ordenActualizada) => {
+            onSaveOrden(ordenActualizada);
+            setOrdenCumplimientoAEditar(null);
+          }}
+          onClose={() => setOrdenCumplimientoAEditar(null)}
         />
       )}
 

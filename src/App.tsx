@@ -82,18 +82,18 @@ export default function App() {
     setIsExplicitlyPinned(true);
   };
 
-  // Recalculo en tiempo real de "hechos" para Órdenes de Proceso en función de los lotes vinculados
+  // Recalculo en tiempo real de "hechos" para Órdenes de Proceso en función de los lotes vinculados o edición manual
   const ordenesProcesoConHechos = useMemo(() => {
     return ordenesProceso.map(ord => {
       const linkedLotes = lotes.filter(l => l.ordenProcesoId === ord.id);
       let sumHechos = ord.hechos;
-      if (linkedLotes.length > 0) {
+      if ((ord.hechos === undefined || ord.hechos === 0) && linkedLotes.length > 0) {
         sumHechos = linkedLotes.reduce((acc, l) => acc + (l.stockBolsas || 0), 0);
       }
 
       return {
         ...ord,
-        hechos: sumHechos,
+        hechos: sumHechos ?? 0,
         // El estado únicamente se modifica manualmente; el objetivo es solo aproximado y no vinculante
         estado: ord.estado
       };
@@ -1929,6 +1929,7 @@ export default function App() {
             siloStocks={siloStocks}
             onSelectLote={(l) => setLoteSeleccionado(l)}
             onNavigateToSilos={() => navigateTo('ingreso-silos')}
+            onSaveOrden={handleSaveOrdenProceso}
           />
         ) : activeView === 'generar-lote' ? (
           <GenerarLoteView
