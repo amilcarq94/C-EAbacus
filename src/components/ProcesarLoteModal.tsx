@@ -271,20 +271,7 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
       }
     }
 
-    // 3. Validación de Stock por Bolsón
-    for (let i = 0; i < origenLineas.length; i++) {
-      const line = origenLineas[i];
-      if (line.bolsonId || line.bolsonNro) {
-        const bObj = bolsones.find(b => b.id === line.bolsonId || b.numeroBolson === line.bolsonNro);
-        if (bObj) {
-          const stockB = bObj.stockKg !== undefined ? bObj.stockKg : ((bObj.entradasKg || 0) - (bObj.salidasKg || 0));
-          if (line.kgExtraidos > stockB) {
-            setErrorMsg(`Stock insuficiente en el Bolsón ${bObj.numeroBolson}. Disponible: ${formatKg(stockB)}, Asignado: ${formatKg(line.kgExtraidos)}.`);
-            return;
-          }
-        }
-      }
-    }
+    // Los datos del bolsón de origen son únicamente informativos y no descuentan ni bloquean por stock.
 
     const fechaHoraStr = fechaRealizacion;
 
@@ -460,7 +447,7 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                   3. Selector de Fuentes de Origen Múltiples (Silo + Bolsón + Sector)
                 </span>
                 <p className="text-[11px] text-slate-600 mt-0.5">
-                  Asigne una o más fuentes de origen. Cada línea incluye validación en tiempo real del stock disponible en el Silo y en el Bolsón.
+                  Asigne una o más fuentes de origen. Las salidas se descuentan únicamente del Silo de Origen. Los datos del Bolsón y Sector son puramente informativos.
                 </p>
               </div>
 
@@ -526,13 +513,12 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                 const bolsonesDelSilo = getBolsonesForSilo(line.siloId);
                 const bObj = bolsones.find(b => b.id === line.bolsonId || b.numeroBolson === line.bolsonNro);
                 const stockBolsonDisp = bObj ? (bObj.stockKg !== undefined ? bObj.stockKg : ((bObj.entradasKg || 0) - (bObj.salidasKg || 0))) : undefined;
-                const excedeStockBolson = stockBolsonDisp !== undefined && line.kgExtraidos > stockBolsonDisp;
 
                 return (
                   <div
                     key={line.id}
                     className={`p-4 rounded-2xl border transition space-y-3 ${
-                      excedeStockSilo || excedeStockBolson
+                      excedeStockSilo
                         ? 'bg-red-50/90 border-red-300 shadow-sm'
                         : 'bg-white border-slate-200 shadow-2xs'
                     }`}
@@ -552,11 +538,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                         {excedeStockSilo && (
                           <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-300">
                             ¡Excede Silo!
-                          </span>
-                        )}
-                        {excedeStockBolson && (
-                          <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-300">
-                            ¡Excede Bolsón!
                           </span>
                         )}
 
@@ -605,11 +586,11 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                       <div className="sm:col-span-4">
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-[10px] font-extrabold text-slate-700 uppercase">
-                            2. Bolsón
+                            2. Bolsón <span className="text-slate-400 font-normal">(Informativo)</span>
                           </label>
                           {stockBolsonDisp !== undefined && (
-                            <span className={`text-[10px] font-mono font-bold ${excedeStockBolson ? 'text-red-600 font-black' : 'text-emerald-700'}`}>
-                              Disp: {formatKg(stockBolsonDisp)}
+                            <span className="text-[10px] font-mono font-bold text-slate-500">
+                              Reg: {formatKg(stockBolsonDisp)}
                             </span>
                           )}
                         </div>
@@ -670,7 +651,7 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                             value={line.kgExtraidos}
                             onChange={(e) => handleUpdateOrigenLinea(line.id, 'kgExtraidos', Number(e.target.value))}
                             className={`w-full px-2.5 py-2 bg-white border rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 ${
-                              excedeStockSilo || excedeStockBolson
+                              excedeStockSilo
                                 ? 'border-red-400 text-red-900 focus:ring-red-400'
                                 : 'border-slate-300 focus:ring-[#00603C]'
                             }`}
@@ -686,13 +667,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                       <p className="text-[11px] font-bold text-red-700 flex items-center gap-1 mt-1">
                         <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
                         <span>El {line.siloId} tiene {formatKg(stockSiloDisp)} disponibles, pero se solicitan {formatKg(reqTotalSilo)} acumulados.</span>
-                      </p>
-                    )}
-
-                    {excedeStockBolson && stockBolsonDisp !== undefined && (
-                      <p className="text-[11px] font-bold text-red-700 flex items-center gap-1 mt-1">
-                        <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                        <span>El Bolsón {line.bolsonNro} tiene {formatKg(stockBolsonDisp)} disponibles, pero se intentan extraer {formatKg(line.kgExtraidos)}.</span>
                       </p>
                     )}
                   </div>
@@ -780,7 +754,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
                 <option value="1">Sector 1</option>
                 <option value="2">Sector 2</option>
                 <option value="3">Sector 3</option>
-                <option value="4">Sector 4</option>
               </select>
             </div>
           </div>

@@ -974,12 +974,68 @@ export default function App() {
   const handleBatchUpdateLotes = async (updatedLotes: Lote[]) => {
     try {
       const batch = writeBatch(db);
+      const nuevosMovsSiloBatch: MovimientoSilo[] = [];
+      const idsLotesProcesados: string[] = [];
+
       for (const loteGuardar of updatedLotes) {
         const docRef = doc(db, 'lotes', loteGuardar.id);
         batch.set(docRef, mapLoteToFirestore(loteGuardar));
+        idsLotesProcesados.push(loteGuardar.id);
+
+        const esRealizado = loteGuardar.estadoRegistro !== 'PRE-CARGA';
+
+        // Eliminar movimientos de silo anteriores para este lote
+        const movsAnterioresLote = movimientosSilo.filter(m => m.loteResultanteId === loteGuardar.id);
+        for (const mAnt of movsAnterioresLote) {
+          const delRef = doc(db, 'movimientos_silo', mAnt.id);
+          batch.delete(delRef);
+        }
+
+        // Si es REALIZADO y especifica silosOrigen, generar EGRESO_OP para descontar stock del Silo
+        if (esRealizado && loteGuardar.silosOrigen && loteGuardar.silosOrigen.length > 0) {
+          const fechaIng = loteGuardar.fechaIngreso || new Date().toISOString().split('T')[0];
+          let idx = 0;
+          for (const item of loteGuardar.silosOrigen) {
+            const kgCant = Number(item.kgExtraidos || item.kg || 0);
+            if (kgCant > 0) {
+              idx++;
+              const movId = `EGRESO-LOTE-${loteGuardar.id}-${item.siloId.replace(/\s+/g, '')}-${Date.now()}-${idx}`;
+              const movEgreso: MovimientoSilo = {
+                id: movId,
+                siloId: item.siloId,
+                fecha: fechaIng,
+                tipo: 'EGRESO_OP',
+                kg: kgCant,
+                loteResultanteId: loteGuardar.id,
+                loteNro: loteGuardar.loteNro,
+                ordenProcesoId: loteGuardar.ordenProcesoId,
+                cliente: loteGuardar.cliente,
+                especie: loteGuardar.especie,
+                variedad: loteGuardar.variedad,
+                categoria: loteGuardar.categoria
+              };
+              const movDocRef = doc(db, 'movimientos_silo', movId);
+              batch.set(movDocRef, movEgreso);
+              nuevosMovsSiloBatch.push(movEgreso);
+            }
+          }
+        }
       }
+
       await batch.commit();
-      showNotification(`¡${updatedLotes.length} lotes actualizados con éxito en conjunto!`);
+
+      // Actualizar estado local
+      setLotes(prev => prev.map(l => {
+        const match = updatedLotes.find(u => u.id === l.id);
+        return match ? match : l;
+      }));
+
+      setMovimientosSilo(prev => {
+        const sinAnteriores = prev.filter(m => !idsLotesProcesados.includes(m.loteResultanteId || ''));
+        return [...sinAnteriores, ...nuevosMovsSiloBatch];
+      });
+
+      showNotification(`¡${updatedLotes.length} lotes actualizados a REALIZADO con éxito (Salida de Silo generada)!`);
     } catch (e) {
       console.error('Error al realizar edición masiva de lotes:', e);
       showNotification('Error al aplicar cambios masivos.');

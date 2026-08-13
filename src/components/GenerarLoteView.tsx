@@ -191,13 +191,18 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
   // Handlers para agregar / quitar ítems de la lista
   const handleAddDraftLote = () => {
     const nextNro = getNextLoteNumber(0, draftLotes);
+    // Copiar automáticamente Tipo y Categoría del Lote 1 precargado si existe
+    const firstDraft = draftLotes[0];
+    const defaultTipo = firstDraft?.tipo || 'Intermedio';
+    const defaultCat = firstDraft?.categoria || 'Pre básica';
+
     setDraftLotes(prev => [
       ...prev,
       {
         id: `draft-${Date.now()}-${Math.random()}`,
         loteNro: nextNro,
-        tipo: 'Intermedio',
-        categoria: 'Pre básica',
+        tipo: defaultTipo,
+        categoria: defaultCat,
         stockBolsas: 35,
         kgPorBolsa: 800,
         printFicha: false,
@@ -207,13 +212,17 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
 
   const handleAddMasivos = () => {
     const count = Math.max(1, Math.min(10, cantidadMasiva));
+    const firstDraft = draftLotes[0];
+    const defaultTipo = firstDraft?.tipo || 'Intermedio';
+    const defaultCat = firstDraft?.categoria || 'Pre básica';
+
     const newItems: LoteDraftItem[] = [];
     for (let i = 0; i < count; i++) {
       newItems.push({
         id: `draft-${Date.now()}-${i}`,
         loteNro: getNextLoteNumber(i, draftLotes),
-        tipo: 'Intermedio',
-        categoria: 'Pre básica',
+        tipo: defaultTipo,
+        categoria: defaultCat,
         stockBolsas: 35,
         kgPorBolsa: 800,
         printFicha: false,
@@ -230,12 +239,20 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
   };
 
   const handleUpdateDraftLote = (id: string, field: keyof LoteDraftItem, value: any) => {
-    setDraftLotes(prev => prev.map(item => {
-      if (item.id === id) {
-        return { ...item, [field]: value };
-      }
-      return item;
-    }));
+    setDraftLotes(prev => {
+      const isFirst = prev.length > 0 && prev[0].id === id;
+
+      return prev.map((item, idx) => {
+        if (item.id === id) {
+          return { ...item, [field]: value };
+        }
+        // Si se actualiza Tipo o Categoría en el Lote 1, copiar automáticamente a los lotes siguientes (2 en adelante)
+        if (isFirst && (field === 'tipo' || field === 'categoria') && idx > 0) {
+          return { ...item, [field]: value };
+        }
+        return item;
+      });
+    });
   };
 
   // Submit guardar todos los lotes
@@ -634,7 +651,6 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
                   <option value="1">Sector 1</option>
                   <option value="2">Sector 2</option>
                   <option value="3">Sector 3</option>
-                  <option value="4">Sector 4</option>
                 </select>
               </div>
             </div>

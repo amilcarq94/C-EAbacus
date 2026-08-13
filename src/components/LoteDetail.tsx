@@ -191,13 +191,11 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
     if (tipoMov === 'Entrada manual') {
       nuevoStockBolsas += cantBolsas;
       nuevoStockKg += totalKgMov;
-    } else if (tipoMov === 'Salida') {
+    } else if (tipoMov === 'Salida' || tipoMov === 'Pasado a Consumo') {
       nuevoStockBolsas -= cantBolsas;
       nuevoStockKg -= totalKgMov;
     } else { // Ajuste
-      // Si es ajuste, podemos permitir que el detalle o el usuario determine el sentido. 
-      // Para simplificar, asumimos que "Ajuste" reduce el stock si se indica, o lo aumenta.
-      // Por defecto, dejemos que un Ajuste reste stock en este formulario.
+      // Si es ajuste, resta stock
       nuevoStockBolsas -= cantBolsas;
       nuevoStockKg -= totalKgMov;
     }
@@ -579,15 +577,6 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
           >
             <QrCode className="w-4 h-4 text-[#C9922E]" />
             <span>Código QR Ficha Técnica</span>
-          </button>
-
-          <button
-            onClick={() => setShowBarcodeModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#E3EFE7] text-[#00603C] border border-[#00603C] border-opacity-25 rounded-lg hover:bg-[#cbe3d3] transition text-xs font-semibold"
-            title="Imprimir Código de Barras"
-          >
-            <Barcode className="w-4 h-4 text-[#C9922E]" />
-            Imprimir Código de Barras
           </button>
 
           <button
@@ -1093,6 +1082,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
                 >
                   <option value="Entrada manual">Entrada manual (+ suma stock)</option>
                   <option value="Salida">Salida manual (- resta stock)</option>
+                  <option value="Pasado a Consumo">Pasado a Consumo (- resta stock)</option>
                   <option value="Ajuste">Ajuste de Auditoría (- resta stock)</option>
                 </select>
               </div>

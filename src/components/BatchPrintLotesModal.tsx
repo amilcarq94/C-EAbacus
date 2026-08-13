@@ -4,9 +4,10 @@
  */
 
 import React, { useEffect } from 'react';
-import { Lote } from '../types';
+import { Lote, MovimientoStock } from '../types';
 import { LogoSiloLoose } from './Logo';
 import { Printer, X, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { formatNumberArg } from '../utils/formatters';
 
 interface BatchPrintLotesModalProps {
@@ -227,6 +228,41 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
               </div>
             </div>
 
+            {/* Código QR de Trazabilidad de gran tamaño */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 my-4 bg-slate-50 rounded-2xl border-2 border-[#00603C] text-slate-800">
+              <div className="text-left space-y-1 max-w-sm">
+                <span className="text-[10px] font-black text-[#00603C] uppercase tracking-widest block">
+                  Código QR de Trazabilidad Oficial
+                </span>
+                <p className="text-xs font-bold text-slate-900">
+                  Lote: <span className="font-mono text-[#00603C]">{lote.loteNro}</span> — {lote.especie} ({lote.variedad || 's/v'})
+                </p>
+                <p className="text-[10px] text-slate-600 leading-tight">
+                  Escanee el código QR para acceder a la ficha técnica oficial, trazabilidad de silos y movimientos en tiempo real.
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-300 shadow-md shrink-0 flex items-center justify-center">
+                <QRCodeCanvas
+                  value={JSON.stringify({
+                    loteNro: lote.loteNro,
+                    cliente: lote.cliente,
+                    especie: lote.especie,
+                    variedad: lote.variedad,
+                    categoria: lote.categoria,
+                    tipo: lote.tipo,
+                    stockBolsas: lote.stockBolsas,
+                    stockKg: lote.stockKg,
+                    estado: lote.estado,
+                    id: lote.id
+                  })}
+                  size={150}
+                  bgColor="#ffffff"
+                  fgColor="#00603C"
+                  level="H"
+                />
+              </div>
+            </div>
+
             {/* Trazabilidad y Orígenes */}
             <div className="space-y-3 mb-4 text-xs">
               {/* Silos de Origen */}
@@ -275,6 +311,124 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* MOVIMIENTOS HISTÓRICOS CATEGORIZADOS */}
+            {(() => {
+              const hist = lote.historial || [];
+              const ingresos = hist.filter(m => {
+                const t = (m.tipo || '').toLowerCase();
+                return t.includes('entrada') || t.includes('ingreso') || t.includes('reingreso') || t.includes('alta');
+              });
+              const egresosTratado = hist.filter(m => {
+                const t = (m.tipo || '').toLowerCase();
+                return t.includes('tratad') || t.includes('tratar') || t.includes('curado') || t.includes('fungicida');
+              });
+              const egresosDespachos = hist.filter(m => {
+                const t = (m.tipo || '').toLowerCase();
+                return (t.includes('despacho') || t.includes('remito') || t.includes('salida')) && !t.includes('consumo') && !t.includes('tratad');
+              });
+              const egresosConsumo = hist.filter(m => {
+                const t = (m.tipo || '').toLowerCase();
+                return t.includes('consumo');
+              });
+
+              return (
+                <div className="my-4 p-3 bg-slate-50 rounded-2xl border border-slate-200 text-left">
+                  <h3 className="font-serif text-xs font-bold text-[#00603C] uppercase tracking-wider border-b border-[#00603C] pb-1 mb-3">
+                    Historial de Movimientos Históricos
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* 1. Ingresos */}
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <div className="flex justify-between items-center mb-1 pb-1 border-b border-slate-100">
+                        <span className="text-[10px] font-extrabold uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                          Ingresos
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 font-bold">{ingresos.length}</span>
+                      </div>
+                      {ingresos.length > 0 ? (
+                        <div className="space-y-1">
+                          {ingresos.map(m => (
+                            <div key={m.id} className="flex justify-between text-[10px] font-mono text-slate-700">
+                              <span>{m.fecha} — {m.detalle || m.tipo}</span>
+                              <span className="font-bold text-emerald-700">+{m.cantidadBolsas} b. ({formatNumberArg(m.cantidadKg, 0)} kg)</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Sin ingresos registrados.</span>
+                      )}
+                    </div>
+
+                    {/* 2. Egresos por Tratado */}
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <div className="flex justify-between items-center mb-1 pb-1 border-b border-slate-100">
+                        <span className="text-[10px] font-extrabold uppercase text-purple-800 bg-purple-100 px-2 py-0.5 rounded">
+                          Egresos por Tratado
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 font-bold">{egresosTratado.length}</span>
+                      </div>
+                      {egresosTratado.length > 0 ? (
+                        <div className="space-y-1">
+                          {egresosTratado.map(m => (
+                            <div key={m.id} className="flex justify-between text-[10px] font-mono text-slate-700">
+                              <span>{m.fecha} — {m.detalle || m.tipo}</span>
+                              <span className="font-bold text-purple-700">-{m.cantidadBolsas} b. ({formatNumberArg(m.cantidadKg, 0)} kg)</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Sin egresos por tratamiento.</span>
+                      )}
+                    </div>
+
+                    {/* 3. Egresos por Despachos */}
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <div className="flex justify-between items-center mb-1 pb-1 border-b border-slate-100">
+                        <span className="text-[10px] font-extrabold uppercase text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                          Egresos por Despachos
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 font-bold">{egresosDespachos.length}</span>
+                      </div>
+                      {egresosDespachos.length > 0 ? (
+                        <div className="space-y-1">
+                          {egresosDespachos.map(m => (
+                            <div key={m.id} className="flex justify-between text-[10px] font-mono text-slate-700">
+                              <span>{m.fecha} — {m.detalle || m.tipo}</span>
+                              <span className="font-bold text-blue-700">-{m.cantidadBolsas} b. ({formatNumberArg(m.cantidadKg, 0)} kg)</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Sin egresos por despacho.</span>
+                      )}
+                    </div>
+
+                    {/* 4. Egresos por Pasado a Consumo */}
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                      <div className="flex justify-between items-center mb-1 pb-1 border-b border-slate-100">
+                        <span className="text-[10px] font-extrabold uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                          Egresos por Pasado a Consumo
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 font-bold">{egresosConsumo.length}</span>
+                      </div>
+                      {egresosConsumo.length > 0 ? (
+                        <div className="space-y-1">
+                          {egresosConsumo.map(m => (
+                            <div key={m.id} className="flex justify-between text-[10px] font-mono text-slate-700">
+                              <span>{m.fecha} — {m.detalle || m.tipo}</span>
+                              <span className="font-bold text-amber-700">-{m.cantidadBolsas} b. ({formatNumberArg(m.cantidadKg, 0)} kg)</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Sin egresos a consumo.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Pie de Ficha con Firmas y Autorizaciones */}
             <div className="mt-6 pt-4 border-t border-slate-300 grid grid-cols-2 gap-8 text-center text-[10px] font-bold text-slate-500 uppercase">
