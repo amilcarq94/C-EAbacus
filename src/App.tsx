@@ -45,6 +45,9 @@ export default function App() {
     return sessionStorage.getItem('agro_abacus_logged') === 'true';
   });
 
+  // Estado para controlar si el usuario ingresó a Planta Móvil desde la Carátula
+  const [enteredPlantaMovil, setEnteredPlantaMovil] = useState(false);
+
   // Estado de Conexión en Tiempo Real a Firebase
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(true);
@@ -824,6 +827,7 @@ export default function App() {
   // 5. Manejo del Login
   const handleLoginSuccess = (nombre: string, rol: string) => {
     setIsLoggedIn(true);
+    setEnteredPlantaMovil(false);
     const user = { nombre, rol };
     setCurrentUser(user);
     sessionStorage.setItem('agro_abacus_logged', 'true');
@@ -833,11 +837,12 @@ export default function App() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setEnteredPlantaMovil(false);
     sessionStorage.removeItem('agro_abacus_logged');
     sessionStorage.removeItem('agro_abacus_user');
     setCurrentUser({ nombre: '', rol: '' });
     setActiveView('modo-planta');
-    showNotification('Sesión cerrada. Acceso público a Planta Móvil.');
+    showNotification('Sesión cerrada.');
   };
 
   // Función auxiliar para notificaciones
@@ -1601,12 +1606,15 @@ export default function App() {
     );
   }
 
-  // Si no está logueado y no está en modo-planta ni viendo lote público, mostrar Login
-  if (!isLoggedIn && activeView !== 'modo-planta') {
+  // Si no está logueado y no ingresó explícitamente a planta-movil ni está viendo un lote público, mostrar la Carátula de Inicio / Login obligatoria
+  if (!isLoggedIn && !enteredPlantaMovil && !publicLote) {
     return (
       <Login 
         onLoginSuccess={handleLoginSuccess} 
-        onAccederPlantaMovil={() => navigateTo('modo-planta')}
+        onAccederPlantaMovil={() => {
+          setEnteredPlantaMovil(true);
+          navigateTo('modo-planta');
+        }}
       />
     );
   }
@@ -1701,7 +1709,9 @@ export default function App() {
             </button>
           ) : (
             <button
-              onClick={() => setActiveView('dashboard')}
+              onClick={() => {
+                setEnteredPlantaMovil(false);
+              }}
               className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg border border-slate-700 transition"
               title="Iniciar Sesión Administrativa"
             >
