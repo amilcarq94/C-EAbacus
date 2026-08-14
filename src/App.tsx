@@ -837,7 +837,7 @@ export default function App() {
     sessionStorage.removeItem('agro_abacus_user');
     setCurrentUser({ nombre: '', rol: '' });
     setActiveView('modo-planta');
-    showNotification('Sesión cerrada. Acceso público en modo Planta Móvil.');
+    showNotification('Sesión cerrada. Acceso público a Planta Móvil.');
   };
 
   // Función auxiliar para notificaciones
