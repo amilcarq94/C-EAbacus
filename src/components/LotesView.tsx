@@ -14,6 +14,7 @@ import { LoteLimitsConfigModal } from './LoteLimitsConfigModal';
 import { ProcesarLoteModal } from './ProcesarLoteModal';
 import { BulkEditLotesModal } from './BulkEditLotesModal';
 import { TratarLoteModal } from './TratarLoteModal';
+import { PaginationControls } from './PaginationControls';
 import { SiloId, BolsonCampo } from '../types';
 
 interface MultiSelectDropdownProps {
@@ -625,6 +626,15 @@ export const LotesView: React.FC<LotesViewProps> = ({
   // Estado para la confirmación de borrado de un lote individual
   const [loteToDelete, setLoteToDelete] = useState<Lote | null>(null);
 
+  // Estados de Paginación de la Tabla de Lotes
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  // Reset de página al cambiar filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterClientes, filterEspecies, filterVariedades, filterTipos, filterCategorias, filterTratamientos, filterEstados, filterAlas, filterSectores]);
+
   // Guardar en localStorage cuando se fija o cuando cambian los filtros estando fijados
   useEffect(() => {
     if (isFilterPinned) {
@@ -840,6 +850,12 @@ export const LotesView: React.FC<LotesViewProps> = ({
       return true;
     });
   }, [lotes, search, filterClientes, filterEspecies, filterVariedades, filterTipos, filterCategorias, filterTratamientos, filterEstados, filterAlas, filterSectores]);
+
+  // Lotes paginados según página y tamaño seleccionados
+  const paginatedLotes = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredLotes.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredLotes, currentPage, itemsPerPage]);
 
   // Resumen dinámico de totales de stock agrupado por tipo de envase (kg por bolsa)
   const stockSummaryByEnvase = useMemo(() => {
@@ -2781,12 +2797,13 @@ export const LotesView: React.FC<LotesViewProps> = ({
       ) : viewType === 'grid' ? (
         
         /* VISTA TARJETAS (GRID) */
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredLotes.map(l => (
-            <div
-              key={l.id}
-              className="bg-white rounded-2xl border border-gray-100 hover:border-[#00603C] hover:border-opacity-30 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between overflow-hidden group"
-            >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {paginatedLotes.map(l => (
+              <div
+                key={l.id}
+                className="bg-white rounded-2xl border border-gray-100 hover:border-[#00603C] hover:border-opacity-30 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between overflow-hidden group"
+              >
               {/* Encabezado Tarjeta */}
               <div className="p-5 border-b border-gray-50 bg-[#E3EFE7] bg-opacity-20 flex justify-between items-start gap-4">
                 <div className="flex items-start gap-3">
@@ -2941,11 +2958,26 @@ export const LotesView: React.FC<LotesViewProps> = ({
               </div>
             </div>
           ))}
+          </div>
+
+          {/* Paginación Vista Grid */}
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredLotes.length / itemsPerPage)}
+            totalItems={filteredLotes.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newSize) => {
+              setItemsPerPage(newSize);
+              setCurrentPage(1);
+            }}
+            className="rounded-2xl border border-gray-100 shadow-sm"
+          />
         </div>
       ) : (
         
         /* VISTA TABLA (ESTILO DE TABLA INSTITUCIONAL) */
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden space-y-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -2975,7 +3007,7 @@ export const LotesView: React.FC<LotesViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
-                {filteredLotes.map((l, index) => (
+                {paginatedLotes.map((l, index) => (
                   <tr
                     key={l.id}
                     className={index % 2 === 0 ? 'bg-white hover:bg-slate-50/80 transition-colors' : 'bg-[#E3EFE7]/30 hover:bg-[#E3EFE7]/60 transition-colors'}
@@ -3132,6 +3164,19 @@ export const LotesView: React.FC<LotesViewProps> = ({
               </tbody>
             </table>
           </div>
+
+          {/* Paginación Vista Tabla */}
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredLotes.length / itemsPerPage)}
+            totalItems={filteredLotes.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newSize) => {
+              setItemsPerPage(newSize);
+              setCurrentPage(1);
+            }}
+          />
         </div>
       )}
 

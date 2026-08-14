@@ -16,7 +16,7 @@ import { SalidasList } from './components/SalidasList';
 import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer, BolsonCampo } from './types';
 import { getLoteAuditoria } from './utils/audit';
 import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES, BOLSONES_INICIALES } from './data/mockData';
-import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database, PackagePlus, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, LogIn, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database, PackagePlus, BarChart3, Smartphone } from 'lucide-react';
 import { GenerarLoteView } from './components/GenerarLoteView';
 import { QrCodeScanner } from './components/QrCodeScanner';
 import { DespachosSection } from './components/DespachosSection';
@@ -25,6 +25,7 @@ import { OrdenesProcesoView } from './components/OrdenesProcesoView';
 import { IngresoSilosView } from './components/IngresoSilosView';
 import { ChoferesView } from './components/ChoferesView';
 import { DataBasesView } from './components/DataBasesView';
+import { ModoPlantaMobileView } from './components/ModoPlantaMobileView';
 import { CampaniaSelector } from './components/CampaniaSelector';
 import { getActiveCampaniaIdStored, setActiveCampaniaIdStored, getCampaniaIdFromDate } from './utils/campanias';
 import { findExistingChofer, mergeChoferData } from './utils/choferes';
@@ -195,8 +196,8 @@ export default function App() {
   const tieneAlertaSilo95 = silosConAlerta95.length > 0;
 
   // 3. Control de Vistas
-  // 'dashboard' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
-  const [activeView, setActiveView] = useState<'dashboard' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('dashboard');
+  // 'modo-planta' | 'dashboard' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
+  const [activeView, setActiveView] = useState<'dashboard' | 'modo-planta' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'>('modo-planta');
   const [loteSeleccionado, setLoteSeleccionado] = useState<Lote | null>(null);
   const [loteAEditar, setLoteAEditar] = useState<Lote | null>(null);
   const [preselectedLoteId, setPreselectedLoteId] = useState<string | undefined>(undefined);
@@ -834,6 +835,9 @@ export default function App() {
     setIsLoggedIn(false);
     sessionStorage.removeItem('agro_abacus_logged');
     sessionStorage.removeItem('agro_abacus_user');
+    setCurrentUser({ nombre: '', rol: '' });
+    setActiveView('modo-planta');
+    showNotification('Sesión cerrada. Acceso público en modo Planta Móvil.');
   };
 
   // Función auxiliar para notificaciones
@@ -1597,9 +1601,14 @@ export default function App() {
     );
   }
 
-  // Si no está logueado, gate de entrada
-  if (!isLoggedIn) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+  // Si no está logueado y no está en modo-planta ni viendo lote público, mostrar Login
+  if (!isLoggedIn && activeView !== 'modo-planta') {
+    return (
+      <Login 
+        onLoginSuccess={handleLoginSuccess} 
+        onAccederPlantaMovil={() => navigateTo('modo-planta')}
+      />
+    );
   }
 
   return (
@@ -1634,7 +1643,7 @@ export default function App() {
           )}
         </div>
         
-        {/* Lado derecho del header: CampaniaSelector + Operario Activo + QR + Botón Cerrar Sesión */}
+        {/* Lado derecho del header: CampaniaSelector + Operario/Login + Planta Móvil + QR + Salir */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Selector y Fijador de Campaña Activa */}
           <CampaniaSelector
@@ -1645,14 +1654,33 @@ export default function App() {
             availableCampaniasIds={availableCampaniasIds}
           />
 
-          {/* Operario Activo */}
-          <div className="hidden sm:flex flex-col text-right mr-1 sm:mr-2 leading-tight border-r border-gray-100 pr-3">
-            <span className="text-xs font-bold text-gray-800">{currentUser.nombre}</span>
-            <span className="text-[9px] text-[#00603C] font-semibold uppercase tracking-wider">{currentUser.rol}</span>
-          </div>
+          {/* Operario Activo o Badge de Acceso Libre */}
+          {isLoggedIn ? (
+            <div className="hidden sm:flex flex-col text-right mr-1 sm:mr-2 leading-tight border-r border-gray-100 pr-3">
+              <span className="text-xs font-bold text-gray-800">{currentUser.nombre}</span>
+              <span className="text-[9px] text-[#00603C] font-semibold uppercase tracking-wider">{currentUser.rol}</span>
+            </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+              <span>PLANTA MÓVIL (PÚBLICO)</span>
+            </div>
+          )}
 
           <LogoSiloLoose size={36} color="#00603C" className="opacity-80 hidden lg:block" />
           
+          <button
+            onClick={() => navigateTo('modo-planta')}
+            className={`flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider px-3 py-1.5 rounded-lg transition shadow-sm ${
+              activeView === 'modo-planta'
+                ? 'bg-emerald-500 text-slate-950 ring-2 ring-emerald-300'
+                : 'bg-emerald-800 text-white hover:bg-emerald-700'
+            }`}
+            title="Acceso a Planta Móvil"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-300" />
+            <span className="hidden sm:inline">PLANTA MÓVIL</span>
+          </button>
+
           <button
             onClick={() => setShowQrScanner(true)}
             className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-[#00603C] hover:bg-[#254731] text-white px-3.5 py-1.5 rounded-lg transition shadow-sm"
@@ -1662,14 +1690,25 @@ export default function App() {
             <span>ESCANEAR QR</span>
           </button>
 
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider text-[#A0522D] hover:bg-[#F5E5DC] px-3 py-1.5 rounded-lg border border-[#A0522D] border-opacity-20 transition"
-            title="Cerrar Sesión del Operario"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">SALIR</span>
-          </button>
+          {isLoggedIn ? (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider text-[#A0522D] hover:bg-[#F5E5DC] px-3 py-1.5 rounded-lg border border-[#A0522D] border-opacity-20 transition"
+              title="Cerrar Sesión del Operario"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">SALIR</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setActiveView('dashboard')}
+              className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg border border-slate-700 transition"
+              title="Iniciar Sesión Administrativa"
+            >
+              <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">INICIAR SESIÓN</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -1677,7 +1716,23 @@ export default function App() {
       <nav className="fixed top-16 left-0 right-0 h-12 bg-[#00603C] border-b border-[#254731] px-2 sm:px-4 md:px-8 flex items-center overflow-x-auto z-40 shadow-inner scrollbar-none print:hidden">
         <div className="flex gap-1 md:gap-2 w-full max-w-7xl mx-auto items-center flex-nowrap shrink-0">
           
-          {/* Tab Dashboard */}
+          {/* Tab 1: Planta Móvil (Mobile / Simplificado) - PRIMERA OPCIÓN */}
+          <button
+            id="nav-tab-planta-movil"
+            onClick={() => navigateTo('modo-planta')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all duration-300 ${
+              activeView === 'modo-planta'
+                ? 'bg-emerald-400 text-slate-950 font-black shadow-[0_0_16px_rgba(52,211,153,0.8)] ring-2 ring-emerald-300'
+                : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-400/40'
+            }`}
+            title="Planta Móvil: Acceso público a Silos y Operaciones"
+          >
+            <Smartphone className="w-4 h-4 text-emerald-300" />
+            <span>Planta Móvil</span>
+            <span className="text-[9px] px-1 py-0.2 bg-emerald-400/30 text-emerald-100 rounded font-mono font-bold ml-0.5">Libre</span>
+          </button>
+
+          {/* Tab 2: Dashboard (Control) */}
           <button
             id="nav-tab-dashboard"
             onClick={() => navigateTo('dashboard')}
@@ -1691,7 +1746,7 @@ export default function App() {
             <span>Control</span>
           </button>
 
-          {/* Tab Reporte de Producción */}
+          {/* Tab 3: Reporte de Producción */}
           <button
             id="nav-tab-reporte-produccion"
             onClick={() => navigateTo('reporte-produccion')}
@@ -1706,7 +1761,7 @@ export default function App() {
             <span>Reporte de Producción</span>
           </button>
 
-          {/* Tab Órdenes de Proceso */}
+          {/* Tab 4: Órdenes de Proceso */}
           <button
             id="nav-tab-ordenes-proceso"
             onClick={() => navigateTo('ordenes-proceso')}
@@ -1720,7 +1775,7 @@ export default function App() {
             <span>Órdenes de Proceso</span>
           </button>
 
-          {/* Tab Ingreso a Silos */}
+          {/* Tab 5: Ingreso a Silos */}
           <button
             id="nav-tab-ingreso-silos"
             onClick={() => navigateTo('ingreso-silos')}
@@ -1762,7 +1817,7 @@ export default function App() {
             )}
           </button>
 
-          {/* Tab Lotes */}
+          {/* Tab 6: Lotes */}
           <button
             id="nav-tab-lotes"
             role="tab"
@@ -1832,7 +1887,7 @@ export default function App() {
             </span>
           </button>
 
-          {/* Tab Generar Lote (Alta rápida en Precarga) */}
+          {/* Tab 7: Generar Lote (Alta rápida en Precarga) */}
           <button
             id="nav-tab-generar-lote"
             onClick={() => navigateTo('generar-lote')}
@@ -1847,7 +1902,7 @@ export default function App() {
             <span>Generar Lote</span>
           </button>
           
-          {/* Tab Despachos */}
+          {/* Tab 8: Despachos */}
           <button
             id="nav-tab-despachos"
             onClick={() => navigateTo('despachos')}
@@ -1861,7 +1916,7 @@ export default function App() {
             <span>Despachos</span>
           </button>
 
-          {/* Tab Historial Salidas */}
+          {/* Tab 9: Historial Salidas */}
           <button
             id="nav-tab-historial-salidas"
             onClick={() => navigateTo('salidas-registradas')}
@@ -1875,7 +1930,7 @@ export default function App() {
             <span>Historial Salidas</span>
           </button>
 
-          {/* Tab Data Bases (Choferes y Bolsones) */}
+          {/* Tab 10: Data Bases (Choferes y Bolsones) */}
           <button
             id="nav-tab-choferes"
             onClick={() => navigateTo('choferes')}
@@ -1889,7 +1944,7 @@ export default function App() {
             <span>Data Bases</span>
           </button>
 
-          {/* Tab Importar */}
+          {/* Tab 11: Importar */}
           <button
             id="nav-tab-importar"
             onClick={() => navigateTo('importar')}
@@ -2100,6 +2155,29 @@ export default function App() {
             onUpdateOrdenStatus={handleUpdateOrdenStatus}
             onDespacharStock={handleDespacharStock}
             onDeleteOrden={handleDeleteOrden}
+          />
+        ) : activeView === 'modo-planta' ? (
+          <ModoPlantaMobileView
+            lotes={filteredLotesByCampania}
+            siloStocks={siloStocks}
+            movimientosSilo={movimientosSilo}
+            choferes={choferes}
+            bolsones={bolsones}
+            clientes={clientes}
+            especies={especies}
+            currentUser={currentUser}
+            ordenesCarga={filteredOrdenesByCampania}
+            onRegistrarIngresoSilo={handleRegistrarIngresoSilo}
+            onUpdateLoteEstado={(lote, nuevoEstado) => {
+              const updatedLote = { ...lote, estadoRegistro: nuevoEstado };
+              handleBatchUpdateLotes([updatedLote]);
+            }}
+            onOpenQrScanner={() => setShowQrScanner(true)}
+            onSelectLote={(l) => setLoteSeleccionado(l)}
+            onSaveOrdenCarga={handleSaveOrden}
+            onUpdateOrdenStatus={handleUpdateOrdenStatus}
+            onDespacharStock={handleDespacharStock}
+            onDeleteOrdenCarga={handleDeleteOrden}
           />
         ) : activeView === 'salidas-registradas' ? (
           <SalidasList

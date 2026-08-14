@@ -3,31 +3,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Lote, MovimientoSilo, SiloId, Chofer, BolsonCampo, EstadoRegistroLote, OrdenCarga } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
-import { ChoferSearchSelector } from './ChoferSearchSelector';
-import { getOfflinePendingIngresos, savePendingOfflineIngreso, syncOfflineQueue } from '../utils/offlineQueue';
-import { recordGlobalAuditLog } from '../utils/auditLogger';
+import { getSiloDetailedInfo, SiloFullInfo } from '../utils/siloValidation';
+import { formatNumberArg } from '../utils/formatters';
 import { DespachosSection } from './DespachosSection';
+import { FichaTecnicaSiloModal } from './FichaTecnicaSiloModal';
+import { GrillaSeisSilosModal } from './GrillaSeisSilosModal';
 import {
-  Truck,
+  Warehouse,
   QrCode,
   CheckCircle2,
-  PackageCheck,
   Wifi,
   WifiOff,
-  RefreshCw,
-  Warehouse,
-  ArrowRight,
-  User,
-  ShieldCheck,
-  AlertTriangle,
+  ClipboardList,
+  FileText,
+  Grid3X3,
+  Calendar,
+  Truck,
+  Droplets,
   Scale,
-  Save,
   Layers,
-  Sparkles,
-  ClipboardList
+  ArrowUpRight,
+  ArrowDownRight,
+  ShieldCheck,
+  Info,
+  Clock,
+  User,
+  Eye
 } from 'lucide-react';
 
 interface ModoPlantaMobileViewProps {
@@ -40,14 +44,18 @@ interface ModoPlantaMobileViewProps {
   especies: string[];
   currentUser: { nombre: string; rol: string };
   ordenesCarga: OrdenCarga[];
-  onRegistrarIngresoSilo: (movimiento: MovimientoSilo) => Promise<any> | void;
-  onUpdateLoteEstado: (lote: Lote, nuevoEstado: EstadoRegistroLote) => void;
   onOpenQrScanner: () => void;
   onSelectLote: (lote: Lote) => void;
   onSaveOrdenCarga: (orden: OrdenCarga) => void;
-  onUpdateOrdenStatus: (id: string, nuevoEstado: 'Disponible' | 'Aceptada' | 'Despachada') => void;
-  onDespacharStock: (ordenId: string, loteId: string, bolsas: number, kg: number, lotesOrigen?: any[]) => Promise<boolean>;
-  onDeleteOrdenCarga: (id: string) => void;
+  onUpdateOrdenStatus: (
+    ordenId: string,
+    nuevoEstado: 'Disponible' | 'Aceptada' | 'Despachada',
+    fotoRemito?: string,
+    firmaChofer?: string
+  ) => void;
+  onDespacharStock: (loteId: string, bolsas: number, kg: number, ordenId: string) => boolean;
+  onDeleteOrdenCarga?: (id: string) => void;
+  onSolicitarLogin?: () => void;
 }
 
 export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
@@ -60,37 +68,25 @@ export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
   especies,
   currentUser,
   ordenesCarga,
-  onRegistrarIngresoSilo,
-  onUpdateLoteEstado,
   onOpenQrScanner,
   onSelectLote,
   onSaveOrdenCarga,
   onUpdateOrdenStatus,
   onDespacharStock,
-  onDeleteOrdenCarga
+  onDeleteOrdenCarga,
+  onSolicitarLogin
 }) => {
-  const [subTab, setSubTab] = useState<'INGRESO_RAPIDO' | 'MARCAR_REALIZADO' | 'DESPACHOS_PLAYA'>('INGRESO_RAPIDO');
-  const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [pendingOfflineCount, setPendingOfflineCount] = useState(() => getOfflinePendingIngresos().length);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [mensajeConfirmacion, setMensajeConfirmacion] = useState('');
-
-  // Estados del Formulario de Ingreso Rápido
+  const [subTab, setSubTab] = useState<'SILOS' | 'DESPACHOS_PLAYA'>('SILOS');
   const [siloSeleccionado, setSiloSeleccionado] = useState<SiloId>('Silo 1');
-  const [kgIngreso, setKgIngreso] = useState<number | ''>('');
-  const [cliente, setCliente] = useState(clientes[0] || 'San Diego Semilla');
-  const [especie, setEspecie] = useState(especies[0] || 'Soja');
-  const [variedad, setVariedad] = useState('P46A03');
-  const [choferNombre, setChoferNombre] = useState('');
-  const [patenteCamion, setPatenteCamion] = useState('');
-  const [humedad, setHumedad] = useState<number | ''>(13.5);
+  const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
 
-  // Escuchar estado online/offline
+  // Modales de Ficha Técnica
+  const [fichaModalSilo, setFichaModalSilo] = useState<SiloId | null>(null);
+  const [showGrillaSeisSilos, setShowGrillaSeisSilos] = useState(false);
+
+  // Escuchar estado de conexión online/offline
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      handleSyncOfflineQueue();
-    };
+    const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
@@ -102,91 +98,27 @@ export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
     };
   }, []);
 
-  const handleSyncOfflineQueue = async () => {
-    if (isSyncing) return;
-    setIsSyncing(true);
-    try {
-      const result = await syncOfflineQueue(async (mov) => {
-        await onRegistrarIngresoSilo(mov);
-        return true;
-      });
-      setPendingOfflineCount(getOfflinePendingIngresos().length);
-      if (result.successCount > 0) {
-        setMensajeConfirmacion(`✅ ${result.successCount} ingresos offline sincronizados exitosamente.`);
-        setTimeout(() => setMensajeConfirmacion(''), 4000);
-      }
-    } catch (e) {
-      console.error('Error al sincronizar cola offline:', e);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleGuardarIngresoRapido = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!kgIngreso || Number(kgIngreso) <= 0) {
-      alert('Por favor ingrese los kilogramos del camión.');
-      return;
-    }
-
-    const movimiento: MovimientoSilo = {
-      id: `ING-RAPIDO-${Date.now()}`,
-      siloId: siloSeleccionado,
-      fecha: new Date().toISOString().split('T')[0],
-      tipo: 'INGRESO',
-      kg: Number(kgIngreso),
-      cliente,
-      especie,
-      variedad,
-      categoria: 'FUNDADORA',
-      chofer: choferNombre || 'Chofer de Planta',
-      patentes: patenteCamion || '—',
-      humedad: humedad !== '' ? Number(humedad) : undefined,
-      usuario: currentUser.nombre
-    };
-
-    if (!isOnline) {
-      // Guardar en cola offline
-      savePendingOfflineIngreso(movimiento);
-      setPendingOfflineCount(getOfflinePendingIngresos().length);
-      setMensajeConfirmacion(`📴 Guardado localmente (Offline). Se sincronizará automáticamente al recuperar señal.`);
-    } else {
-      try {
-        await onRegistrarIngresoSilo(movimiento);
-        setMensajeConfirmacion(`✅ Ingreso de ${Number(kgIngreso).toLocaleString('es-AR')} kg registrado en ${siloSeleccionado}.`);
-      } catch (err) {
-        savePendingOfflineIngreso(movimiento);
-        setPendingOfflineCount(getOfflinePendingIngresos().length);
-        setMensajeConfirmacion(`⚠️ Error de red. Guardado localmente en cola offline.`);
-      }
-    }
-
-    // Registrar en auditoría
-    recordGlobalAuditLog({
-      tipo: 'Creación',
-      usuario: currentUser.nombre,
-      rol: currentUser.rol,
-      modulo: 'SILOS',
-      entidadId: siloSeleccionado,
-      descripcion: `Ingreso rápido móvil: +${Number(kgIngreso).toLocaleString('es-AR')} kg en ${siloSeleccionado} (${cliente} - ${variedad}).`,
-      detalles: `Chofer: ${choferNombre || 'S/D'} | Patente: ${patenteCamion || 'S/D'} | Modo: Planta Móvil.`
+  // Calcular la información detallada de los 6 silos
+  const silosInfoMap = useMemo(() => {
+    const map: Record<SiloId, SiloFullInfo> = {} as any;
+    SILOS_DISPONIBLES.forEach((siloId) => {
+      map[siloId] = getSiloDetailedInfo(siloId, movimientosSilo);
     });
+    return map;
+  }, [movimientosSilo]);
 
-    // Reset de campos
-    setKgIngreso('');
-    setChoferNombre('');
-    setPatenteCamion('');
-    setTimeout(() => setMensajeConfirmacion(''), 4000);
-  };
+  const siloActivo = silosInfoMap[siloSeleccionado] || silosInfoMap['Silo 1'];
 
-  // Filtrar lotes pendientes de marcar realizado (PRE-CARGA)
-  const lotesPendientesRealizado = lotes.filter(l => l.estadoRegistro === 'PRE-CARGA');
+  // Totales de stock en silos
+  const totalStockSilosKg = useMemo(() => {
+    return (Object.values(silosInfoMap) as SiloFullInfo[]).reduce((acc, s) => acc + s.stockKg, 0);
+  }, [silosInfoMap]);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-16">
+    <div className="max-w-3xl mx-auto space-y-4 pb-16">
       
-      {/* Barra Superior de Estado y Conexión */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-3">
+      {/* Barra Superior de Estado y Conexión de Planta Móvil */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className={`p-2 rounded-xl flex items-center justify-center ${
             isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
@@ -197,296 +129,473 @@ export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
             <div className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-ping'}`} />
               <span className="font-bold text-xs text-gray-900">
-                {isOnline ? 'Conectado a Planta' : 'Modo Offline (Sin Señal)'}
+                Planta Móvil · {isOnline ? 'En línea' : 'Sin señal'}
               </span>
             </div>
             <span className="text-[11px] text-gray-500 font-mono block">
-              Operador: {currentUser.nombre} ({currentUser.rol})
+              {currentUser.nombre || 'Acceso Público'} ({currentUser.rol || 'Visualizador'})
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {pendingOfflineCount > 0 && (
-            <button
-              onClick={handleSyncOfflineQueue}
-              disabled={isSyncing || !isOnline}
-              className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm disabled:opacity-50"
-              title="Sincronizar cola offline"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{pendingOfflineCount} pend.</span>
-            </button>
-          )}
-
           <button
             onClick={onOpenQrScanner}
-            className="p-2.5 bg-[#00603C] hover:bg-[#254731] text-white rounded-xl shadow-md transition flex items-center gap-1.5 text-xs font-bold"
-            title="Escanear QR de Lote"
+            className="p-2.5 bg-[#00603C] hover:bg-[#254731] text-white rounded-xl shadow-xs transition flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+            title="Escanear QR de Lote o Silo"
           >
             <QrCode className="w-4 h-4 text-[#C9922E]" />
-            <span className="hidden sm:inline">Escanear</span>
+            <span className="hidden sm:inline">Escanear QR</span>
           </button>
         </div>
       </div>
 
-      {mensajeConfirmacion && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{mensajeConfirmacion}</span>
-        </div>
-      )}
-
-      {/* Selector de Sub-pestañas Operativas Táctiles */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl">
+      {/* Selector de Sub-pestañas Táctiles: Silos y Mis Órdenes (Playa) */}
+      <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/60 shadow-2xs">
         <button
-          onClick={() => setSubTab('INGRESO_RAPIDO')}
-          className={`py-2.5 px-2 rounded-lg text-xs font-bold transition flex flex-col sm:flex-row items-center justify-center gap-1 ${
-            subTab === 'INGRESO_RAPIDO'
-              ? 'bg-white text-[#00603C] shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+          onClick={() => setSubTab('SILOS')}
+          className={`py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            subTab === 'SILOS'
+              ? 'bg-[#00603C] text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
           }`}
         >
-          <Truck className="w-4 h-4" />
-          <span className="truncate">Ingreso Camión</span>
-        </button>
-
-        <button
-          onClick={() => setSubTab('MARCAR_REALIZADO')}
-          className={`py-2.5 px-2 rounded-lg text-xs font-bold transition flex flex-col sm:flex-row items-center justify-center gap-1 relative ${
-            subTab === 'MARCAR_REALIZADO'
-              ? 'bg-white text-[#00603C] shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <PackageCheck className="w-4 h-4" />
-          <span className="truncate">Marcar Realizado</span>
-          {lotesPendientesRealizado.length > 0 && (
-            <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[9px] font-mono font-bold">
-              {lotesPendientesRealizado.length}
-            </span>
-          )}
+          <Warehouse className={`w-4 h-4 ${subTab === 'SILOS' ? 'text-[#C9922E]' : 'text-slate-500'}`} />
+          <span>Silos</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ml-1 ${
+            subTab === 'SILOS' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+          }`}>
+            6
+          </span>
         </button>
 
         <button
           onClick={() => setSubTab('DESPACHOS_PLAYA')}
-          className={`py-2.5 px-2 rounded-lg text-xs font-bold transition flex flex-col sm:flex-row items-center justify-center gap-1 ${
+          className={`py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
             subTab === 'DESPACHOS_PLAYA'
-              ? 'bg-white text-[#00603C] shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-[#00603C] text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
           }`}
         >
-          <ClipboardList className="w-4 h-4" />
-          <span className="truncate">Mis Órdenes (Playa)</span>
+          <ClipboardList className={`w-4 h-4 ${subTab === 'DESPACHOS_PLAYA' ? 'text-[#C9922E]' : 'text-slate-500'}`} />
+          <span>Mis Órdenes (Playa)</span>
+          {ordenesCarga.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ml-1 ${
+              subTab === 'DESPACHOS_PLAYA' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {ordenesCarga.length}
+            </span>
+          )}
         </button>
       </div>
 
-      {/* 1. INGRESO RÁPIDO DE CAMIÓN */}
-      {subTab === 'INGRESO_RAPIDO' && (
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <div className="flex items-center gap-2">
-              <Truck className="w-5 h-5 text-[#00603C]" />
-              <h3 className="font-serif text-base font-bold text-gray-900">
-                Ingreso Rápido a Silo
-              </h3>
+      {/* 1. SECCIÓN DE SILOS: SELECTOR Y VISOR DE SOLO VISUALIZACIÓN */}
+      {subTab === 'SILOS' && (
+        <div className="space-y-4">
+          
+          {/* Header de la sección Silos con acciones de Ficha Técnica */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-sans font-bold tracking-widest text-[#00603C] uppercase">
+                    VISOR DE CONTROL DE SILOS
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[9.5px] font-bold border border-slate-200">
+                    Solo Visualización
+                  </span>
+                </div>
+                <h3 className="font-serif text-lg font-bold text-gray-900 mt-0.5">
+                  Estado de Capacidad y Operaciones
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGrillaSeisSilos(true)}
+                  className="px-3 py-1.5 bg-[#E3EFE7] hover:bg-[#C2E0CC] text-[#00603C] font-bold text-xs rounded-xl transition flex items-center gap-1.5 border border-[#00603C]/30 shadow-2xs cursor-pointer"
+                  title="Ver e Imprimir Grilla de los 6 Silos en 1 Hoja A4"
+                >
+                  <Grid3X3 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Grilla 6 Silos (A4)</span>
+                  <span className="sm:hidden">Grilla A4</span>
+                </button>
+              </div>
             </div>
-            <span className="text-[10px] text-gray-400 font-mono">
-              Auto-guardado offline
-            </span>
+
+            {/* Resumen Global Rápido */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/70">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
+                  Stock Total en Silos
+                </span>
+                <span className="font-mono font-black text-[#00603C] text-sm">
+                  {formatNumberArg(totalStockSilosKg, 0)} kg
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono block">
+                  {(totalStockSilosKg / 1000).toFixed(1)} Tn
+                </span>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/70">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
+                  Capacidad Total
+                </span>
+                <span className="font-mono font-black text-slate-800 text-sm">
+                  1.080.000 kg
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono block">
+                  1.080 Tn (6 Silos x 180 Tn)
+                </span>
+              </div>
+
+              <div className="col-span-2 sm:col-span-1 p-2.5 bg-slate-50 rounded-xl border border-slate-200/70">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-0.5">
+                  Ocupación General
+                </span>
+                <span className="font-mono font-black text-[#C9922E] text-sm">
+                  {((totalStockSilosKg / 1080000) * 100).toFixed(1)}%
+                </span>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
+                  <div
+                    className="bg-[#00603C] h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, (totalStockSilosKg / 1080000) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <form onSubmit={handleGuardarIngresoRapido} className="space-y-4 text-xs">
-            {/* Silo Destino (Selector grande táctil) */}
-            <div>
-              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                Silo Destino *
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {SILOS_DISPONIBLES.map((siloId) => {
-                  const stock = siloStocks[siloId] || 0;
-                  const isSelected = siloSeleccionado === siloId;
-                  return (
-                    <button
-                      key={siloId}
-                      type="button"
-                      onClick={() => setSiloSeleccionado(siloId)}
-                      className={`p-2.5 rounded-xl border text-left transition ${
-                        isSelected
-                          ? 'border-[#00603C] bg-[#E3EFE7] bg-opacity-40 text-[#00603C] font-bold shadow-sm'
-                          : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                      }`}
-                    >
-                      <div className="text-xs font-bold">{siloId}</div>
-                      <div className="text-[10px] font-mono text-gray-500 mt-0.5">
-                        {(stock / 1000).toFixed(1)} Tn
+          {/* SELECTOR "SELECCIONAR SILO" (LOS 6 SILOS CON SUS 5 DATOS: Cliente, Especie, Variedad, Stock actual, Humedad promedio) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                Seleccionar Silo (6 Silos de Planta)
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium">
+                Toque un silo para ver su detalle
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {SILOS_DISPONIBLES.map((siloId) => {
+                const info = silosInfoMap[siloId];
+                const isSelected = siloSeleccionado === siloId;
+                const hasStock = info.stockKg > 0;
+                const pct = Number(info.pctOcupacion);
+
+                return (
+                  <button
+                    key={siloId}
+                    type="button"
+                    onClick={() => setSiloSeleccionado(siloId)}
+                    className={`p-3.5 rounded-2xl border text-left transition-all duration-200 relative overflow-hidden cursor-pointer ${
+                      isSelected
+                        ? 'border-[#00603C] bg-white ring-2 ring-[#00603C]/40 shadow-md transform -translate-y-0.5'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70 shadow-2xs'
+                    }`}
+                  >
+                    {/* Indicador de selección */}
+                    {isSelected && (
+                      <div className="absolute top-0 right-0 left-0 h-1 bg-[#00603C]" />
+                    )}
+
+                    {/* Cabecera de la Tarjeta del Silo */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-serif font-black text-xs ${
+                          isSelected
+                            ? 'bg-[#00603C] text-white shadow-xs'
+                            : 'bg-[#E3EFE7] text-[#00603C]'
+                        }`}>
+                          {siloId.replace('Silo ', 'S')}
+                        </div>
+                        <div>
+                          <h4 className="font-serif font-extrabold text-sm text-slate-900 leading-none">
+                            {siloId}
+                          </h4>
+                          <span className="text-[10px] font-mono text-slate-500">
+                            {hasStock ? `${info.stockTn} Tn` : 'Vacío'}
+                          </span>
+                        </div>
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
+
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase border ${
+                        hasStock
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : 'bg-slate-100 text-slate-600 border-slate-300'
+                      }`}>
+                        {hasStock ? `${info.pctOcupacion}%` : '0%'}
+                      </span>
+                    </div>
+
+                    {/* Barra de nivel del Silo */}
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mb-2.5 border border-slate-200/60">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          pct >= 95 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-[#00603C]'
+                        }`}
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+
+                    {/* 5 Datos Mandatarios para cada uno de los 6 silos */}
+                    <div className="space-y-1 text-xs border-t border-slate-100 pt-2">
+                      {/* 1. Cliente */}
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">Cliente:</span>
+                        <span className="font-bold text-[#00603C] truncate max-w-[150px] text-right" title={info.cliente}>
+                          {info.cliente}
+                        </span>
+                      </div>
+
+                      {/* 2. Especie */}
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">Especie:</span>
+                        <span className="font-bold text-slate-800 truncate text-right">
+                          {info.especie}
+                        </span>
+                      </div>
+
+                      {/* 3. Variedad */}
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">Variedad:</span>
+                        <span className="font-bold text-slate-800 truncate text-right">
+                          {info.variedad}
+                        </span>
+                      </div>
+
+                      {/* 4. Stock actual */}
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">Stock actual:</span>
+                        <span className="font-mono font-bold text-slate-900 text-right">
+                          {formatNumberArg(info.stockKg, 0)} kg
+                        </span>
+                      </div>
+
+                      {/* 5. Humedad promedio */}
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase">Humedad:</span>
+                        <span className="font-mono font-bold text-slate-800 text-right">
+                          {hasStock ? `${info.humedad}%` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-
-            {/* Kilogramos Netos */}
-            <div>
-              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                Kilos Netos del Camión (kg) *
-              </label>
-              <input
-                type="number"
-                required
-                placeholder="ej: 30000"
-                value={kgIngreso}
-                onChange={(e) => setKgIngreso(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-base font-mono font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-              />
-            </div>
-
-            {/* Cliente y Grano */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-                  Cliente Comitente
-                </label>
-                <select
-                  value={cliente}
-                  onChange={(e) => setCliente(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-                >
-                  {clientes.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-                  Variedad
-                </label>
-                <input
-                  type="text"
-                  value={variedad}
-                  onChange={(e) => setVariedad(e.target.value)}
-                  placeholder="ej: P46A03"
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-                />
-              </div>
-            </div>
-
-            {/* Chofer y Patente */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-                  Chofer / Transporte
-                </label>
-                <input
-                  type="text"
-                  value={choferNombre}
-                  onChange={(e) => setChoferNombre(e.target.value)}
-                  placeholder="Nombre del chofer"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-                  Patente
-                </label>
-                <input
-                  type="text"
-                  value={patenteCamion}
-                  onChange={(e) => setPatenteCamion(e.target.value)}
-                  placeholder="ej: AA123BB"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#00603C]"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 px-4 bg-[#00603C] hover:bg-[#254731] text-white font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm"
-            >
-              <Save className="w-4 h-4" />
-              <span>Registrar Ingreso de Camión</span>
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* 2. MARCAR LOTE REALIZADO / PRODUCIDO */}
-      {subTab === 'MARCAR_REALIZADO' && (
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <div className="flex items-center gap-2">
-              <PackageCheck className="w-5 h-5 text-[#C9922E]" />
-              <h3 className="font-serif text-base font-bold text-gray-900">
-                Lotes en Pre-carga / Pendientes
-              </h3>
-            </div>
-            <span className="text-xs font-mono font-bold text-gray-500">
-              {lotesPendientesRealizado.length} lotes
-            </span>
           </div>
 
-          {lotesPendientesRealizado.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-              <p className="font-bold text-gray-700 text-xs">Todos los lotes están marcados como Realizados.</p>
-              <p className="text-[11px]">No hay precargas pendientes de confirmación en planta.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {lotesPendientesRealizado.map((lote) => (
-                <div
-                  key={lote.id}
-                  className="p-4 bg-gray-50 hover:bg-gray-100/80 rounded-xl border border-gray-200 transition space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[9px] font-mono font-bold text-[#C9922E] uppercase block">
-                        Lote ID: {lote.id}
-                      </span>
-                      <h4 className="font-bold text-gray-900 text-sm">{lote.loteNro}</h4>
-                    </div>
-                    <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full border border-amber-200">
-                      PRE-CARGA
+          {/* DETALLE COMPLETO DEL SILO SELECCIONADO (SOLO VISUALIZACIÓN) */}
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+            
+            {/* Header del Detalle */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#00603C] text-white flex items-center justify-center font-serif font-black text-sm shadow-xs">
+                  {siloActivo.siloId.replace('Silo ', 'S')}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-serif text-lg font-black text-slate-900 leading-tight">
+                      Detalle {siloActivo.siloId}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      siloActivo.stockKg > 0
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-slate-100 text-slate-600 border-slate-300'
+                    }`}>
+                      {siloActivo.stockKg > 0 ? 'Con Stock' : 'Silo Vacío'}
                     </span>
                   </div>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Planta de Clasificación de Semillas · La Barrancosa
+                  </p>
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                    <div>
-                      <span className="text-gray-400 block text-[10px]">Cliente / Especie</span>
-                      <strong className="text-gray-800">{lote.cliente}</strong> · {lote.especie}
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block text-[10px]">Variedad / Stock</span>
-                      <strong className="text-gray-800">{lote.variedad}</strong> · {lote.stockKg.toLocaleString('es-AR')} kg
-                    </div>
-                  </div>
+              {/* Botón para abrir la Ficha Técnica Oficial */}
+              <button
+                type="button"
+                onClick={() => setFichaModalSilo(siloActivo.siloId)}
+                className="px-3.5 py-2 bg-[#00603C] hover:bg-[#254731] text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#C9922E]" />
+                <span>Ver Ficha Técnica Oficial</span>
+              </button>
+            </div>
 
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => onUpdateLoteEstado(lote, 'REALIZADO')}
-                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Marcar como Realizado
-                    </button>
-                    <button
-                      onClick={() => onSelectLote(lote)}
-                      className="px-3 py-2.5 bg-white hover:bg-gray-200 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 transition"
-                    >
-                      Ver
-                    </button>
+            {/* Ficha Resumen de 5 Campos de Datos */}
+            <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200/70 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Cliente destacado */}
+                <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Cliente Comitente
+                  </span>
+                  <div className="font-sans font-black text-[#00603C] text-sm truncate" title={siloActivo.cliente}>
+                    {siloActivo.cliente}
                   </div>
                 </div>
-              ))}
+
+                {/* Especie y Variedad */}
+                <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Especie / Variedad
+                  </span>
+                  <div className="font-bold text-slate-800 text-sm">
+                    {siloActivo.especie} · <span className="font-medium text-slate-600">{siloActivo.variedad}</span>
+                  </div>
+                </div>
+
+                {/* Stock Actual y Capacidad */}
+                <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Stock Actual en Silo
+                  </span>
+                  <div className="font-mono font-black text-slate-900 text-sm">
+                    {formatNumberArg(siloActivo.stockKg, 0)} kg ({siloActivo.stockTn} Tn)
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                    Espacio disponible: {formatNumberArg(siloActivo.disponibleKg, 0)} kg ({siloActivo.disponibleTn} Tn)
+                  </span>
+                </div>
+
+                {/* Humedad Promedio */}
+                <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Humedad Promedio Ponderada
+                  </span>
+                  <div className="font-mono font-black text-slate-800 text-sm flex items-center gap-1.5">
+                    <Droplets className="w-4 h-4 text-blue-500" />
+                    <span>{siloActivo.stockKg > 0 ? `${siloActivo.humedad}%` : '0.0%'}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                    Base de recibo estándar: 13.5%
+                  </span>
+                </div>
+              </div>
+
+              {/* Barra de progreso de llenado */}
+              <div className="space-y-1 pt-1">
+                <div className="flex justify-between text-[11px] font-bold">
+                  <span className="text-slate-600">Nivel de llenado: {siloActivo.pctOcupacion}%</span>
+                  <span className="text-slate-500 font-mono">Máx: 180.000 kg</span>
+                </div>
+                <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      Number(siloActivo.pctOcupacion) >= 95
+                        ? 'bg-red-500'
+                        : Number(siloActivo.pctOcupacion) >= 80
+                        ? 'bg-amber-500'
+                        : 'bg-[#00603C]'
+                    }`}
+                    style={{ width: `${Math.min(100, Number(siloActivo.pctOcupacion))}%` }}
+                  />
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* HISTORIAL Y OPERACIONES DEL SILO (SOLO LECTURA) */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#00603C]" />
+                  <h4 className="font-serif font-bold text-sm text-slate-900">
+                    Registro de Operaciones de {siloActivo.siloId}
+                  </h4>
+                </div>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {siloActivo.movimientos.length} movimiento(s)
+                </span>
+              </div>
+
+              {siloActivo.movimientos.length === 0 ? (
+                <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 text-slate-400 space-y-1">
+                  <Warehouse className="w-7 h-7 mx-auto text-slate-300" />
+                  <p className="text-xs font-bold text-slate-600">Sin movimientos registrados</p>
+                  <p className="text-[11px]">No hay ingresos ni egresos cargados para este silo.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {siloActivo.movimientos.map((mov) => {
+                    const isIngreso = mov.tipo === 'INGRESO';
+                    const isEgreso = mov.tipo === 'EGRESO_OP' || (mov.tipo as string).startsWith('EGRESO');
+                    const isAjuste = mov.tipo === 'AJUSTE_ZERO';
+
+                    return (
+                      <div
+                        key={mov.id}
+                        className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 transition flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`p-1.5 rounded-lg shrink-0 ${
+                            isIngreso
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isEgreso
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {isIngreso ? (
+                              <ArrowDownRight className="w-4 h-4" />
+                            ) : isEgreso ? (
+                              <ArrowUpRight className="w-4 h-4" />
+                            ) : (
+                              <Warehouse className="w-4 h-4" />
+                            )}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900 truncate">
+                                {isIngreso ? 'Ingreso Camión' : isEgreso ? 'Egreso a Proceso' : 'Puesta en Cero'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                · {mov.fecha}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">
+                              {mov.cliente ? `${mov.cliente} · ` : ''}
+                              {mov.chofer ? `Chofer: ${mov.chofer}` : mov.usuario ? `Por: ${mov.usuario}` : ''}
+                              {mov.patentes && mov.patentes !== '—' ? ` (${mov.patentes})` : ''}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className={`font-mono font-bold block ${
+                            isIngreso ? 'text-emerald-700' : isEgreso ? 'text-amber-700' : 'text-slate-600'
+                          }`}>
+                            {isIngreso ? '+' : isEgreso ? '-' : ''}{formatNumberArg(mov.kg, 0)} kg
+                          </span>
+                          {mov.humedad !== undefined && (
+                            <span className="text-[10px] font-mono text-slate-400 block">
+                              Hum: {mov.humedad}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Mensaje informativo de solo lectura */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-blue-900 text-[11px] flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Modo Solo Lectura:</strong> Para registrar ingresos de camiones, calibraciones o egresos de silos, acceda con usuario autorizado al módulo principal de Gestión de Silos.
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* 3. DESPACHOS (MIS ÓRDENES - PLAYA) */}
+      {/* 2. DESPACHOS (MIS ÓRDENES - PLAYA) */}
       {subTab === 'DESPACHOS_PLAYA' && (
         <div className="space-y-4">
           <div className="bg-[#00603C] text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
@@ -510,8 +619,58 @@ export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
             onUpdateOrdenStatus={onUpdateOrdenStatus}
             onDespacharStock={onDespacharStock}
             onDeleteOrden={onDeleteOrdenCarga}
+            onlyMisOrdenes={true}
           />
         </div>
+      )}
+
+      {/* Modal Ficha Técnica Oficial de Silo (Individual) */}
+      {fichaModalSilo && (
+        <FichaTecnicaSiloModal
+          ficha={silosInfoMap[fichaModalSilo] ? {
+            siloId: fichaModalSilo,
+            stockKg: silosInfoMap[fichaModalSilo].stockKg,
+            stockTn: silosInfoMap[fichaModalSilo].stockTn,
+            pctOcupacion: silosInfoMap[fichaModalSilo].pctOcupacion,
+            cliente: silosInfoMap[fichaModalSilo].cliente,
+            especie: silosInfoMap[fichaModalSilo].especie,
+            variedad: silosInfoMap[fichaModalSilo].variedad,
+            categoria: silosInfoMap[fichaModalSilo].categoria,
+            humedad: silosInfoMap[fichaModalSilo].humedad,
+            ingresosActivos: silosInfoMap[fichaModalSilo].ingresosActivos,
+            totalIngresos: silosInfoMap[fichaModalSilo].totalIngresos,
+            totalKgIngresados: silosInfoMap[fichaModalSilo].totalKgIngresados,
+            totalKgEgresados: silosInfoMap[fichaModalSilo].totalKgEgresados,
+            ultimoMovimiento: silosInfoMap[fichaModalSilo].movimientos[0]?.fecha || 'Sin registros'
+          } : null}
+          onClose={() => setFichaModalSilo(null)}
+        />
+      )}
+
+      {/* Modal Grilla de 6 Fichas Técnicas en 1 Hoja A4 */}
+      {showGrillaSeisSilos && (
+        <GrillaSeisSilosModal
+          fichas={SILOS_DISPONIBLES.map((s) => {
+            const info = silosInfoMap[s];
+            return {
+              siloId: s,
+              stockKg: info.stockKg,
+              stockTn: info.stockTn,
+              pctOcupacion: info.pctOcupacion,
+              cliente: info.cliente,
+              especie: info.especie,
+              variedad: info.variedad,
+              categoria: info.categoria,
+              humedad: info.humedad,
+              ingresosActivos: info.ingresosActivos,
+              totalIngresos: info.totalIngresos,
+              totalKgIngresados: info.totalKgIngresados,
+              totalKgEgresados: info.totalKgEgresados,
+              ultimoMovimiento: info.movimientos[0]?.fecha || 'Sin registros'
+            };
+          })}
+          onClose={() => setShowGrillaSeisSilos(false)}
+        />
       )}
     </div>
   );

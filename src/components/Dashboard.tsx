@@ -53,6 +53,7 @@ import {
 import { StockAlertsConfigModal } from './StockAlertsConfigModal';
 import { DashboardAnalitico } from './DashboardAnalitico';
 import { StockThresholdsConfigSection } from './StockThresholdsConfigSection';
+import { Smartphone } from 'lucide-react';
 
 interface DashboardProps {
   lotes: Lote[];
@@ -65,7 +66,7 @@ interface DashboardProps {
   siloStocks?: Record<SiloId, number>;
   movimientosSilo?: MovimientoSilo[];
   onUpdateThresholds: (newThresholds: Record<string, number>, email: string) => void;
-  onNavigate: (view: 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'ingreso-silos') => void;
+  onNavigate: (view: 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'ingreso-silos' | 'modo-planta') => void;
   onSelectLote?: (lote: Lote) => void;
 }
 
@@ -476,6 +477,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Accesos Rápidos */}
         <div className="flex flex-wrap gap-2.5">
+          <button
+            id="btn-shortcut-planta-movil"
+            onClick={() => onNavigate('modo-planta')}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition shadow-sm cursor-pointer"
+            title="Acceso Rápido a Planta Móvil"
+          >
+            <Smartphone className="w-4 h-4 text-emerald-200" />
+            Planta Móvil
+          </button>
+
           <button
             id="btn-shortcut-salida"
             onClick={() => onNavigate('registrar-salida')}

@@ -342,40 +342,6 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
             <QrCode className="w-4 h-4 text-[#C9922E]" />
             <span>Código QR Ficha Técnica</span>
           </button>
-
-          <button
-            onClick={() => setShowAddMovModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#E3EFE7] text-[#00603C] border border-[#00603C] border-opacity-25 rounded-lg hover:bg-[#cbe3d3] transition text-xs font-semibold"
-          >
-            <Plus className="w-4 h-4 text-[#C9922E]" />
-            Ajustar Stock Manual
-          </button>
-
-          {onUpdateLoteLocation && (
-            <button
-              onClick={() => {
-                setSelectedAla(lote.ala || '');
-                setSelectedSector(lote.sector || '');
-                setShowLocationModal(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-[#E3EFE7] text-[#00603C] border border-[#00603C] border-opacity-25 rounded-lg hover:bg-[#cbe3d3] transition text-xs font-semibold cursor-pointer"
-              title="Asignar Ubicación por Ala y Sector"
-            >
-              <Warehouse className="w-4 h-4 text-[#C9922E]" />
-              Asignar Ubicación
-            </button>
-          )}
-
-          {onRegistrarSalida && lote.stockBolsas > 0 && (
-            <button
-              onClick={() => onRegistrarSalida(lote.id)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#00603C] text-white rounded-lg hover:bg-[#254731] transition text-xs font-semibold"
-              title="Registrar salida para este lote"
-            >
-              <ArrowDownRight className="w-4 h-4 text-[#C9922E]" />
-              Registrar Salida
-            </button>
-          )}
         </div>
       </div>
 
@@ -450,22 +416,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
             </div>
 
             <div className="border-t border-gray-50 pt-3">
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">Sector de Acopio / Ubicación</span>
-                {onUpdateLoteLocation && (
-                  <button
-                    onClick={() => {
-                      setSelectedAla(lote.ala || '');
-                      setSelectedSector(lote.sector || '');
-                      setShowLocationModal(true);
-                    }}
-                    className="text-[10px] font-bold text-[#C9922E] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                    Asignar
-                  </button>
-                )}
-              </div>
+              <span className="text-[9px] uppercase tracking-wider text-gray-400 block font-bold">Sector de Acopio / Ubicación</span>
               <span className="font-semibold text-[#00603C] text-sm block mt-0.5 flex items-center gap-1.5">
                 <Warehouse className="w-3.5 h-3.5 text-[#C9922E]" />
                 {lote.ala && lote.sector ? `ALA: ${lote.ala} / SECTOR: ${lote.sector}` : 'No asignado'}

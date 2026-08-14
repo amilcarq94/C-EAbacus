@@ -50,6 +50,8 @@ interface DespachosSectionProps {
     ordenId: string
   ) => boolean;
   onDeleteOrden?: (ordenId: string) => void;
+  initialSubView?: 'generar' | 'mis-ordenes' | 'listado';
+  onlyMisOrdenes?: boolean;
 }
 
 const LISTA_CLIENTES = ["San Diego Semilla", "Eco Rural", "Pampa", "Stine", "Elementa Foods"];
@@ -63,10 +65,14 @@ export const DespachosSection: React.FC<DespachosSectionProps> = ({
   onSaveOrden,
   onUpdateOrdenStatus,
   onDespacharStock,
-  onDeleteOrden
+  onDeleteOrden,
+  initialSubView = 'generar',
+  onlyMisOrdenes = false,
 }) => {
   // 1. Navegación de Sub-vistas
-  const [subView, setSubView] = useState<'generar' | 'mis-ordenes' | 'listado'>('generar');
+  const [subView, setSubView] = useState<'generar' | 'mis-ordenes' | 'listado'>(
+    onlyMisOrdenes ? 'mis-ordenes' : initialSubView
+  );
 
   // 2. Estados para "Generar orden de carga"
   // Filtros obligatorios y combinables para buscar lotes candidatos
@@ -491,62 +497,64 @@ export const DespachosSection: React.FC<DespachosSectionProps> = ({
       </div>
 
       {/* CABECERA */}
-      <div className="border-b border-gray-100 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-        <div>
-          <span className="text-xs font-sans font-semibold tracking-widest text-[#00603C] uppercase">
-            SISTEMA DE DESPACHOS Y EXPEDICIÓN
-          </span>
-          <h2 className="font-serif text-3xl font-bold text-[#1A1A1A] mt-1">
-            Playa de Carga — Agro Abacus S.A.
-          </h2>
-        </div>
-
-        {/* NAVEGACIÓN INTERNA EN SUB-VISTAS */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex bg-[#E3EFE7] bg-opacity-40 p-1 rounded-xl border border-gray-200 self-start text-xs font-sans font-bold">
-            <button
-              onClick={() => setSubView('generar')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg uppercase tracking-wider transition ${
-                subView === 'generar' ? 'bg-[#00603C] text-white shadow-md' : 'text-gray-600 hover:text-[#00603C]'
-              }`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              1. Crear Orden
-            </button>
-            <button
-              onClick={() => setSubView('mis-ordenes')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg uppercase tracking-wider transition ${
-                subView === 'mis-ordenes' ? 'bg-[#00603C] text-white shadow-md' : 'text-gray-600 hover:text-[#00603C]'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              2. Mis Órdenes (Playa)
-            </button>
-            <button
-              onClick={() => setSubView('listado')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg uppercase tracking-wider transition ${
-                subView === 'listado' ? 'bg-[#00603C] text-white shadow-md' : 'text-gray-600 hover:text-[#00603C]'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              3. Registro General
-            </button>
+      {!onlyMisOrdenes ? (
+        <div className="border-b border-gray-100 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+          <div>
+            <span className="text-xs font-sans font-semibold tracking-widest text-[#00603C] uppercase">
+              SISTEMA DE DESPACHOS Y EXPEDICIÓN
+            </span>
+            <h2 className="font-serif text-3xl font-bold text-[#1A1A1A] mt-1">
+              Playa de Carga — Agro Abacus S.A.
+            </h2>
           </div>
 
-          <button
-            onClick={() => {
-              setAddDespError('');
-              setAddDespSuccess('');
-              setShowAddDespModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#00603C] hover:bg-[#254731] text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl shadow-sm transition"
-            title="Agregar despachante autorizado con usuario y clave de Malcon Baez o Amilcar Quiroz"
-          >
-            <UserPlus className="w-4 h-4 text-[#F6EFDC]" />
-            <span>+ Agregar Despachante</span>
-          </button>
+          {/* NAVEGACIÓN INTERNA EN SUB-VISTAS */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-[#E3EFE7] bg-opacity-40 p-1 rounded-xl border border-gray-200 self-start text-xs font-sans font-bold">
+              <button
+                onClick={() => setSubView('generar')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg uppercase tracking-wider transition ${
+                  subView === 'generar' ? 'bg-[#00603C] text-white shadow-md' : 'text-gray-600 hover:text-[#00603C]'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                1. Crear Orden
+              </button>
+              <button
+                onClick={() => setSubView('mis-ordenes')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg uppercase tracking-wider transition ${
+                  subView === 'mis-ordenes' ? 'bg-[#00603C] text-white shadow-md' : 'text-gray-600 hover:text-[#00603C]'
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                2. Mis Órdenes (Playa)
+              </button>
+              <button
+                onClick={() => setSubView('listado')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg uppercase tracking-wider transition ${
+                  subView === 'listado' ? 'bg-[#00603C] text-white shadow-md' : 'text-gray-600 hover:text-[#00603C]'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                3. Registro General
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setAddDespError('');
+                setAddDespSuccess('');
+                setShowAddDespModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#00603C] hover:bg-[#254731] text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl shadow-sm transition"
+              title="Agregar despachante autorizado con usuario y clave de Malcon Baez o Amilcar Quiroz"
+            >
+              <UserPlus className="w-4 h-4 text-[#F6EFDC]" />
+              <span>+ Agregar Despachante</span>
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* CONTENIDO DE LAS SUBVISTAS */}
       <div className="relative z-10">
