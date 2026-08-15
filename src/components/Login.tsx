@@ -3,63 +3,78 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LogoSiloLoose, LogoSiloSquare } from './Logo';
-import { KeyRound, User, Briefcase, AlertTriangle, Smartphone, ArrowRight, ShieldCheck, ChevronDown, Lock, QrCode } from 'lucide-react';
-import { getListaDespachantes } from '../utils/despachantes';
+import { KeyRound, User, AlertTriangle, Smartphone, ArrowRight, ShieldCheck, ChevronDown, Lock, Check } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: (nombre: string, rol: string) => void;
   onAccederPlantaMovil?: () => void;
 }
 
-const BASE_PERFILES = [
-  { nombre: 'Malcon Baez', rol: 'Jefe de Planta', requierePass: true },
-  { nombre: 'Amilcar Quiroz', rol: 'Logística', requierePass: true },
-  { nombre: 'Jose Ballarini', rol: 'Despachante', requierePass: false },
-  { nombre: 'Anibal Grandolio', rol: 'Despachante', requierePass: false },
-  { nombre: 'Cristian Grandolio', rol: 'Despachante', requierePass: false },
-  { nombre: 'Manuel Gomez Riquel', rol: 'Despachante', requierePass: false }
+const USUARIOS_AUTORIZADOS = [
+  { nombre: 'Amilcar Quiroz', rol: 'Logística', key: 'quiroz', avatar: 'AQ' },
+  { nombre: 'Malcón Báez', rol: 'Jefe de Planta', key: 'baez', avatar: 'MB' }
 ];
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMovil }) => {
-  const perfilesList = useMemo(() => {
-    const allDespachantes = getListaDespachantes();
-    const result = [...BASE_PERFILES];
-    
-    allDespachantes.forEach(name => {
-      if (!result.some(p => p.nombre.toLowerCase() === name.toLowerCase())) {
-        result.push({ nombre: name, rol: 'Despachante', requierePass: false });
-      }
-    });
-    return result;
-  }, []);
+const STORAGE_KEYS = {
+  RECORDARME: 'agro_abacus_recordarme',
+  LAST_USER: 'agro_abacus_last_user',
+  PASS_PREFIX: 'agro_abacus_pass_'
+};
 
-  const [perfilSeleccionado, setPerfilSeleccionado] = useState<string>('Malcon Baez');
+export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMovil }) => {
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>('Amilcar Quiroz');
   const [password, setPassword] = useState<string>('');
-  const [nombreManual, setNombreManual] = useState<string>('');
-  const [rolManual, setRolManual] = useState<string>('Despachante');
+  const [recordarme, setRecordarme] = useState<boolean>(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mostrarPanelLogin, setMostrarPanelLogin] = useState(false);
+  const [mostrarPanelLogin, setMostrarPanelLogin] = useState(true);
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
-  const currentYear = new Date().getFullYear(); // e.g. 2026
+  // Cargar credenciales guardadas en caché al iniciar
+  useEffect(() => {
+    try {
+      const isRecordarmeSaved = localStorage.getItem(STORAGE_KEYS.RECORDARME);
+      const shouldRemember = isRecordarmeSaved === null ? true : isRecordarmeSaved === 'true';
+      setRecordarme(shouldRemember);
 
-  // Determinar si el usuario seleccionado requiere contraseña
-  const requiresPassword = useMemo(() => {
-    const norm = perfilSeleccionado.toLowerCase().trim();
-    return norm.includes('malcon') || norm.includes('amilcar');
-  }, [perfilSeleccionado]);
+      const lastUser = localStorage.getItem(STORAGE_KEYS.LAST_USER) || 'Amilcar Quiroz';
+      const targetUser = USUARIOS_AUTORIZADOS.find(u => u.nombre === lastUser) || USUARIOS_AUTORIZADOS[0];
+      
+      setUsuarioSeleccionado(targetUser.nombre);
 
-  const handleSelectQuickUser = (nombre: string) => {
-    setPerfilSeleccionado(nombre);
-    setPassword('');
+      if (shouldRemember) {
+        const savedPass = localStorage.getItem(`${STORAGE_KEYS.PASS_PREFIX}${targetUser.key}`);
+        if (savedPass) {
+          setPassword(savedPass);
+        }
+      }
+    } catch (e) {
+      console.warn('No se pudo acceder al almacenamiento local:', e);
+    }
+  }, []);
+
+  // Manejar cambio de usuario y cargar clave en caché si existe
+  const handleSelectUser = (userName: string) => {
+    setUsuarioSeleccionado(userName);
     setError('');
-    setMostrarPanelLogin(true);
-    setTimeout(() => {
-      passwordInputRef.current?.focus();
-    }, 150);
+    const userObj = USUARIOS_AUTORIZADOS.find(u => u.nombre === userName);
+    if (userObj) {
+      try {
+        const savedPass = localStorage.getItem(`${STORAGE_KEYS.PASS_PREFIX}${userObj.key}`);
+        if (savedPass && recordarme) {
+          setPassword(savedPass);
+        } else {
+          setPassword('');
+          setTimeout(() => {
+            passwordInputRef.current?.focus();
+          }, 100);
+        }
+      } catch {
+        setPassword('');
+      }
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -67,66 +82,48 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
     setError('');
     setLoading(true);
 
-    let finalNombre = '';
-    let finalRol = '';
-
-    if (perfilSeleccionado === 'otro') {
-      if (!nombreManual.trim()) {
-        setError('Por favor ingrese su nombre completo.');
-        setLoading(false);
-        return;
-      }
-      finalNombre = nombreManual.trim();
-      finalRol = rolManual;
-    } else {
-      const perfil = perfilesList.find(p => p.nombre === perfilSeleccionado);
-      if (!perfil) {
-        setError('Perfil seleccionado no válido.');
-        setLoading(false);
-        return;
-      }
-      finalNombre = perfil.nombre;
-      finalRol = perfil.rol;
+    const userObj = USUARIOS_AUTORIZADOS.find(u => u.nombre === usuarioSeleccionado);
+    if (!userObj) {
+      setError('Usuario no autorizado.');
+      setLoading(false);
+      return;
     }
 
-    const normNombre = finalNombre.toLowerCase().trim();
     const cleanPass = password.trim().toLowerCase();
 
-    // Verificación de contraseña exclusiva para Malcon Baez y Amilcar Quiroz (formato apellido + año)
-    if (normNombre.includes('malcon')) {
-      const validMalconPass = [
-        `baez${currentYear}`,
-        'baez2026',
-        'baez',
-        'malcon2026',
-        'abacus2026'
-      ];
-      if (!cleanPass || !validMalconPass.includes(cleanPass)) {
-        setError('Contraseña incorrecta.');
-        setLoading(false);
-        passwordInputRef.current?.focus();
-        return;
+    // Verificación estricta de credenciales
+    let isValid = false;
+    if (userObj.key === 'baez') {
+      isValid = cleanPass === 'baez2026' || cleanPass === 'baez';
+    } else if (userObj.key === 'quiroz') {
+      isValid = cleanPass === 'quiroz2026' || cleanPass === 'quiroz';
+    }
+
+    if (!isValid) {
+      setError('Usuario o contraseña incorrectos.');
+      setLoading(false);
+      passwordInputRef.current?.focus();
+      return;
+    }
+
+    // Guardar o limpiar información en caché según el checkbox 'Recordarme'
+    try {
+      localStorage.setItem(STORAGE_KEYS.RECORDARME, recordarme ? 'true' : 'false');
+      localStorage.setItem(STORAGE_KEYS.LAST_USER, userObj.nombre);
+
+      if (recordarme) {
+        localStorage.setItem(`${STORAGE_KEYS.PASS_PREFIX}${userObj.key}`, password);
+      } else {
+        localStorage.removeItem(`${STORAGE_KEYS.PASS_PREFIX}${userObj.key}`);
       }
-    } else if (normNombre.includes('amilcar')) {
-      const validAmilcarPass = [
-        `quiroz${currentYear}`,
-        'quiroz2026',
-        'quiroz',
-        'amilcar2026',
-        'abacus2026'
-      ];
-      if (!cleanPass || !validAmilcarPass.includes(cleanPass)) {
-        setError('Contraseña incorrecta.');
-        setLoading(false);
-        passwordInputRef.current?.focus();
-        return;
-      }
+    } catch (err) {
+      console.warn('Error al guardar credenciales en el almacenamiento local:', err);
     }
 
     setTimeout(() => {
-      onLoginSuccess(finalNombre, finalRol);
+      onLoginSuccess(userObj.nombre, userObj.rol);
       setLoading(false);
-    }, 300);
+    }, 250);
   };
 
   return (
@@ -167,7 +164,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
         {/* Cuerpo Principal de la Carátula */}
         <div className="p-6 sm:p-8 space-y-6">
           
-          {/* Opción 1: BOTÓN PLANTA MÓVIL (Acceso Público Directo sin Login) */}
+          {/* Opción 1: BOTÓN PLANTA MÓVIL (Acceso Libre sin Login) */}
           {onAccederPlantaMovil && (
             <div className="bg-gradient-to-r from-emerald-900/60 to-emerald-950/80 border-2 border-emerald-500/60 hover:border-emerald-400 rounded-2xl p-4 sm:p-5 transition-all duration-200 hover:shadow-[0_0_24px_rgba(16,185,129,0.25)] group">
               <div className="flex items-center justify-between gap-3 mb-2.5">
@@ -177,7 +174,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
                   </div>
                   <div>
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-emerald-400 block">
-                      Acceso Público
+                      Acceso Libre
                     </span>
                     <h2 className="text-lg font-bold text-white leading-tight">
                       Planta Móvil
@@ -206,10 +203,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
             </div>
           )}
 
-          {/* Opción 2: BOTÓN / DESPLEGABLE INICIAR SESIÓN (Acceso Administrativo) */}
+          {/* Opción 2: INICIAR SESIÓN (Acceso Administrativo) */}
           <div className="border border-slate-700/60 rounded-2xl bg-slate-900/50 overflow-hidden">
             
-            {/* Botón de apertura / cabecera de Iniciar Sesión */}
+            {/* Cabecera de Iniciar Sesión */}
             <button
               type="button"
               onClick={() => setMostrarPanelLogin(!mostrarPanelLogin)}
@@ -224,58 +221,59 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
                     Iniciar Sesión
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Acceso para Jefatura, Logística y Despachantes
+                    Acceso para administración y gestión operativa
                   </p>
                 </div>
               </div>
               <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${mostrarPanelLogin ? 'rotate-180 text-emerald-400' : ''}`} />
             </button>
 
-            {/* Panel de Login Desplegado */}
+            {/* Formulario de Login */}
             {mostrarPanelLogin && (
               <form onSubmit={handleSubmit} className="p-4 sm:p-6 pt-2 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
                 
-                {/* Accesos Rápidos para Amilcar Quiroz y Malcón Báez */}
+                {/* 1. DOS BOTONES CON PRECARGA DE USUARIOS: AMILCAR Y MALCÓN */}
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 text-center">
-                    Accesos Rápidos
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                    Seleccione Usuario
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectQuickUser('Amilcar Quiroz')}
-                      className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2 cursor-pointer ${
-                        perfilSeleccionado === 'Amilcar Quiroz'
-                          ? 'bg-[#005e38]/50 border-emerald-400 text-white ring-2 ring-emerald-400/40 shadow-sm'
-                          : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center justify-center font-bold text-xs shrink-0">
-                        AQ
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">Amilcar Quiroz</div>
-                        <div className="text-[10px] text-emerald-400 font-medium">Logística</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSelectQuickUser('Malcon Baez')}
-                      className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2 cursor-pointer ${
-                        perfilSeleccionado === 'Malcon Baez'
-                          ? 'bg-[#005e38]/50 border-emerald-400 text-white ring-2 ring-emerald-400/40 shadow-sm'
-                          : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40 flex items-center justify-center font-bold text-xs shrink-0">
-                        MB
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">Malcón Báez</div>
-                        <div className="text-[10px] text-amber-400 font-medium">Jefe de Planta</div>
-                      </div>
-                    </button>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {USUARIOS_AUTORIZADOS.map((u) => {
+                      const isSelected = usuarioSeleccionado === u.nombre;
+                      return (
+                        <button
+                          key={u.nombre}
+                          type="button"
+                          onClick={() => handleSelectUser(u.nombre)}
+                          className={`p-3 rounded-2xl border text-left transition-all duration-200 flex items-center gap-2.5 cursor-pointer relative ${
+                            isSelected
+                              ? 'bg-[#005e38]/70 border-emerald-400 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-950/40'
+                              : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                              isSelected
+                                ? 'bg-emerald-400 text-slate-950 shadow-inner'
+                                : 'bg-slate-700 text-slate-300 border border-slate-600'
+                            }`}
+                          >
+                            {u.avatar}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold truncate leading-snug">
+                              {u.nombre}
+                            </div>
+                            <div className={`text-[10px] font-medium truncate ${isSelected ? 'text-emerald-300' : 'text-slate-400'}`}>
+                              {u.rol}
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -286,95 +284,48 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
                   </div>
                 )}
 
-                {/* Selección de Usuario */}
+                {/* 2. Campo Contraseña */}
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Usuario *
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                      Contraseña
+                    </label>
+                  </div>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                      <User className="w-4 h-4" />
+                      <KeyRound className="w-4 h-4 text-emerald-400" />
                     </span>
-                    <select
-                      value={perfilSeleccionado}
+                    <input
+                      ref={passwordInputRef}
+                      type="password"
+                      value={password}
                       onChange={(e) => {
-                        setPerfilSeleccionado(e.target.value);
-                        setPassword('');
+                        setPassword(e.target.value);
                         setError('');
                       }}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition"
-                    >
-                      {perfilesList.map((p) => (
-                        <option key={p.nombre} value={p.nombre} className="bg-slate-900 text-white">
-                          {p.nombre} — {p.rol} {p.requierePass ? '(Requiere Clave)' : ''}
-                        </option>
-                      ))}
-                      <option value="otro" className="bg-slate-900 text-white">Otro (Ingreso manual)...</option>
-                    </select>
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-800 text-white text-sm font-mono rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition"
+                      required
+                    />
                   </div>
                 </div>
 
-                {/* Campos condicionales si es "Otro" */}
-                {perfilSeleccionado === 'otro' && (
-                  <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1">
-                        Nombre Completo *
-                      </label>
-                      <input
-                        type="text"
-                        value={nombreManual}
-                        onChange={(e) => setNombreManual(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-800 text-white text-sm rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition"
-                        placeholder="Ingrese su nombre completo"
-                        required={perfilSeleccionado === 'otro'}
-                      />
-                    </div>
+                {/* 3. Check de Recordarme para guardar info en caché del dispositivo */}
+                <div className="pt-1">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={recordarme}
+                      onChange={(e) => setRecordarme(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#00603C] bg-slate-800 border-slate-600 focus:ring-emerald-400 focus:ring-offset-slate-900 cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-300 group-hover:text-white transition font-medium">
+                      Recordarme en este dispositivo
+                    </span>
+                  </label>
+                </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1">
-                        Rol *
-                      </label>
-                      <select
-                        value={rolManual}
-                        onChange={(e) => setRolManual(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-800 text-white text-sm font-semibold rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition"
-                      >
-                        <option value="Jefe de Planta" className="bg-slate-900 text-white">Jefe de Planta</option>
-                        <option value="Logística" className="bg-slate-900 text-white">Logística</option>
-                        <option value="Despachante" className="bg-slate-900 text-white">Despachante</option>
-                        <option value="Operario" className="bg-slate-900 text-white">Operario</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Campo Contraseña (requerido para Amilcar y Malcon) SIN placeholder de ejemplo */}
-                {requiresPassword && (
-                  <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                      Contraseña *
-                    </label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                        <KeyRound className="w-4 h-4 text-emerald-400" />
-                      </span>
-                      <input
-                        ref={passwordInputRef}
-                        type="password"
-                        value={password}
-                        onChange={(e) => {
-                          setPassword(e.target.value);
-                          setError('');
-                        }}
-                        placeholder="••••••••"
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-800 text-white text-sm font-mono rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 transition"
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
-
+                {/* 4. Botón Ingresar */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -397,7 +348,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onAccederPlantaMov
         {/* Pie de página institucional */}
         <div className="bg-[#011a11] px-6 py-3.5 border-t border-slate-800 text-center">
           <p className="text-[10px] font-mono text-emerald-300/60 uppercase tracking-widest">
-            AGRO ABACUS S.A. · ESTANCIA LA BARRANCOSA · © {currentYear}
+            AGRO ABACUS S.A. · ESTANCIA LA BARRANCOSA
           </p>
         </div>
       </div>

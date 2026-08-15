@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Lote } from '../types';
-import { Printer, X, CheckCircle2 } from 'lucide-react';
+import { Printer, X, CheckCircle2, Download, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { FichaTecnicaOficialCard } from './FichaTecnicaOficialCard';
+import { exportCardAsJpg } from '../utils/exportImage';
 
 interface BatchPrintLotesModalProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
   lotes,
   onClose,
 }) => {
+  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+
   useEffect(() => {
     if (isOpen && lotes.length > 0) {
       const timer = setTimeout(() => {
@@ -32,6 +36,29 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadSingleJpg = async (lote: Lote, index: number) => {
+    const cardId = `ficha-batch-card-${lote.id || index}`;
+    const safeLoteName = (lote.loteNro || lote.id || `Lote_${index + 1}`).replace(/\s+/g, '_');
+    const fileName = `Ficha_Tecnica_${safeLoteName}`;
+    setDownloadingIndex(index);
+    await exportCardAsJpg(cardId, fileName);
+    setDownloadingIndex(null);
+  };
+
+  const handleDownloadAllJpg = async () => {
+    setIsDownloadingAll(true);
+    for (let i = 0; i < lotes.length; i++) {
+      const lote = lotes[i];
+      const cardId = `ficha-batch-card-${lote.id || i}`;
+      const safeLoteName = (lote.loteNro || lote.id || `Lote_${i + 1}`).replace(/\s+/g, '_');
+      const fileName = `Ficha_Tecnica_${safeLoteName}`;
+      await exportCardAsJpg(cardId, fileName);
+      // Small pause between multiple file downloads to let the browser process
+      await new Promise(res => setTimeout(res, 300));
+    }
+    setIsDownloadingAll(false);
   };
 
   return (
@@ -50,21 +77,44 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
               </span>
             </h3>
             <p className="text-xs text-slate-300 mt-0.5">
-              Ficha de Lote y Trazabilidad (Plantilla fija de impresión A4).
+              Ficha de Lote y Trazabilidad (Plantilla fija de impresión A4 o descarga en .JPG).
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl border border-slate-700 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl border border-slate-700 transition cursor-pointer"
           >
             <X className="w-4 h-4 text-slate-400" />
-            <span>Cancelar</span>
+            <span>Cerrar</span>
           </button>
 
+          {/* Botón Descargar en .JPG */}
+          <button
+            type="button"
+            onClick={handleDownloadAllJpg}
+            disabled={isDownloadingAll}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-extrabold text-xs uppercase tracking-wider rounded-xl border border-amber-500/40 transition cursor-pointer disabled:opacity-50"
+            title="Descargar cada ficha en imagen de alta resolución .JPG"
+          >
+            {isDownloadingAll ? (
+              <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+            ) : (
+              <ImageIcon className="w-4 h-4 text-amber-400" />
+            )}
+            <span>
+              {isDownloadingAll
+                ? 'Descargando...'
+                : lotes.length === 1
+                ? 'Descargar .JPG'
+                : `Descargar ${lotes.length} JPG`}
+            </span>
+          </button>
+
+          {/* Botón Aceptar e Imprimir */}
           <button
             type="button"
             onClick={handlePrint}
@@ -131,28 +181,72 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
 
       {/* Contenedor Imprimible */}
       <div className="w-full max-w-4xl space-y-8 print:space-y-0 print:w-full print:max-w-none">
-        {lotes.map((lote, index) => (
-          <FichaTecnicaOficialCard
-            key={lote.id || `lote-print-${index}`}
-            lote={lote}
-            index={index}
-          />
-        ))}
+        {lotes.map((lote, index) => {
+          const cardDomId = `ficha-batch-card-${lote.id || index}`;
+          const isDownloadingThis = downloadingIndex === index;
+          return (
+            <div key={lote.id || `lote-print-${index}`} className="relative group">
+              {/* Botón flotante para descargar ficha individual en JPG (sólo en pantalla) */}
+              <div className="flex justify-end mb-1 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadSingleJpg(lote, index)}
+                  disabled={isDownloadingThis}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 hover:bg-white text-slate-700 hover:text-[#00603C] rounded-lg shadow-sm border border-slate-300 text-xs font-bold transition cursor-pointer"
+                  title="Descargar esta ficha en formato imagen JPG"
+                >
+                  {isDownloadingThis ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00603C]" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5 text-[#00603C]" />
+                  )}
+                  <span>Descargar Ficha en .JPG</span>
+                </button>
+              </div>
+
+              <FichaTecnicaOficialCard
+                id={cardDomId}
+                lote={lote}
+                index={index}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Barra Inferior de Acciones (Oculta al Imprimir) */}
-      <div className="w-full max-w-4xl bg-slate-900 text-white p-4 rounded-2xl shadow-xl border border-slate-800 flex items-center justify-between mt-6 sticky bottom-2 z-50 print:hidden">
+      <div className="w-full max-w-4xl bg-slate-900 text-white p-4 rounded-2xl shadow-xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 sticky bottom-2 z-50 print:hidden">
         <div className="text-xs text-slate-300">
           ¿Listo para imprimir <strong className="text-amber-400 font-mono font-bold">{lotes.length}</strong> {lotes.length === 1 ? 'ficha técnica' : 'fichas técnicas'}?
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={onClose}
             className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl border border-slate-700 transition cursor-pointer"
           >
             <X className="w-4 h-4 text-slate-400" />
-            <span>Cancelar</span>
+            <span>Cerrar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadAllJpg}
+            disabled={isDownloadingAll}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-extrabold text-xs uppercase tracking-wider rounded-xl border border-amber-500/40 transition cursor-pointer disabled:opacity-50"
+          >
+            {isDownloadingAll ? (
+              <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+            ) : (
+              <ImageIcon className="w-4 h-4 text-amber-400" />
+            )}
+            <span>
+              {isDownloadingAll
+                ? 'Descargando...'
+                : lotes.length === 1
+                ? 'Descargar .JPG'
+                : `Descargar ${lotes.length} JPG`}
+            </span>
           </button>
 
           <button

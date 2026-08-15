@@ -905,12 +905,14 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
             <button
               type="button"
               onClick={handlePrintSelectedFichas}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-md transition cursor-pointer border border-amber-300"
-              title="Imprimir únicamente la Ficha Técnica de los lotes seleccionados (1 hoja A4 por ficha)"
+              disabled={selectedDraftsToPrint.length === 0}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-[#00603C] hover:bg-[#254731] text-white rounded-xl text-xs font-extrabold uppercase tracking-wider shadow-md transition cursor-pointer border border-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Aceptar e imprimir la Ficha de Lote de los lotes marcados (1 hoja A4 por ficha)"
             >
-              <Printer className="w-4 h-4 text-slate-950" />
+              <CheckCircle2 className="w-4 h-4 text-amber-300" />
+              <Printer className="w-4 h-4 text-[#C9922E]" />
               <span>
-                Imprimir fichas {selectedDraftsToPrint.length > 0 ? `(${selectedDraftsToPrint.length})` : ''}
+                Aceptar e Imprimir ({selectedDraftsToPrint.length})
               </span>
             </button>
 

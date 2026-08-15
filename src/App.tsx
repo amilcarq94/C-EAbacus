@@ -16,7 +16,7 @@ import { SalidasList } from './components/SalidasList';
 import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer, BolsonCampo } from './types';
 import { getLoteAuditoria } from './utils/audit';
 import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES, BOLSONES_INICIALES } from './data/mockData';
-import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, LogIn, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database, PackagePlus, BarChart3, Smartphone } from 'lucide-react';
+import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, LogIn, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database, PackagePlus, BarChart3, Smartphone, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { GenerarLoteView } from './components/GenerarLoteView';
 import { QrCodeScanner } from './components/QrCodeScanner';
 import { DespachosSection } from './components/DespachosSection';
@@ -54,6 +54,25 @@ export default function App() {
 
   // Estado del Escáner de QR
   const [showQrScanner, setShowQrScanner] = useState(false);
+
+  // Estado del Panel Lateral de Navegación (Colapso / Minimizar y Mobile Drawer)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('agro_abacus_sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('agro_abacus_sidebar_collapsed', String(next));
+      }
+      return next;
+    });
+  };
 
   // 2. Estados Principales del Sistema (Durable Local Storage)
   const [lotes, setLotes] = useState<Lote[]>([]);
@@ -211,20 +230,22 @@ export default function App() {
   const [isLotesSpinning, setIsLotesSpinning] = useState(false);
   const [lotesRipples, setLotesRipples] = useState<{ x: number; y: number; id: number }[]>([]);
 
-  const handleLotesClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleLotesClick = (event?: React.MouseEvent<HTMLButtonElement>) => {
     navigateTo('lotes');
     setIsLotesSpinning(true);
     setTimeout(() => setIsLotesSpinning(false), 800);
 
-    const button = event.currentTarget;
-    const rect = button.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const id = Date.now();
-    setLotesRipples((prev) => [...prev, { x, y, id }]);
-    setTimeout(() => {
-      setLotesRipples((prev) => prev.filter((ripple) => ripple.id !== id));
-    }, 600);
+    if (event && event.currentTarget) {
+      const button = event.currentTarget;
+      const rect = button.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const id = Date.now();
+      setLotesRipples((prev) => [...prev, { x, y, id }]);
+      setTimeout(() => {
+        setLotesRipples((prev) => prev.filter((ripple) => ripple.id !== id));
+      }, 600);
+    }
   };
 
   // Calcular cantidad de lotes críticos (con stock por debajo del umbral de alerta)
@@ -1484,6 +1505,11 @@ export default function App() {
 
   // Router de Vistas
   const navigateTo = (view: typeof activeView) => {
+    if (!isLoggedIn && view !== 'modo-planta') {
+      setEnteredPlantaMovil(false);
+      showNotification('Acceso restringido. Inicie sesión para acceder a este módulo.');
+      return;
+    }
     setActiveView(view);
     setLoteSeleccionado(null);
     setLoteAEditar(null);
@@ -1495,8 +1521,12 @@ export default function App() {
     const found = lotes.find(l => l.id.toLowerCase() === loteId.toLowerCase());
     if (found) {
       setLoteSeleccionado(found);
-      setActiveView('lotes');
-      showNotification(`Lote ${found.id} detectado y abierto con éxito.`);
+      if (isLoggedIn) {
+        setActiveView('lotes');
+      } else {
+        setActiveView('modo-planta');
+      }
+      showNotification(`Lote ${found.id} detectado y cargado.`);
     } else {
       showNotification(`No se encontró el lote: ${loteId}`);
     }
@@ -1626,22 +1656,40 @@ export default function App() {
         <LogoSiloSquare size={520} color="#00603C" />
       </div>
       
-      {/* 1. HEADER FIJO (Logo + Nombre a la Izquierda, Isotipo Suelto a la Derecha) */}
-      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 px-4 md:px-8 flex items-center justify-between z-40 shadow-sm print:hidden">
-        <div className="flex items-center gap-3 md:gap-4">
+      {/* 1. HEADER FIJO (Logo + Toggle Menú a la Izquierda, Controles a la Derecha) */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 px-3 sm:px-4 md:px-6 flex items-center justify-between z-40 shadow-xs print:hidden">
+        <div className="flex items-center gap-2.5 sm:gap-4">
+          {/* Botón de Minimizar/Expandir Menú (Toggle Sidebar / Mobile Drawer) */}
+          <button
+            id="sidebar-toggle-btn"
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                setMobileNavOpen((prev) => !prev);
+              } else {
+                toggleSidebar();
+              }
+            }}
+            className="p-2 rounded-xl text-[#00603C] hover:bg-[#E3EFE7] active:bg-[#C2E0CC] transition cursor-pointer flex items-center justify-center border border-[#00603C]/20 shadow-xs shrink-0"
+            title={sidebarCollapsed ? "Expandir menú de navegación lateral" : "Minimizar menú de navegación lateral"}
+            aria-label="Alternar menú de navegación"
+          >
+            <Menu className="w-5 h-5 text-[#00603C]" />
+          </button>
+
           <HeaderBrand />
           
           {/* Indicador de Conexión en Tiempo Real */}
           {isOnline && isFirebaseConnected ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E3EFE7] border border-[#C2E0CC]/50 text-[#00603C] text-[10px] md:text-[11px] font-sans font-bold shadow-xs select-none transition-all duration-300" title="Conexión en tiempo real activa con Firestore">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E3EFE7] border border-[#C2E0CC]/50 text-[#00603C] text-[10px] md:text-[11px] font-sans font-bold shadow-xs select-none transition-all duration-300" title="Conexión en tiempo real activa con Firestore">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2E8B57] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00603C]"></span>
               </span>
-              <span className="hidden sm:inline">CONECTADO</span>
+              <span>CONECTADO</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF5F5] border border-[#FED7D7] text-red-600 text-[10px] md:text-[11px] font-sans font-bold shadow-xs select-none animate-pulse transition-all duration-300" title="Sin conexión a la base de datos. Los cambios locales se guardan offline y se sincronizarán al reconectar.">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF5F5] border border-[#FED7D7] text-red-600 text-[10px] md:text-[11px] font-sans font-bold shadow-xs select-none animate-pulse transition-all duration-300" title="Sin conexión a la base de datos. Los cambios locales se guardan offline y se sincronizarán al reconectar.">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
@@ -1652,7 +1700,7 @@ export default function App() {
         </div>
         
         {/* Lado derecho del header: CampaniaSelector + Operario/Login + Planta Móvil + QR + Salir */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Selector y Fijador de Campaña Activa */}
           <CampaniaSelector
             activeCampaniaId={activeCampaniaId}
@@ -1664,21 +1712,21 @@ export default function App() {
 
           {/* Operario Activo o Badge de Acceso Libre */}
           {isLoggedIn ? (
-            <div className="hidden sm:flex flex-col text-right mr-1 sm:mr-2 leading-tight border-r border-gray-100 pr-3">
+            <div className="hidden lg:flex flex-col text-right mr-1 leading-tight border-r border-gray-100 pr-3">
               <span className="text-xs font-bold text-gray-800">{currentUser.nombre}</span>
               <span className="text-[9px] text-[#00603C] font-semibold uppercase tracking-wider">{currentUser.rol}</span>
             </div>
           ) : (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+            <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
               <span>PLANTA MÓVIL (PÚBLICO)</span>
             </div>
           )}
 
-          <LogoSiloLoose size={36} color="#00603C" className="opacity-80 hidden lg:block" />
+          <LogoSiloLoose size={32} color="#00603C" className="opacity-80 hidden xl:block" />
           
           <button
             onClick={() => navigateTo('modo-planta')}
-            className={`flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider px-3 py-1.5 rounded-lg transition shadow-sm ${
+            className={`flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider px-2.5 sm:px-3 py-1.5 rounded-lg transition shadow-xs ${
               activeView === 'modo-planta'
                 ? 'bg-emerald-500 text-slate-950 ring-2 ring-emerald-300'
                 : 'bg-emerald-800 text-white hover:bg-emerald-700'
@@ -1691,17 +1739,17 @@ export default function App() {
 
           <button
             onClick={() => setShowQrScanner(true)}
-            className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-[#00603C] hover:bg-[#254731] text-white px-3.5 py-1.5 rounded-lg transition shadow-sm"
+            className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-[#00603C] hover:bg-[#254731] text-white px-2.5 sm:px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer"
             title="Escanear Código QR con Cámara"
           >
             <QrCode className="w-3.5 h-3.5 text-[#C9922E]" />
-            <span>ESCANEAR QR</span>
+            <span className="hidden sm:inline">QR</span>
           </button>
 
           {isLoggedIn ? (
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider text-[#A0522D] hover:bg-[#F5E5DC] px-3 py-1.5 rounded-lg border border-[#A0522D] border-opacity-20 transition"
+              className="flex items-center gap-1 text-[10px] font-sans font-bold tracking-wider text-[#A0522D] hover:bg-[#F5E5DC] px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#A0522D]/20 transition cursor-pointer"
               title="Cerrar Sesión del Operario"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -1712,86 +1760,148 @@ export default function App() {
               onClick={() => {
                 setEnteredPlantaMovil(false);
               }}
-              className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg border border-slate-700 transition"
+              className="flex items-center gap-1 text-[10px] font-sans font-bold tracking-wider bg-slate-900 hover:bg-slate-800 text-white px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-700 transition cursor-pointer"
               title="Iniciar Sesión Administrativa"
             >
               <LogIn className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden md:inline">INICIAR SESIÓN</span>
+              <span className="hidden md:inline">LOGIN</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* 2. MENÚ DE NAVEGACIÓN TABULAR */}
-      <nav className="fixed top-16 left-0 right-0 h-12 bg-[#00603C] border-b border-[#254731] px-2 sm:px-4 md:px-8 flex items-center overflow-x-auto z-40 shadow-inner scrollbar-none print:hidden">
-        <div className="flex gap-1 md:gap-2 w-full max-w-7xl mx-auto items-center flex-nowrap shrink-0">
+      {/* 2. PANEL DE NAVEGACIÓN VERTICAL (SIDEBAR) - DESKTOP */}
+      <aside
+        id="main-sidebar"
+        className={`fixed top-16 bottom-0 left-0 z-30 bg-[#00603C] text-white flex flex-col border-r border-[#254731] transition-all duration-300 print:hidden hidden md:flex shadow-lg ${
+          sidebarCollapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        {/* Cabecera del Sidebar con Botón de Colapsar/Expandir */}
+        <div className="px-3 py-2.5 border-b border-[#254731] flex items-center justify-between bg-black/10">
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-1.5 text-emerald-200">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider">
+                Panel de Control
+              </span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className={`p-1.5 rounded-lg hover:bg-white/10 text-emerald-200 hover:text-white transition cursor-pointer ${
+              sidebarCollapsed ? 'mx-auto' : ''
+            }`}
+            title={sidebarCollapsed ? "Expandir menú de navegación" : "Minimizar a solo íconos"}
+            aria-label={sidebarCollapsed ? "Expandir menú" : "Minimizar menú"}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4 text-emerald-300" />
+            ) : (
+              <div className="flex items-center gap-1 text-xs text-emerald-300 font-semibold">
+                <ChevronLeft className="w-4 h-4" />
+                <span className="text-[10px] uppercase font-bold">Minimizar</span>
+              </div>
+            )}
+          </button>
+        </div>
+
+        {/* Lista de Navegación Vertical */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-emerald-700/60">
           
-          {/* Tab 1: Planta Móvil (Mobile / Simplificado) - PRIMERA OPCIÓN */}
+          {/* Tab 1: Planta Móvil */}
           <button
             id="nav-tab-planta-movil"
             onClick={() => navigateTo('modo-planta')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3 justify-between'
+            } ${
               activeView === 'modo-planta'
                 ? 'bg-emerald-400 text-slate-950 font-black shadow-[0_0_16px_rgba(52,211,153,0.8)] ring-2 ring-emerald-300'
                 : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-400/40'
             }`}
             title="Planta Móvil: Acceso público a Silos y Operaciones"
           >
-            <Smartphone className="w-4 h-4 text-emerald-300" />
-            <span>Planta Móvil</span>
-            <span className="text-[9px] px-1 py-0.2 bg-emerald-400/30 text-emerald-100 rounded font-mono font-bold ml-0.5">Libre</span>
+            <div className="flex items-center gap-2.5 truncate">
+              <Smartphone className="w-4 h-4 shrink-0 text-emerald-300" />
+              {!sidebarCollapsed && <span className="truncate">Planta Móvil</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span className="text-[9px] px-1.5 py-0.5 bg-emerald-400/30 text-emerald-100 rounded font-mono font-bold">
+                Libre
+              </span>
+            )}
           </button>
+
+          {/* Separador de Sección */}
+          {!sidebarCollapsed ? (
+            <div className="pt-2 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+              Operaciones & Planta
+            </div>
+          ) : (
+            <div className="my-1 border-t border-[#254731]/60" />
+          )}
 
           {/* Tab 2: Dashboard (Control) */}
           <button
             id="nav-tab-dashboard"
             onClick={() => navigateTo('dashboard')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'dashboard'
-                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
+                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Panel de Control General"
           >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Control</span>
+            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Control</span>}
           </button>
 
           {/* Tab 3: Reporte de Producción */}
           <button
             id="nav-tab-reporte-produccion"
             onClick={() => navigateTo('reporte-produccion')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'reporte-produccion'
-                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
+                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
             title="Reporte de Producción: Rendimiento diario y lotes realizados"
           >
-            <Factory className="w-4 h-4 text-amber-300" />
-            <span>Reporte de Producción</span>
+            <Factory className="w-4 h-4 shrink-0 text-amber-300" />
+            {!sidebarCollapsed && <span className="truncate">Producción</span>}
           </button>
 
           {/* Tab 4: Órdenes de Proceso */}
           <button
             id="nav-tab-ordenes-proceso"
             onClick={() => navigateTo('ordenes-proceso')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'ordenes-proceso'
-                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
+                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Órdenes de Proceso y Movimiento"
           >
-            <ClipboardList className="w-4 h-4" />
-            <span>Órdenes de Proceso</span>
+            <ClipboardList className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Órdenes Proceso</span>}
           </button>
 
           {/* Tab 5: Ingreso a Silos */}
           <button
             id="nav-tab-ingreso-silos"
             onClick={() => navigateTo('ingreso-silos')}
-            className={`shrink-0 whitespace-nowrap relative flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3 justify-between'
+            } ${
               activeView === 'ingreso-silos'
-                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-[0_0_14px_rgba(201,146,46,0.55)] ring-1.5 ring-[#C9922E]/60'
+                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
                 : tieneAlertaSilo95
                 ? 'text-white bg-red-900/50 border border-red-500/80 shadow-[0_0_12px_rgba(239,68,68,0.5)]'
                 : 'text-white hover:bg-white/10'
@@ -1802,44 +1912,50 @@ export default function App() {
                 : 'Ingreso a Silos'
             }
           >
-            <Warehouse className={`w-4 h-4 ${tieneAlertaSilo95 ? 'text-red-400 animate-pulse' : 'text-[#C9922E]'}`} />
-            <span>Ingreso a Silos</span>
+            <div className="flex items-center gap-2.5 truncate">
+              <Warehouse className={`w-4 h-4 shrink-0 ${tieneAlertaSilo95 ? 'text-red-400 animate-pulse' : 'text-[#C9922E]'}`} />
+              {!sidebarCollapsed && <span className="truncate">Ingreso Silos</span>}
+            </div>
 
             {tieneAlertaSilo95 && (
-              <span className="flex items-center gap-1 ml-0.5">
-                <span className="relative flex h-2.5 w-2.5">
+              <span className="flex items-center gap-1 shrink-0">
+                <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                 </span>
-                <span className="animate-pulse bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-red-300 shadow">
-                  95%+
-                </span>
-              </span>
-            )}
-
-            {tieneAlertaSilo95 && (
-              <span
-                className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-extrabold text-white bg-red-600 shadow-md ring-2 ring-red-400 animate-bounce z-10"
-                title={`Alerta: ${silosConAlerta95.length} silo(s) al 95%+ (171.000 kg): ${silosConAlerta95.join(', ')}`}
-              >
-                !
+                {!sidebarCollapsed && (
+                  <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full border border-red-300">
+                    95%+
+                  </span>
+                )}
               </span>
             )}
           </button>
+
+          {/* Separador de Sección */}
+          {!sidebarCollapsed ? (
+            <div className="pt-2 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+              Inventario & Lotes
+            </div>
+          ) : (
+            <div className="my-1 border-t border-[#254731]/60" />
+          )}
 
           {/* Tab 6: Lotes */}
           <button
             id="nav-tab-lotes"
             role="tab"
             aria-selected={activeView === 'lotes' || Boolean(loteSeleccionado)}
-            aria-current={(activeView === 'lotes' || loteSeleccionado) ? 'page' : undefined}
-            aria-label={`Pestaña Lotes. Gestión de inventario y clasificación de semillas${criticalLotesCount > 0 ? `. Alerta: ${criticalLotesCount} lotes con stock crítico` : ''}`}
+            aria-label={`Pestaña Lotes. Gestión de inventario de semillas`}
             onClick={handleLotesClick}
-            className={`shrink-0 whitespace-nowrap group relative flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 ease-in-out hover:scale-105 active:scale-95 active:opacity-85 active:z-20 active:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C9922E] focus:ring-offset-2 focus:ring-offset-[#00603C] ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3 justify-between'
+            } ${
               activeView === 'lotes' || loteSeleccionado
-                ? 'bg-[#F6EFDC] text-[#00603C] shadow-md font-bold z-10'
+                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Inventario de Lotes y Clasificación"
           >
             {/* Inline keyframe style for custom ripple animation */}
             <style>{`
@@ -1859,7 +1975,7 @@ export default function App() {
             `}</style>
             
             {/* Ripple Container */}
-            <span className="absolute inset-0 overflow-hidden rounded-lg pointer-events-none">
+            <span className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none">
               {lotesRipples.map((ripple) => (
                 <span
                   key={ripple.id}
@@ -1874,131 +1990,391 @@ export default function App() {
               ))}
             </span>
 
-            <Layers className={`w-4 h-4 transition-transform duration-300 ${isLotesSpinning ? 'animate-spin' : ''}`} />
-            <span>Lotes</span>
+            <div className="flex items-center gap-2.5 truncate">
+              <Layers className={`w-4 h-4 shrink-0 transition-transform duration-300 ${isLotesSpinning ? 'animate-spin' : ''}`} />
+              {!sidebarCollapsed && <span className="truncate">Lotes</span>}
+            </div>
             
-            {/* Badge de Lotes Críticos */}
             {criticalLotesCount > 0 && (
               <span 
-                className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-sm z-10"
+                className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-xs shrink-0"
                 style={{ backgroundColor: '#A0522D' }}
                 title={`${criticalLotesCount} lotes con stock crítico`}
               >
                 {criticalLotesCount}
               </span>
             )}
-
-            {(activeView === 'lotes' || loteSeleccionado) && (
-              <span className="absolute bottom-1 left-4 right-4 h-0.5 bg-[#00603C] rounded-full animate-in fade-in duration-200" />
-            )}
-            {/* Tooltip */}
-            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 text-[10px] normal-case tracking-normal text-white bg-gray-900 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
-              Gestionar inventario de lotes
-            </span>
           </button>
 
-          {/* Tab 7: Generar Lote (Alta rápida en Precarga) */}
+          {/* Tab 7: Generar Lote */}
           <button
             id="nav-tab-generar-lote"
             onClick={() => navigateTo('generar-lote')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-300 ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'generar-lote'
                 ? 'bg-amber-400 text-slate-950 font-black shadow-[0_0_16px_rgba(251,191,36,0.8)] ring-2 ring-amber-300'
                 : 'bg-amber-500/20 text-amber-300 hover:bg-amber-400 hover:text-slate-950 border border-amber-400/40'
             }`}
             title="Alta rápida individual o múltiple de lotes en Precarga"
           >
-            <PackagePlus className="w-4 h-4" />
-            <span>Generar Lote</span>
+            <PackagePlus className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Generar Lote</span>}
           </button>
           
           {/* Tab 8: Despachos */}
           <button
             id="nav-tab-despachos"
             onClick={() => navigateTo('despachos')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'despachos'
-                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
+                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Despachos y Órdenes de Carga"
           >
-            <ClipboardCheck className="w-4 h-4" />
-            <span>Despachos</span>
+            <ClipboardCheck className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Despachos</span>}
           </button>
 
           {/* Tab 9: Historial Salidas */}
           <button
             id="nav-tab-historial-salidas"
             onClick={() => navigateTo('salidas-registradas')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'salidas-registradas'
-                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
+                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Historial de Salidas Registradas"
           >
-            <History className="w-4 h-4" />
-            <span>Historial Salidas</span>
+            <History className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Historial Salidas</span>}
           </button>
+
+          {/* Separador de Sección */}
+          {!sidebarCollapsed ? (
+            <div className="pt-2 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+              Datos & Sistema
+            </div>
+          ) : (
+            <div className="my-1 border-t border-[#254731]/60" />
+          )}
 
           {/* Tab 10: Data Bases (Choferes y Bolsones) */}
           <button
             id="nav-tab-choferes"
             onClick={() => navigateTo('choferes')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'choferes'
-                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
+                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Bases de Datos: Choferes, Camiones y Bolsones"
           >
-            <Database className="w-4 h-4 text-[#C9922E]" />
-            <span>Data Bases</span>
+            <Database className="w-4 h-4 shrink-0 text-[#C9922E]" />
+            {!sidebarCollapsed && <span className="truncate">Data Bases</span>}
           </button>
 
           {/* Tab 11: Importar */}
           <button
             id="nav-tab-importar"
             onClick={() => navigateTo('importar')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-semibold font-sans uppercase tracking-wider transition ${
+            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            } ${
               activeView === 'importar'
-                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold'
+                ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
                 : 'text-white hover:bg-white/10'
             }`}
+            title="Importar Stock desde Planilla Excel (Ctrl+I)"
           >
-            <Upload className="w-4 h-4" />
-            <span>Importar Stock</span>
-            <kbd className="hidden lg:inline-block ml-1 px-1 py-0.5 text-[9px] font-mono font-normal opacity-60 bg-white/10 rounded border border-white/5">Ctrl+I</kbd>
+            <Upload className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Importar Stock</span>}
           </button>
 
         </div>
-      </nav>
 
-      {/* 3. BANNER DE NOTIFICACIONES GLOBAL DESACTIVADO */}
+        {/* Pie del Sidebar */}
+        <div className="p-3 border-t border-[#254731] bg-black/10 text-center">
+          {!sidebarCollapsed ? (
+            <div className="text-[10px] text-emerald-200/80 font-sans tracking-wide">
+              Agro Abacus · La Barrancosa
+            </div>
+          ) : (
+            <div className="text-[9px] font-mono text-emerald-300 font-bold">
+              AA
+            </div>
+          )}
+        </div>
+      </aside>
 
-      {/* 4. ÁREA DE CONTENIDO */}
-      <main className="flex-grow pt-32 pb-16 px-3 sm:px-4 md:px-8 w-full max-w-7xl mx-auto relative z-10 print:pt-4 print:pb-4">
+      {/* 2.b MENÚ DESPLEGABLE PARA MÓVILES (MOBILE DRAWER) */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Backdrop oscuro */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setMobileNavOpen(false)}
+          />
+
+          {/* Panel Lateral Deslizable */}
+          <div className="relative w-72 max-w-[85vw] bg-[#00603C] text-white h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="p-4 border-b border-[#254731] flex items-center justify-between bg-black/10">
+              <div className="flex items-center gap-2">
+                <LogoSiloLoose size={26} color="#C9922E" />
+                <span className="font-serif font-black tracking-wider text-sm">AGRO ABACUS</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-white cursor-pointer"
+                aria-label="Cerrar menú"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 px-3 space-y-1.5">
+              {/* Tab 1: Planta Móvil */}
+              <button
+                onClick={() => {
+                  navigateTo('modo-planta');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold font-sans uppercase tracking-wider transition ${
+                  activeView === 'modo-planta'
+                    ? 'bg-emerald-400 text-slate-950 font-black shadow-md ring-2 ring-emerald-300'
+                    : 'bg-emerald-500/20 text-emerald-300'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Smartphone className="w-4 h-4 text-emerald-300" />
+                  <span>Planta Móvil</span>
+                </div>
+                <span className="text-[9px] px-1.5 py-0.5 bg-emerald-400/30 text-emerald-100 rounded font-mono font-bold">
+                  Libre
+                </span>
+              </button>
+
+              <div className="pt-3 pb-1 px-1 text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+                Operaciones
+              </div>
+
+              <button
+                onClick={() => {
+                  navigateTo('dashboard');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'dashboard'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Control</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('reporte-produccion');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'reporte-produccion'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <Factory className="w-4 h-4 text-amber-300" />
+                <span>Reporte de Producción</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('ordenes-proceso');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'ordenes-proceso'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                <span>Órdenes de Proceso</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('ingreso-silos');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'ingreso-silos'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Warehouse className="w-4 h-4 text-[#C9922E]" />
+                  <span>Ingreso a Silos</span>
+                </div>
+                {tieneAlertaSilo95 && (
+                  <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full">
+                    95%+
+                  </span>
+                )}
+              </button>
+
+              <div className="pt-3 pb-1 px-1 text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+                Inventario
+              </div>
+
+              <button
+                onClick={() => {
+                  handleLotesClick();
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'lotes' || loteSeleccionado
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Layers className="w-4 h-4" />
+                  <span>Lotes</span>
+                </div>
+                {criticalLotesCount > 0 && (
+                  <span className="bg-[#A0522D] text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
+                    {criticalLotesCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('generar-lote');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ${
+                  activeView === 'generar-lote'
+                    ? 'bg-amber-400 text-slate-950 font-black'
+                    : 'bg-amber-500/20 text-amber-300'
+                }`}
+              >
+                <PackagePlus className="w-4 h-4" />
+                <span>Generar Lote</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('despachos');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'despachos'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <ClipboardCheck className="w-4 h-4" />
+                <span>Despachos</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('salidas-registradas');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'salidas-registradas'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <History className="w-4 h-4" />
+                <span>Historial Salidas</span>
+              </button>
+
+              <div className="pt-3 pb-1 px-1 text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+                Sistema
+              </div>
+
+              <button
+                onClick={() => {
+                  navigateTo('choferes');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'choferes'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <Database className="w-4 h-4 text-[#C9922E]" />
+                <span>Data Bases</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  navigateTo('importar');
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
+                  activeView === 'importar'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    : 'text-white hover:bg-white/10'
+                }`}
+              >
+                <Upload className="w-4 h-4" />
+                <span>Importar Stock</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. ÁREA DE CONTENIDO PRINCIPAL */}
+      <main
+        className={`flex-grow pt-20 pb-16 px-3 sm:px-4 md:px-6 w-full relative z-10 transition-all duration-300 print:pt-2 print:pb-2 print:px-0 ${
+          sidebarCollapsed ? 'md:pl-24' : 'md:pl-68'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto">
         
         {/* RUTA DE COMPONENTES SEGÚN VISTA ACTIVA */}
         {loteSeleccionado ? (
           <LoteDetail
             lote={loteSeleccionado}
+            readOnly={!isLoggedIn}
             ordenesProceso={ordenesProcesoConHechos}
             movimientosSilo={movimientosSilo}
             onBack={() => setLoteSeleccionado(null)}
             onUpdateLoteStock={handleUpdateLoteStock}
-            onRegistrarSalida={(id) => {
+            onRegistrarSalida={isLoggedIn ? (id) => {
               setPreselectedLoteId(id);
               setLoteSeleccionado(null);
               setActiveView('registrar-salida');
-            }}
-            onUpdateLoteLocation={handleUpdateLoteLocation}
-            onNavigateToOrdenesProceso={() => {
+            } : undefined}
+            onUpdateLoteLocation={isLoggedIn ? handleUpdateLoteLocation : undefined}
+            onNavigateToOrdenesProceso={isLoggedIn ? () => {
               setLoteSeleccionado(null);
               navigateTo('ordenes-proceso');
-            }}
-            onNavigateToSilos={() => {
+            } : undefined}
+            onNavigateToSilos={isLoggedIn ? () => {
               setLoteSeleccionado(null);
               navigateTo('ingreso-silos');
-            }}
+            } : undefined}
           />
         ) : activeView === 'dashboard' ? (
           <Dashboard
@@ -2197,10 +2573,13 @@ export default function App() {
           />
         ) : null}
 
+        </div>
       </main>
 
       {/* 5. FOOTER CON IDENTIDAD EXACTA */}
-      <footer className="h-12 bg-gray-50 border-t border-gray-100 flex items-center justify-center text-center text-xs text-gray-400 font-sans tracking-widest uppercase mt-auto print:hidden">
+      <footer className={`h-12 bg-gray-50 border-t border-gray-100 flex items-center justify-center text-center text-xs text-gray-400 font-sans tracking-widest uppercase mt-auto transition-all duration-300 print:hidden ${
+        sidebarCollapsed ? 'md:pl-20' : 'md:pl-64'
+      }`}>
         AGRO ABACUS S.A. · ESTANCIA LA BARRANCOSA
       </footer>
 

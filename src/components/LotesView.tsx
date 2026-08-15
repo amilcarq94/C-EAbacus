@@ -2356,11 +2356,12 @@ export const LotesView: React.FC<LotesViewProps> = ({
                 setTableBatchPrintLotes(selectedObjects);
                 setShowTableBatchPrintModal(true);
               }}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition shadow-xs cursor-pointer"
-              title="Imprimir la Ficha Técnica Oficial de los lotes seleccionados con un solo clic"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-extrabold font-sans uppercase tracking-wider bg-[#00603C] hover:bg-[#254731] text-white rounded-lg transition shadow-md cursor-pointer border border-emerald-500/30"
+              title="Aceptar e imprimir la Ficha de Lote de todos los lotes marcados"
             >
+              <CheckCircle2 className="w-4 h-4 text-amber-300" />
               <Printer className="w-4 h-4 text-[#C9922E]" />
-              <span>Imprimir Fichas ({selectedLoteIds.length})</span>
+              <span>Aceptar e Imprimir ({selectedLoteIds.length})</span>
             </button>
 
             <button
@@ -2995,6 +2996,8 @@ export const LotesView: React.FC<LotesViewProps> = ({
                           setSelectedLoteIds(prev => prev.filter(id => !currentIds.includes(id)));
                         }
                       }}
+                      title="Seleccionar todos para imprimir ficha de lote"
+                      aria-label="Seleccionar todos para imprimir ficha de lote"
                       className="rounded border-gray-300 text-white focus:ring-offset-0 focus:ring-0 h-4 w-4 cursor-pointer"
                     />
                   </th>
@@ -3017,6 +3020,8 @@ export const LotesView: React.FC<LotesViewProps> = ({
                         type="checkbox"
                         checked={selectedLoteIds.includes(l.id)}
                         onChange={() => toggleSelectLote(l.id)}
+                        title="Imprimir ficha de lote"
+                        aria-label="Imprimir ficha de lote"
                         className="rounded border-gray-300 text-[#00603C] focus:ring-[#00603C] h-4 w-4 cursor-pointer"
                       />
                     </td>

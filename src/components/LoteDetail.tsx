@@ -3,16 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lote, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenProceso, MovimientoSilo } from '../types';
 import { getLoteAuditoria } from '../utils/audit';
 import { formatNumberArg, formatKg, formatBolsas, formatDateStr } from '../utils/formatters';
 import { LogoSiloLoose } from './Logo';
-import { ArrowLeft, ArrowUpRight, ArrowDownRight, Printer, Plus, AlertCircle, Trash2, ShieldCheck, Download, QrCode, Barcode, Clock, User, Edit2, X, Warehouse, FileText, FileSpreadsheet, Package } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Printer, Plus, AlertCircle, Trash2, ShieldCheck, Download, QrCode, Barcode, Clock, User, Edit2, X, Warehouse, FileText, FileSpreadsheet, Package, Image as ImageIcon, Loader2, RotateCcw, Check, CheckCircle, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import { QrCodeModal } from './QrCodeModal';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
 import { FichaTecnicaOficialCard } from './FichaTecnicaOficialCard';
+import { ImprimirFichaTecnica } from './ImprimirFichaTecnica';
 import { QrTrazabilidadLote } from './QrTrazabilidadLote';
+import { exportCardAsJpg } from '../utils/exportImage';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const CustomLineTooltip = ({ active, payload }: any) => {
@@ -44,6 +46,7 @@ interface LoteDetailProps {
   lote: Lote;
   ordenesProceso?: OrdenProceso[];
   movimientosSilo?: MovimientoSilo[];
+  readOnly?: boolean;
   onBack: () => void;
   onUpdateLoteStock: (loteId: string, nuevosMovimientos: MovimientoStock[], nuevoStockBolsas: number, nuevoStockKg: number, nuevoEstado: EstadoLoteType) => void;
   onRegistrarSalida?: (loteId: string) => void;
@@ -56,6 +59,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
   lote,
   ordenesProceso,
   movimientosSilo,
+  readOnly = false,
   onBack,
   onUpdateLoteStock,
   onRegistrarSalida,
@@ -75,6 +79,46 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
   const [kgBolsa, setKgBolsa] = useState<number>(lote.kgPorBolsa || 40);
   const [detalle, setDetalle] = useState('');
   const [error, setError] = useState('');
+  const [isPrintingMode, setIsPrintingMode] = useState(false);
+  const [isDownloadingJpg, setIsDownloadingJpg] = useState(false);
+
+  // Estado borrador para la Ficha Técnica (permite previsualización y edición antes de imprimir o descargar)
+  const [draftFichaLote, setDraftFichaLote] = useState<Lote>(lote);
+  const [showEditFichaDrawer, setShowEditFichaDrawer] = useState(false);
+  const [showEditFichaModal, setShowEditFichaModal] = useState(false);
+  const [showImprimirFichaModal, setShowImprimirFichaModal] = useState(false);
+  const [initialFichaEditMode, setInitialFichaEditMode] = useState(false);
+  const [fichaModificada, setFichaModificada] = useState(false);
+
+  // Sincronizar draft si cambia el lote original de props
+  useEffect(() => {
+    setDraftFichaLote(lote);
+    setFichaModificada(false);
+  }, [lote]);
+
+  const handleUpdateDraftField = (field: string, value: any) => {
+    setDraftFichaLote((prev: any) => {
+      const updated = { ...prev, [field]: value };
+      if (field === 'stockBolsas' || field === 'kgPorBolsa') {
+        const b = field === 'stockBolsas' ? Number(value) || 0 : prev.stockBolsas || 0;
+        const k = field === 'kgPorBolsa' ? Number(value) || 0 : prev.kgPorBolsa || 40;
+        updated.stockKg = b * k;
+      }
+      return updated;
+    });
+    setFichaModificada(true);
+  };
+
+  const handleResetDraft = () => {
+    setDraftFichaLote(lote);
+    setFichaModificada(false);
+  };
+
+  const handleConfirmarYPrevisualizar = () => {
+    setShowEditFichaModal(false);
+    setShowEditFichaDrawer(false);
+    setIsPrintingMode(true);
+  };
 
   // Resolver vincular Orden de Proceso, Silo de Origen y Bolsón de Origen
   const linkedOp = ordenesProceso?.find(
@@ -108,8 +152,6 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
     ingresoPrevioSilo?.bolsonOrigenNro ||
     'Sin dato';
 
-  // Modo Imprimir Ficha
-  const [isPrintingMode, setIsPrintingMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'stock' | 'audit'>('stock');
 
   // Calcular evolución del stock a lo largo del tiempo
@@ -230,44 +272,307 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
     setDetalle('');
   };
 
-  // Función para simular exportación e imprimir en pantalla
-  const handlePrintFicha = () => {
+  const handleDownloadJpg = async () => {
+    setIsDownloadingJpg(true);
+    const cardId = `ficha-detail-card-${lote.id}`;
+    const safeLoteName = (draftFichaLote.loteNro || draftFichaLote.id || 'Lote').replace(/\s+/g, '_');
+    await exportCardAsJpg(cardId, `Ficha_Tecnica_${safeLoteName}`);
+    setIsDownloadingJpg(false);
+  };
+
+  // Función para abrir vista de impresión
+  const handlePrintFicha = (openEditor = false) => {
     setIsPrintingMode(true);
-    setTimeout(() => {
-      window.print();
-    }, 400);
+    setShowEditFichaDrawer(openEditor);
+    if (!openEditor) {
+      setTimeout(() => {
+        window.print();
+      }, 400);
+    }
   };
 
   if (isPrintingMode) {
-    // Vista limpia para imprimir (Ficha de Lote - Plantilla A4 Fija)
+    // Vista limpia para imprimir (Ficha de Lote - Plantilla A4 Fija) con panel de edición pre-impresión
     return (
       <div className="min-h-screen bg-gray-50 py-6 px-4 print:p-0 print:bg-white print:min-h-0">
         {/* Barra de Acciones de Impresión - Visible en pantalla, Oculta al imprimir */}
-        <div className="max-w-4xl mx-auto mb-6 flex items-center justify-between bg-white border border-gray-200 p-4 rounded-xl shadow-xs print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#E3EFE7] rounded-lg">
-              <Printer className="w-5 h-5 text-[#00603C]" />
+        <div className="max-w-4xl mx-auto mb-4 flex flex-col gap-3 bg-white border border-gray-200 p-4 rounded-xl shadow-xs print:hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-[#E3EFE7] rounded-lg">
+                <Printer className="w-5 h-5 text-[#00603C]" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-serif text-sm font-bold text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                  <span>Vista de Impresión</span>
+                  {fichaModificada && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] rounded-full font-bold normal-case">
+                      Ficha personalizada
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-gray-500 font-medium">
+                  Lote: <strong className="font-mono text-[#00603C]">{draftFichaLote.loteNro || draftFichaLote.id}</strong> · {draftFichaLote.cliente || 'Agro Abacus'}
+                </p>
+              </div>
             </div>
-            <div className="text-left">
-              <h3 className="font-serif text-sm font-bold text-gray-800 uppercase tracking-wide">Vista de Impresión</h3>
-              <p className="text-[11px] text-gray-500 font-medium">Ficha de Lote: <strong className="font-mono text-[#00603C]">{lote.loteNro}</strong></p>
+
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => setShowEditFichaDrawer(!showEditFichaDrawer)}
+                className={`px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition border flex items-center gap-1.5 cursor-pointer ${
+                  showEditFichaDrawer
+                    ? 'bg-[#00603C] text-white border-[#00603C]'
+                    : 'bg-emerald-50 text-[#00603C] border-emerald-300 hover:bg-emerald-100'
+                }`}
+                title="Editar los datos que aparecerán en la Ficha Técnica antes de imprimir o descargar"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-[#C9922E]" />
+                <span>{showEditFichaDrawer ? 'Ocultar Editor' : 'Editar Ficha'}</span>
+                {showEditFichaDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsPrintingMode(false)}
+                className="px-3.5 py-2 text-xs font-semibold uppercase tracking-wider text-gray-600 hover:text-gray-800 hover:bg-gray-100 border border-gray-200 rounded-lg transition cursor-pointer"
+              >
+                Volver
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadJpg}
+                disabled={isDownloadingJpg}
+                className="px-3.5 py-2 text-xs font-semibold uppercase tracking-wider bg-white hover:bg-gray-50 text-slate-800 border border-slate-300 rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isDownloadingJpg ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-[#00603C]" />
+                ) : (
+                  <ImageIcon className="w-4 h-4 text-[#C9922E]" />
+                )}
+                <span>Descargar .JPG</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-5 py-2 text-xs font-semibold uppercase tracking-wider bg-[#00603C] hover:bg-[#004D30] text-white rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Imprimir Ficha</span>
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setIsPrintingMode(false)}
-              className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-600 hover:text-gray-800 hover:bg-gray-100 border border-gray-200 rounded-lg transition cursor-pointer"
-            >
-              Volver
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="px-5 py-2 text-xs font-semibold uppercase tracking-wider bg-[#00603C] hover:bg-[#004D30] text-white rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              Imprimir Ficha de Lote
-            </button>
-          </div>
+
+          {/* Panel Desplegable: Editar Ficha Técnica Antes de Imprimir */}
+          {showEditFichaDrawer && (
+            <div className="border-t border-gray-200 pt-4 mt-2 animate-in fade-in slide-in-from-top-2 duration-200 text-left">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-[#00603C]" />
+                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                    Editar Datos de la Ficha Técnica (Edición previa a Impresión)
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  {fichaModificada && (
+                    <button
+                      type="button"
+                      onClick={handleResetDraft}
+                      className="text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Restablecer originales
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">N° de Lote</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.loteNro || ''}
+                    onChange={(e) => handleUpdateDraftField('loteNro', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Cliente</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.cliente || ''}
+                    onChange={(e) => handleUpdateDraftField('cliente', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Especie</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.especie || ''}
+                    onChange={(e) => handleUpdateDraftField('especie', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Variedad</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.variedad || ''}
+                    onChange={(e) => handleUpdateDraftField('variedad', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Categoría</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.categoria || ''}
+                    onChange={(e) => handleUpdateDraftField('categoria', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Tipo de Lote</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.tipo || ''}
+                    onChange={(e) => handleUpdateDraftField('tipo', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Tratamiento / Curado</label>
+                  <input
+                    type="text"
+                    value={Array.isArray(draftFichaLote.tratamiento) ? draftFichaLote.tratamiento.join(', ') : (draftFichaLote.tratamiento as any) || ''}
+                    onChange={(e) => handleUpdateDraftField('tratamiento', e.target.value.split(',').map(s => s.trim()))}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                    placeholder="Sin Tratar, Curado..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Producto Químico</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.producto || ''}
+                    onChange={(e) => handleUpdateDraftField('producto', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                    placeholder="Ninguno, Maxim XL..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">N° Orden Proceso/Mov.</label>
+                  <input
+                    type="text"
+                    value={draftFichaLote.ordenProcesoId || (draftFichaLote as any).numeroOrdenMovimiento || (draftFichaLote as any).ordenProceso || ''}
+                    onChange={(e) => handleUpdateDraftField('ordenProcesoId', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">N° Bolsón Origen</label>
+                  <input
+                    type="text"
+                    value={(draftFichaLote as any).numeroBolsonOrigen || (draftFichaLote as any).bolsonOrigenNro || ''}
+                    onChange={(e) => handleUpdateDraftField('numeroBolsonOrigen', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono"
+                    placeholder="B-12, B-34..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Sector Bolsón Origen</label>
+                  <input
+                    type="text"
+                    value={(draftFichaLote as any).sectorBolsonOrigen || ''}
+                    onChange={(e) => handleUpdateDraftField('sectorBolsonOrigen', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                    placeholder="Ala A - Sector 1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Ubicación de Acopio</label>
+                  <input
+                    type="text"
+                    value={(draftFichaLote as any).ubicacionAcopio || (draftFichaLote.ala && draftFichaLote.sector ? `Ala ${draftFichaLote.ala} - Sector ${draftFichaLote.sector}` : '')}
+                    onChange={(e) => handleUpdateDraftField('ubicacionAcopio', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                    placeholder="Ala A - Sector 1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Cantidad de Bolsas</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={draftFichaLote.stockBolsas || 0}
+                    onChange={(e) => handleUpdateDraftField('stockBolsas', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-bold text-gray-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Kg por Bolsa</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={draftFichaLote.kgPorBolsa || 40}
+                    onChange={(e) => handleUpdateDraftField('kgPorBolsa', Math.max(1, parseInt(e.target.value, 10) || 0))}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-bold text-gray-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Fecha Realizado / Ingreso</label>
+                  <input
+                    type="date"
+                    value={draftFichaLote.fechaIngreso || ''}
+                    onChange={(e) => handleUpdateDraftField('fechaIngreso', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 md:col-span-3 lg:col-span-4">
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Observaciones / Notas de la Ficha</label>
+                  <textarea
+                    rows={2}
+                    value={draftFichaLote.observaciones || ''}
+                    onChange={(e) => handleUpdateDraftField('observaciones', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-semibold text-gray-800 text-xs resize-none"
+                    placeholder="Notas técnicas adicionales, destino especial, especificaciones de curado o acopio..."
+                  />
+                </div>
+              </div>
+
+              {/* Botón Confirmar y Previsualizar Impresión */}
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleConfirmarYPrevisualizar}
+                  className="px-4 py-2 bg-[#00603C] hover:bg-[#254731] text-white text-xs font-bold uppercase tracking-wider rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle className="w-4 h-4 text-[#C9922E]" />
+                  <span>Confirmar y Previsualizar Impresión</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Estilos CSS Específicos para Impresión A4 de Hoja Única */}
@@ -305,7 +610,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
 
         {/* Contenedor del Reporte Oficial Definitivo */}
         <div className="max-w-4xl mx-auto print:max-w-none print:w-full">
-          <FichaTecnicaOficialCard lote={lote} />
+          <FichaTecnicaOficialCard id={`ficha-detail-card-${lote.id}`} lote={draftFichaLote} />
         </div>
       </div>
     );
@@ -324,14 +629,43 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
         </button>
 
         <div className="flex flex-wrap gap-2">
-          {/* Botón Exportar Ficha de Lote - Habilitado y Autorizado para todos los usuarios */}
+          {/* Botón Editar Ficha antes de Imprimir */}
           <button
-            onClick={handlePrintFicha}
+            onClick={() => {
+              setInitialFichaEditMode(true);
+              setShowImprimirFichaModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-[#00603C] border border-[#00603C]/40 rounded-lg hover:bg-emerald-50 transition text-xs font-bold uppercase tracking-wider shadow-xs cursor-pointer"
+            title="Editar observaciones y datos de la Ficha Técnica antes de imprimir o descargar"
+          >
+            <Edit2 className="w-4 h-4 text-[#C9922E]" />
+            <span>Editar Ficha</span>
+          </button>
+
+          {/* Botón Exportar / Imprimir Ficha de Lote */}
+          <button
+            onClick={() => {
+              setInitialFichaEditMode(false);
+              setShowImprimirFichaModal(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-[#00603C] text-white border border-[#00603C] rounded-lg hover:bg-[#254731] transition text-xs font-bold uppercase tracking-wider shadow-sm cursor-pointer"
-            title="Exportar e imprimir la Ficha Técnica Oficial del Lote (Habilitado para todos los usuarios)"
+            title="Exportar e imprimir la Ficha Técnica Oficial del Lote en formato A4"
           >
             <Printer className="w-4 h-4 text-[#C9922E]" />
-            <span>Exportar e Imprimir Ficha de Lote</span>
+            <span>Imprimir Ficha de Lote</span>
+          </button>
+
+          {/* Botón Descargar en formato .JPG */}
+          <button
+            onClick={() => {
+              setInitialFichaEditMode(false);
+              setShowImprimirFichaModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-slate-800 border border-slate-300 rounded-lg hover:bg-slate-50 transition text-xs font-bold uppercase tracking-wider shadow-xs cursor-pointer"
+            title="Abrir Ficha Técnica para descargar como imagen .JPG de alta calidad"
+          >
+            <ImageIcon className="w-4 h-4 text-[#C9922E]" />
+            <span>Descargar .JPG</span>
           </button>
 
           <button
@@ -1010,6 +1344,279 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Modo Edición de Ficha Técnica antes de Imprimir o Descargar */}
+      {showEditFichaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto print:hidden animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden border border-gray-100 my-8">
+            {/* Header */}
+            <div className="bg-[#00603C] p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-xl">
+                  <Edit2 className="w-5 h-5 text-[#C9922E]" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base uppercase tracking-wider">
+                    Modo Edición: Ficha Técnica
+                  </h3>
+                  <p className="text-xs text-emerald-100/90 font-medium">
+                    Edite temporalmente los campos para la ficha técnica, impresión y descarga JPG
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditFichaModal(false)}
+                className="p-1.5 rounded-lg text-emerald-100 hover:bg-white/10 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido del Formulario de Edición */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-start justify-between gap-3">
+                <div>
+                  <strong>Modo Edición Temporal:</strong> Los cambios que realice se reflejarán inmediatamente en la previsualización oficial, la impresión A4 y la descarga en .JPG.
+                </div>
+                {fichaModificada && (
+                  <button
+                    type="button"
+                    onClick={handleResetDraft}
+                    className="text-xs text-red-600 hover:text-red-700 font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Restablecer
+                  </button>
+                )}
+              </div>
+
+              {/* Sección 1: Datos Principales */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2 border-b border-gray-100 pb-1">
+                  1. Identificación y Clasificación
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">N° de Lote</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.loteNro || ''}
+                      onChange={(e) => handleUpdateDraftField('loteNro', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Cliente</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.cliente || ''}
+                      onChange={(e) => handleUpdateDraftField('cliente', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Especie</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.especie || ''}
+                      onChange={(e) => handleUpdateDraftField('especie', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Variedad</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.variedad || ''}
+                      onChange={(e) => handleUpdateDraftField('variedad', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Categoría</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.categoria || ''}
+                      onChange={(e) => handleUpdateDraftField('categoria', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Tipo de Lote</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.tipo || ''}
+                      onChange={(e) => handleUpdateDraftField('tipo', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 2: Tratamiento y Origen */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2 border-b border-gray-100 pb-1">
+                  2. Trazabilidad, Curado y Origen
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Tratamiento / Curado</label>
+                    <input
+                      type="text"
+                      value={Array.isArray(draftFichaLote.tratamiento) ? draftFichaLote.tratamiento.join(', ') : (draftFichaLote.tratamiento as any) || ''}
+                      onChange={(e) => handleUpdateDraftField('tratamiento', e.target.value.split(',').map(s => s.trim()))}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                      placeholder="Sin Tratar, Curado..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Producto Químico</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.producto || ''}
+                      onChange={(e) => handleUpdateDraftField('producto', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                      placeholder="Ninguno, Maxim XL..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">N° Orden Proceso / Mov.</label>
+                    <input
+                      type="text"
+                      value={draftFichaLote.ordenProcesoId || (draftFichaLote as any).numeroOrdenMovimiento || (draftFichaLote as any).ordenProceso || ''}
+                      onChange={(e) => handleUpdateDraftField('ordenProcesoId', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">N° Bolsón de Origen</label>
+                    <input
+                      type="text"
+                      value={(draftFichaLote as any).numeroBolsonOrigen || (draftFichaLote as any).bolsonOrigenNro || ''}
+                      onChange={(e) => handleUpdateDraftField('numeroBolsonOrigen', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                      placeholder="Ej: B-12"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Sector Bolsón Origen</label>
+                    <input
+                      type="text"
+                      value={(draftFichaLote as any).sectorBolsonOrigen || ''}
+                      onChange={(e) => handleUpdateDraftField('sectorBolsonOrigen', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                      placeholder="Ej: Ala A - Sector 1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Ubicación de Acopio</label>
+                    <input
+                      type="text"
+                      value={(draftFichaLote as any).ubicacionAcopio || (draftFichaLote.ala && draftFichaLote.sector ? `Ala ${draftFichaLote.ala} - Sector ${draftFichaLote.sector}` : '')}
+                      onChange={(e) => handleUpdateDraftField('ubicacionAcopio', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                      placeholder="Ej: Ala A - Sector 1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 3: Cantidades y Observaciones */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2 border-b border-gray-100 pb-1">
+                  3. Stock, Pesos y Observaciones
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Cantidad de Bolsas</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={draftFichaLote.stockBolsas || 0}
+                      onChange={(e) => handleUpdateDraftField('stockBolsas', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Kg por Bolsa</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={draftFichaLote.kgPorBolsa || 40}
+                      onChange={(e) => handleUpdateDraftField('kgPorBolsa', Math.max(1, parseInt(e.target.value, 10) || 0))}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Fecha Realizado / Ingreso</label>
+                    <input
+                      type="date"
+                      value={draftFichaLote.fechaIngreso || ''}
+                      onChange={(e) => handleUpdateDraftField('fechaIngreso', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-600 mb-1">Observaciones / Notas de la Ficha Técnica</label>
+                  <textarea
+                    rows={3}
+                    value={draftFichaLote.observaciones || ''}
+                    onChange={(e) => handleUpdateDraftField('observaciones', e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 text-xs focus:bg-white focus:border-[#00603C] focus:outline-none resize-none"
+                    placeholder="Escriba aquí observaciones especiales para la ficha técnica..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer de Acciones del Modal */}
+            <div className="bg-gray-50 p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowEditFichaModal(false)}
+                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold font-sans uppercase tracking-wider text-gray-600 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+              >
+                Cerrar
+              </button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleConfirmarYPrevisualizar}
+                  className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold font-sans uppercase tracking-wider bg-[#00603C] hover:bg-[#254731] text-white rounded-lg transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle className="w-4 h-4 text-[#C9922E]" />
+                  <span>Confirmar y Previsualizar Impresión</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Componente Independiente de Impresión y Edición de Ficha Técnica (A4 / JPG) */}
+      <ImprimirFichaTecnica
+        lote={draftFichaLote}
+        ordenesProceso={ordenesProceso}
+        isOpen={showImprimirFichaModal}
+        onClose={() => setShowImprimirFichaModal(false)}
+        initialEditMode={initialFichaEditMode}
+        onSaveLote={(updated) => {
+          setDraftFichaLote(updated);
+          setFichaModificada(true);
+        }}
+      />
+
+      {/* Contenedor off-screen de la Ficha Técnica para exportación directa a JPG */}
+      <div
+        aria-hidden="true"
+        className="fixed -left-[9999px] -top-[9999px] w-[800px] pointer-events-none opacity-100 z-[-1] bg-white p-4 print:hidden"
+      >
+        <FichaTecnicaOficialCard id={`ficha-detail-card-${lote.id}`} lote={draftFichaLote} />
+      </div>
     </div>
   );
 };

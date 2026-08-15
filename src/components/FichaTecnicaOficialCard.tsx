@@ -12,13 +12,14 @@ import { formatNumberArg, formatDateStr } from '../utils/formatters';
 interface FichaTecnicaOficialCardProps {
   lote: Lote;
   index?: number;
+  id?: string;
 }
 
 /**
  * Ficha de Lote y Trazabilidad (Ficha Técnica)
  * Rediseño UI/UX Oficial Agro Abacus S.A. - Planta La Barrancosa
  */
-export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = ({ lote }) => {
+export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = ({ lote, index, id }) => {
   // 1. Fecha de realizado
   const fechaRealizadoDisplay =
     formatDateStr(
@@ -122,8 +123,19 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
     { label: 'Ubicación de acopio', valor: ubicacionAcopioDisplay },
   ];
 
+  // Observaciones adicionales si existen o fueron editadas
+  if (lote.observaciones && lote.observaciones.trim()) {
+    tablaDatos.push({
+      label: 'Observaciones',
+      valor: lote.observaciones.trim(),
+    });
+  }
+
+  const cardDomId = id || `ficha-card-${lote.id || index || '0'}`;
+
   return (
     <div
+      id={cardDomId}
       className="bg-white rounded-2xl border-[1.5px] border-[#006837] shadow-sm relative text-[#0F172A] font-sans batch-print-page-break ficha-tecnica-a4-container"
       style={{
         boxSizing: 'border-box',

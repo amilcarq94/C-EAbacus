@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useRef, useState } from 'react';
-import { QRCodeCanvas } from 'qrcode.react';
-import { QrCode, Copy, Check, Download, Printer, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { QrCode, Copy, Check, Download, Printer, X, Loader2 } from 'lucide-react';
 import { Lote } from '../types';
+import { QrTrazabilidadLote, getPublicLoteTraceUrl } from './QrTrazabilidadLote';
+import { exportCardAsJpg } from '../utils/exportImage';
 
 interface QrCodeModalProps {
   lote: Lote;
@@ -15,10 +16,10 @@ interface QrCodeModalProps {
 
 export const QrCodeModal: React.FC<QrCodeModalProps> = ({ lote, onClose }) => {
   const [copied, setCopied] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
   // Generar la URL pública de trazabilidad y ficha técnica del lote
-  const qrUrl = `${window.location.origin}${window.location.pathname}?lote=${encodeURIComponent(lote.id)}`;
+  const qrUrl = getPublicLoteTraceUrl(lote.id);
 
   const handleCopyLink = async () => {
     try {
@@ -30,88 +31,15 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({ lote, onClose }) => {
     }
   };
 
-  const handleDownload = () => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const url = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.download = `QR-Lote-${lote.id}.png`;
-    link.href = url;
-    link.click();
+  const handleDownload = async () => {
+    setDownloading(true);
+    const safeName = `QR_Trazabilidad_${(lote.loteNro || lote.id).replace(/\s+/g, '_')}`;
+    await exportCardAsJpg('modal-qr-container-box', safeName);
+    setDownloading(false);
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>QR Lote ${lote.id}</title>
-          <style>
-            body {
-              font-family: 'Inter', sans-serif;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              height: 90vh;
-              margin: 0;
-              color: #1a1a1a;
-            }
-            .container {
-              border: 3px solid #00603C;
-              padding: 40px;
-              border-radius: 16px;
-              text-align: center;
-              max-width: 400px;
-            }
-            h1 {
-              font-size: 24px;
-              margin: 0;
-              color: #00603C;
-              font-weight: 800;
-            }
-            h2 {
-              font-size: 11px;
-              color: #C9922E;
-              margin-top: 4px;
-              margin-bottom: 25px;
-              letter-spacing: 1.5px;
-              font-weight: 700;
-              text-transform: uppercase;
-            }
-            .info {
-              margin-top: 25px;
-              font-size: 18px;
-              font-weight: 800;
-              color: #1A1A1A;
-            }
-            .desc {
-              font-size: 13px;
-              color: #555;
-              margin-top: 4px;
-              font-weight: 500;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>AGRO ABACUS</h1>
-            <h2>Estancia La Barrancosa</h2>
-            <img src="${canvasRef.current?.toDataURL('image/png')}" width="250" height="250" />
-            <div class="info">LOTE: ${lote.id}</div>
-            <div class="desc">${lote.especie} - ${lote.variedad} (${lote.categoria || 'Fundadora'})</div>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    window.print();
   };
 
   return (
@@ -144,20 +72,12 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({ lote, onClose }) => {
         </p>
 
         {/* Contenedor QR */}
-        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-inner mb-3 flex flex-col justify-center items-center">
-          <QRCodeCanvas
-            ref={canvasRef}
-            value={qrUrl}
+        <div id="modal-qr-container-box" className="mb-3 flex flex-col justify-center items-center">
+          <QrTrazabilidadLote
+            loteId={lote.id}
             size={300}
-            style={{ width: '200px', height: '200px' }}
-            bgColor="#ffffff"
-            fgColor="#006837"
-            level="H"
-            includeMargin={true}
+            className="w-[220px] h-[220px]"
           />
-          <span className="font-sans font-bold text-[#475569] uppercase tracking-wider mt-2 text-center block text-[10px]">
-            QR TRAZABILIDAD
-          </span>
         </div>
 
         {/* Mostrar Enlace */}
