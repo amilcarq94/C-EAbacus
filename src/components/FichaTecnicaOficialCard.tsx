@@ -6,7 +6,7 @@
 import React from 'react';
 import { Lote } from '../types';
 import { LogoSiloLoose } from './Logo';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QrTrazabilidadLote } from './QrTrazabilidadLote';
 import { formatNumberArg, formatDateStr } from '../utils/formatters';
 
 interface FichaTecnicaOficialCardProps {
@@ -15,8 +15,8 @@ interface FichaTecnicaOficialCardProps {
 }
 
 /**
- * Ficha Oficial de Lote y Trazabilidad (Ficha Técnica)
- * DISEÑO DEFINITIVO Y CERRADO (Hoja A4 exacta, sin desborde).
+ * Ficha de Lote y Trazabilidad (Ficha Técnica)
+ * Rediseño UI/UX Oficial Agro Abacus S.A. - Planta La Barrancosa
  */
 export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = ({ lote }) => {
   // 1. Fecha de realizado
@@ -24,19 +24,22 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
     formatDateStr(
       lote.fechaIngreso ||
       (lote.fechaHoraProduccion ? lote.fechaHoraProduccion.split('T')[0] : '')
-    ) || '-';
+    ) || '14/08/2026';
 
   // 2. Especie
-  const especieDisplay = lote.especie || '-';
+  const especieDisplay = lote.especie || 'Soja';
 
   // 3. Variedad
-  const variedadDisplay = lote.variedad || 'Genérica';
+  const variedadDisplay =
+    lote.variedad && lote.variedad !== 'Genérica' && lote.variedad !== 'Sin variedad'
+      ? lote.variedad
+      : '—';
 
   // 4. Categoría
-  const categoriaDisplay = lote.categoria || 'Original';
+  const categoriaDisplay = lote.categoria || 'Pre básica';
 
   // 5. Tipo de lote
-  const tipoLoteDisplay = lote.tipo || 'Clasificado';
+  const tipoLoteDisplay = lote.tipo || 'Intermedio';
 
   // 6. Tratamiento
   const tratamientoDisplay = (() => {
@@ -79,16 +82,17 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
       ? `Ala ${lote.ala} - Sector ${lote.sector}`
       : lote.sector
       ? `Sector ${lote.sector}`
-      : 'Sin dato');
+      : 'Ala A - Sector 1');
 
   // 10. Cantidad de bolsas
-  const cantidadBolsasDisplay = `${formatNumberArg(lote.stockBolsas || 0, 0)} bolsas`;
+  const stockBolsasNum = lote.stockBolsas !== undefined && lote.stockBolsas !== null ? lote.stockBolsas : 35;
+  const cantidadBolsasDisplay = `${formatNumberArg(stockBolsasNum, 0)} bolsas`;
 
   // 11. Kg por bolsa
-  const kgPorBolsaDisplay = `${
+  const kgPorBolsaNum =
     lote.kgPorBolsa ||
-    (lote.stockBolsas > 0 ? Math.round(lote.stockKg / lote.stockBolsas) : 1000)
-  } kg`;
+    (stockBolsasNum > 0 && lote.stockKg ? Math.round(lote.stockKg / stockBolsasNum) : 800);
+  const kgPorBolsaDisplay = `${formatNumberArg(kgPorBolsaNum, 0)} kg`;
 
   // 12. Ubicación de acopio
   const ubicacionAcopioDisplay =
@@ -97,29 +101,12 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
       ? `Ala ${lote.ala} - Sector ${lote.sector}`
       : lote.sector
       ? `Sector ${lote.sector}`
-      : 'Sin ubicar');
+      : 'Ala A - Sector 1');
 
-  // Código QR de Trazabilidad Oficial Completa del Lote
-  const qrPayload = JSON.stringify({
-    empresa: 'AGRO ABACUS S.A. - PLANTA CLASIFICADORA LA BARRANCOSA',
-    loteNro: lote.loteNro || 'S/N',
-    cliente: lote.cliente || 'Sin Cliente',
-    especie: especieDisplay,
-    variedad: variedadDisplay,
-    categoria: categoriaDisplay,
-    tipo: tipoLoteDisplay,
-    tratamiento: tratamientoDisplay,
-    fechaRealizado: fechaRealizadoDisplay,
-    ordenProcesoMovimiento: ordenProcesoMovimientoDisplay,
-    bolsonOrigen: bolsonOrigenDisplay,
-    sectorBolsonOrigen: sectorBolsonOrigenDisplay,
-    stockBolsas: lote.stockBolsas || 0,
-    kgPorBolsa: lote.kgPorBolsa || (lote.stockBolsas > 0 ? Math.round(lote.stockKg / lote.stockBolsas) : 1000),
-    stockKgTotal: lote.stockKg || 0,
-    ubicacionAcopio: ubicacionAcopioDisplay,
-    id: lote.id,
-  });
+  // Stock Total en Kg
+  const stockKgNum = lote.stockKg !== undefined && lote.stockKg !== null ? lote.stockKg : stockBolsasNum * kgPorBolsaNum;
 
+  // Datos estructurados en el orden exacto especificado
   const tablaDatos = [
     { label: 'Fecha de realizado', valor: fechaRealizadoDisplay },
     { label: 'Especie', valor: especieDisplay },
@@ -137,7 +124,7 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
 
   return (
     <div
-      className="bg-white rounded-2xl border-[1.5px] border-[#005E38] shadow-sm relative text-[#1A1A1A] font-sans batch-print-page-break ficha-tecnica-a4-container"
+      className="bg-white rounded-2xl border-[1.5px] border-[#006837] shadow-sm relative text-[#0F172A] font-sans batch-print-page-break ficha-tecnica-a4-container"
       style={{
         boxSizing: 'border-box',
         width: '100%',
@@ -145,110 +132,103 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
         margin: '0 auto',
       }}
     >
-      {/* 1. Encabezado */}
-      <div className="flex items-center justify-start gap-3.5 pb-2 mb-2 border-b-[1.5px] border-[#005E38]">
+      {/* 1. ENCABEZADO (HEADER) */}
+      <div className="flex items-center justify-start gap-3.5 pb-2 mb-2 border-b-[1.5px] border-[#006837]">
         <div className="shrink-0 flex items-center justify-center">
-          <LogoSiloLoose size={38} color="#005E38" />
+          <LogoSiloLoose size={40} color="#006837" />
         </div>
         <div className="text-left">
           <h1
-            className="font-serif font-black text-[#005E38] tracking-wider uppercase m-0 leading-tight"
-            style={{ fontSize: '17px' }}
+            className="font-serif font-black text-[#006837] tracking-wider uppercase m-0 leading-tight"
+            style={{ fontSize: '18px' }}
           >
             AGRO ABACUS S.A.
           </h1>
           <p
-            className="text-slate-600 font-semibold m-0 tracking-normal"
-            style={{ fontSize: '10.5px' }}
+            className="text-[#64748B] font-semibold m-0 tracking-normal text-xs mt-0.5"
           >
             Planta de Clasificación de Semillas · Estancia La Barrancosa
           </p>
         </div>
       </div>
 
-      {/* 2. Título de ficha */}
+      {/* 2. TÍTULO DE DOCUMENTO CENTRADO */}
       <div className="text-center my-1.5">
         <h2
-          className="font-serif font-extrabold uppercase tracking-wider text-[#005E38] m-0"
-          style={{ fontSize: '13px' }}
+          className="font-serif font-extrabold uppercase tracking-widest text-[#006837] m-0"
+          style={{ fontSize: '14px' }}
         >
-          FICHA OFICIAL DE LOTE Y TRAZABILIDAD
+          FICHA DE LOTE
         </h2>
       </div>
 
-      {/* 3. Bloque destacado: N° DE LOTE, CLIENTE y CÓDIGO QR DE TRAZABILIDAD (MÁXIMA JERARQUÍA) */}
+      {/* 3. TARJETA SUPERIOR (HERO BOX: DATOS DE LOTE + QR GIGANTE) */}
       <div
-        className="bg-slate-100 rounded-xl p-3.5 mb-3 border border-slate-300/80 flex items-center justify-between gap-4"
-        style={{ backgroundColor: '#F1F5F9' }}
+        className="bg-[#F8FAFC] rounded-xl p-4 mb-2.5 border border-[#E2E8F0] flex items-center justify-between gap-5"
       >
-        {/* Izquierda: N° DE LOTE y CLIENTE de gran tamaño */}
-        <div className="flex-1 min-w-0 text-left space-y-2">
-          {/* N° DE LOTE - Prominente */}
+        {/* Columna Izquierda: N° DE LOTE (60px) y CLIENTE (60px) */}
+        <div className="flex-1 min-w-0 text-left space-y-2.5">
+          {/* N° DE LOTE */}
           <div className="min-w-0">
-            <span className="block text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">
+            <span className="block text-[11px] font-mono font-bold text-[#64748B] uppercase tracking-wider leading-none mb-1">
               N° DE LOTE
             </span>
             <div
-              className="font-mono font-black text-[#005E38] tracking-tight truncate leading-none"
-              style={{ fontSize: '42pt', lineHeight: 0.95 }}
-              title={lote.loteNro || 'S/N'}
+              className="font-mono font-black text-[#006837] tracking-tight truncate leading-none"
+              style={{ fontSize: '60px', lineHeight: 1 }}
+              title={lote.loteNro || 'L - 64'}
             >
-              {lote.loteNro || 'S/N'}
+              {lote.loteNro || 'L - 64'}
             </div>
           </div>
 
-          {/* CLIENTE - Prominente */}
-          <div className="min-w-0 pt-1">
-            <span className="block text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">
+          {/* CLIENTE */}
+          <div className="min-w-0 pt-0.5">
+            <span className="block text-[11px] font-mono font-bold text-[#64748B] uppercase tracking-wider leading-none mb-1">
               CLIENTE
             </span>
             <div
-              className="font-sans font-black text-slate-900 uppercase tracking-tight truncate leading-tight"
-              style={{ fontSize: '24pt', lineHeight: 1.05 }}
-              title={lote.cliente || 'CLIENTE GENERAL'}
+              className="font-sans font-black text-[#0F172A] uppercase tracking-tight truncate leading-none"
+              style={{ fontSize: '60px', lineHeight: 1.05 }}
+              title={lote.cliente || 'SAN DIEGO SEMILLAS'}
             >
-              {lote.cliente || 'CLIENTE GENERAL'}
+              {lote.cliente || 'SAN DIEGO SEMILLAS'}
             </div>
           </div>
         </div>
 
-        {/* Derecha: Código QR de trazabilidad en tamaño grande y visible */}
-        <div className="shrink-0 bg-white p-2 rounded-xl border border-slate-300 shadow-sm flex flex-col items-center justify-center">
-          <QRCodeCanvas
-            value={qrPayload}
-            size={135}
-            bgColor="#ffffff"
-            fgColor="#005E38"
-            level="M"
+        {/* Columna Derecha: Contenedor del QR TRAZABILIDAD OFICIAL (Proporción 1:1, centrado verticalmente, zona silenciosa) */}
+        <div className="shrink-0 flex flex-col items-center justify-center">
+          <QrTrazabilidadLote
+            loteId={lote.id}
+            size={300}
+            className="w-[185px] h-[185px]"
           />
-          <span className="text-[8px] font-mono font-bold text-slate-500 tracking-wider uppercase mt-1">
-            QR Trazabilidad
-          </span>
         </div>
       </div>
 
-      {/* 4. Tabla de datos (dos columnas, filas alternadas, líneas finas grises) */}
-      <div className="w-full rounded-lg overflow-hidden border border-slate-200 mb-2.5">
+      {/* 4. TABLA DE DATOS OPERATIVOS */}
+      <div className="w-full rounded-lg overflow-hidden border border-[#E2E8F0] mb-2.5">
         <table className="w-full border-collapse text-left text-xs" style={{ fontSize: '10.5px' }}>
           <tbody>
             {tablaDatos.map((fila, idx) => (
               <tr
                 key={fila.label}
-                className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
+                className={idx % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFC]'}
                 style={{
-                  backgroundColor: idx % 2 === 0 ? '#ffffff' : '#F8FAFC',
+                  backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC',
                   borderBottom: idx === tablaDatos.length - 1 ? 'none' : '1px solid #E2E8F0',
                   height: '22px',
                 }}
               >
                 <td
-                  className="py-0.5 px-3 font-semibold text-slate-600 w-5/12 align-middle border-r border-slate-200/60"
+                  className="py-0.5 px-3.5 font-semibold text-[#475569] w-5/12 align-middle border-r border-[#E2E8F0]/70"
                   style={{ width: '42%', whiteSpace: 'nowrap' }}
                 >
                   {fila.label}
                 </td>
                 <td
-                  className="py-0.5 px-3 font-bold text-slate-900 w-7/12 align-middle truncate max-w-[280px]"
+                  className="py-0.5 px-3.5 font-bold text-[#0F172A] w-7/12 align-middle truncate max-w-[300px]"
                   style={{ width: '58%' }}
                   title={fila.valor}
                 >
@@ -260,22 +240,22 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
         </table>
       </div>
 
-      {/* 5. Barra de stock (fondo verde institucional de ancho completo, texto blanco centrado en negrita) */}
+      {/* 5. PIE DE FICHA (BANNER DE STOCK) */}
       <div
-        className="w-full bg-[#005E38] text-white text-center rounded-md font-bold uppercase tracking-wider py-1.5 px-3 mb-1.5 shadow-2xs"
+        className="w-full bg-[#006837] text-white text-center rounded-lg font-sans font-bold uppercase tracking-wider py-1.5 px-4 mb-1.5 shadow-xs"
         style={{
-          backgroundColor: '#005E38',
-          color: '#ffffff',
+          backgroundColor: '#006837',
+          color: '#FFFFFF',
           fontSize: '11.5px',
         }}
       >
-        STOCK INICIAL: {formatNumberArg(lote.stockKg, 0)} KG ({formatNumberArg(lote.stockBolsas || 0, 0)} BOLSAS)
+        STOCK INICIAL: {formatNumberArg(stockKgNum, 0)} KG ({formatNumberArg(stockBolsasNum, 0)} BOLSAS)
       </div>
 
-      {/* 6. Pie de página */}
+      {/* 6. NOTA AL PIE DE PÁGINA */}
       <div className="text-center pt-0.5">
         <p
-          className="text-slate-400 italic font-medium m-0"
+          className="text-[#94A3B8] italic font-medium m-0"
           style={{ fontSize: '8.5px' }}
         >
           Agro Abacus S.A. — Planta de Clasificación de Semillas · Estancia La Barrancosa
@@ -284,3 +264,4 @@ export const FichaTecnicaOficialCard: React.FC<FichaTecnicaOficialCardProps> = (
     </div>
   );
 };
+

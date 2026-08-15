@@ -144,8 +144,10 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
     const lotesToPrint: Lote[] = selectedDraftsToPrint.map(draft => {
       const stockKgCalculado = draft.stockBolsas * draft.kgPorBolsa;
       const normNro = draft.loteNro.trim() || 'S/N';
+      const existing = lotes.find(l => l.loteNro?.trim().toLowerCase() === normNro.toLowerCase());
+      const loteId = existing ? existing.id : (normNro !== 'S/N' ? normNro : `LOTE-${draft.id}`);
       return {
-        id: `LOTE-PREVIEW-${draft.id}`,
+        id: loteId,
         loteNro: normNro,
         cliente: cliente.trim() || 'Sin Cliente Asignado',
         especie: especie || 'Soja',

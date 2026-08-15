@@ -9,10 +9,10 @@ import { getLoteAuditoria } from '../utils/audit';
 import { formatNumberArg, formatKg, formatBolsas, formatDateStr } from '../utils/formatters';
 import { LogoSiloLoose } from './Logo';
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Printer, Plus, AlertCircle, Trash2, ShieldCheck, Download, QrCode, Barcode, Clock, User, Edit2, X, Warehouse, FileText, FileSpreadsheet, Package } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
 import { QrCodeModal } from './QrCodeModal';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
 import { FichaTecnicaOficialCard } from './FichaTecnicaOficialCard';
+import { QrTrazabilidadLote } from './QrTrazabilidadLote';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const CustomLineTooltip = ({ active, payload }: any) => {
@@ -239,7 +239,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
   };
 
   if (isPrintingMode) {
-    // Vista limpia para imprimir (Ficha Oficial de Lote y Trazabilidad - Plantilla A4 Fija)
+    // Vista limpia para imprimir (Ficha de Lote - Plantilla A4 Fija)
     return (
       <div className="min-h-screen bg-gray-50 py-6 px-4 print:p-0 print:bg-white print:min-h-0">
         {/* Barra de Acciones de Impresión - Visible en pantalla, Oculta al imprimir */}
@@ -250,7 +250,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
             </div>
             <div className="text-left">
               <h3 className="font-serif text-sm font-bold text-gray-800 uppercase tracking-wide">Vista de Impresión</h3>
-              <p className="text-[11px] text-gray-500 font-medium">Ficha Oficial del Lote: <strong className="font-mono text-[#00603C]">{lote.loteNro}</strong></p>
+              <p className="text-[11px] text-gray-500 font-medium">Ficha de Lote: <strong className="font-mono text-[#00603C]">{lote.loteNro}</strong></p>
             </div>
           </div>
           <div className="flex items-center gap-2.5">
@@ -265,7 +265,7 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
               className="px-5 py-2 text-xs font-semibold uppercase tracking-wider bg-[#00603C] hover:bg-[#004D30] text-white rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              Imprimir Ficha
+              Imprimir Ficha de Lote
             </button>
           </div>
         </div>
@@ -484,8 +484,27 @@ export const LoteDetail: React.FC<LoteDetailProps> = ({
               </div>
             )}
 
+            {/* Código QR de Trazabilidad Oficial (Full Size 300x300 con etiqueta y enlace público) */}
+            <div className="border-t border-gray-100 pt-4 mt-4 flex flex-col items-center">
+              <div className="w-full flex items-center justify-between mb-2">
+                <span className="text-[9.5px] uppercase tracking-wider text-gray-400 font-bold block">
+                  Código QR de Trazabilidad
+                </span>
+                <span className="text-[9px] font-mono font-bold text-[#00603C] bg-[#E3EFE7] px-2 py-0.5 rounded">
+                  Oficial
+                </span>
+              </div>
+              <div className="w-full flex justify-center cursor-pointer" onClick={() => setShowQrModal(true)}>
+                <QrTrazabilidadLote
+                  loteId={lote.id}
+                  size={300}
+                  className="w-full max-w-[280px]"
+                />
+              </div>
+            </div>
+
             {/* Botón QR Ficha Técnica Pública */}
-            <div className="border-t border-gray-100 pt-4 mt-4">
+            <div className="pt-3">
               <button
                 onClick={() => setShowQrModal(true)}
                 className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-[#E3EFE7] hover:bg-[#cbe3d3] text-[#00603C] border border-[#00603C]/30 rounded-xl transition font-bold text-xs cursor-pointer shadow-2xs group"

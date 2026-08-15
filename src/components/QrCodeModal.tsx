@@ -144,17 +144,20 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({ lote, onClose }) => {
         </p>
 
         {/* Contenedor QR */}
-        <div className="bg-white p-2.5 rounded-xl border border-gray-200 shadow-inner mb-3 flex justify-center items-center">
+        <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-inner mb-3 flex flex-col justify-center items-center">
           <QRCodeCanvas
             ref={canvasRef}
             value={qrUrl}
-            size={200}
-            style={{ width: '140px', height: '140px' }}
+            size={300}
+            style={{ width: '200px', height: '200px' }}
             bgColor="#ffffff"
-            fgColor="#00603C"
+            fgColor="#006837"
             level="H"
             includeMargin={true}
           />
+          <span className="font-sans font-bold text-[#475569] uppercase tracking-wider mt-2 text-center block text-[10px]">
+            QR TRAZABILIDAD
+          </span>
         </div>
 
         {/* Mostrar Enlace */}

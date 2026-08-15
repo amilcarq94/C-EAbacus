@@ -50,7 +50,7 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
               </span>
             </h3>
             <p className="text-xs text-slate-300 mt-0.5">
-              Ficha Oficial de Lote y Trazabilidad (Plantilla fija de impresión A4).
+              Ficha de Lote y Trazabilidad (Plantilla fija de impresión A4).
             </p>
           </div>
         </div>
