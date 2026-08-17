@@ -19,8 +19,10 @@ import {
   Layers,
   Sparkles
 } from 'lucide-react';
+import { ModalVentanaOperacion } from './ModalVentanaOperacion';
 
 interface TratarLoteModalProps {
+  isOpen?: boolean;
   lote: Lote;
   allLotes: Lote[];
   ordenesProceso?: OrdenProceso[];
@@ -36,6 +38,7 @@ interface TratarLoteModalProps {
 }
 
 export const TratarLoteModal: React.FC<TratarLoteModalProps> = ({
+  isOpen = true,
   lote,
   allLotes,
   ordenesProceso = [],
@@ -102,33 +105,15 @@ export const TratarLoteModal: React.FC<TratarLoteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden text-left">
-        
-        {/* Header Banner */}
-        <div className="bg-gradient-to-r from-[#00603C] to-[#254731] text-white p-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-400 text-slate-950 rounded-xl shadow-sm">
-              <FlaskConical className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest block">
-                Tratamiento de Semilla
-              </span>
-              <h2 className="text-lg font-extrabold text-white">
-                Curar Semilla: Lote {lote.loteNro}
-              </h2>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-emerald-200 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+    <ModalVentanaOperacion
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Curar Semilla: Lote ${lote.loteNro}`}
+      subtitle="Tratamiento de Semilla y Generación de Lote T"
+      icon={FlaskConical}
+      maxWidth="max-w-2xl"
+    >
+      <form onSubmit={handleSubmit} className="p-6 space-y-5">
           
           {/* Alerta informativa de estado existente de Lote T */}
           {loteExistenteT ? (
@@ -313,8 +298,6 @@ export const TratarLoteModal: React.FC<TratarLoteModalProps> = ({
           </div>
 
         </form>
-
-      </div>
-    </div>
+    </ModalVentanaOperacion>
   );
 };

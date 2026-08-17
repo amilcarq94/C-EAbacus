@@ -1777,28 +1777,34 @@ export default function App() {
           sidebarCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        {/* Cabecera del Sidebar con Botón de Colapsar/Expandir */}
-        <div className="px-3 py-2.5 border-b border-[#254731] flex items-center justify-between bg-black/10">
+        {/* Cabecera del Sidebar con Botón de Minimizar / Expandir */}
+        <div className={`px-3 py-2.5 border-b border-[#254731] flex items-center bg-black/10 transition-all ${
+          sidebarCollapsed ? 'justify-center' : 'justify-between'
+        }`}>
           {!sidebarCollapsed && (
-            <div className="flex items-center gap-1.5 text-emerald-200">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider">
-                Panel de Control
+            <div className="flex items-center gap-2 text-emerald-200">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider">
+                Navegación
+              </span>
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-400/30">
+                Planta
               </span>
             </div>
           )}
           <button
+            id="btn-toggle-sidebar"
             type="button"
             onClick={toggleSidebar}
-            className={`p-1.5 rounded-lg hover:bg-white/10 text-emerald-200 hover:text-white transition cursor-pointer ${
+            className={`p-1.5 rounded-lg hover:bg-white/10 text-emerald-200 hover:text-white transition cursor-pointer flex items-center justify-center ${
               sidebarCollapsed ? 'mx-auto' : ''
             }`}
-            title={sidebarCollapsed ? "Expandir menú de navegación" : "Minimizar a solo íconos"}
-            aria-label={sidebarCollapsed ? "Expandir menú" : "Minimizar menú"}
+            title={sidebarCollapsed ? "Expandir panel de navegación" : "Minimizar panel a solo íconos"}
+            aria-label={sidebarCollapsed ? "Expandir panel" : "Minimizar panel"}
           >
             {sidebarCollapsed ? (
-              <ChevronRight className="w-4 h-4 text-emerald-300" />
+              <ChevronRight className="w-4 h-4 text-emerald-300 hover:scale-110 transition-transform" />
             ) : (
-              <div className="flex items-center gap-1 text-xs text-emerald-300 font-semibold">
+              <div className="flex items-center gap-1 text-xs text-emerald-300 font-semibold hover:text-white">
                 <ChevronLeft className="w-4 h-4" />
                 <span className="text-[10px] uppercase font-bold">Minimizar</span>
               </div>
@@ -2057,9 +2063,9 @@ export default function App() {
             {!sidebarCollapsed && <span className="truncate">Historial Salidas</span>}
           </button>
 
-          {/* Separador de Sección */}
+          {/* Separador de Sección: Datos & Sistema */}
           {!sidebarCollapsed ? (
-            <div className="pt-2 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
+            <div className="pt-3 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
               Datos & Sistema
             </div>
           ) : (
@@ -2099,6 +2105,103 @@ export default function App() {
             <Upload className="w-4 h-4 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Importar Stock</span>}
           </button>
+
+          {/* Punto Integrado 1: Campaña Activa */}
+          {!sidebarCollapsed ? (
+            <div className="pt-2 pb-1 border-t border-[#254731]/60">
+              <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 px-2 mb-1.5 flex items-center justify-between">
+                <span>Campaña Activa</span>
+                {isExplicitlyPinned ? (
+                  <span className="text-[8px] bg-[#C9922E] text-white px-1.5 py-0.2 rounded font-mono font-bold">Fijada</span>
+                ) : (
+                  <span className="text-[8px] bg-emerald-700/60 text-emerald-200 px-1.5 py-0.2 rounded font-mono">Sugerida</span>
+                )}
+              </div>
+              <div className="px-1">
+                <CampaniaSelector
+                  activeCampaniaId={activeCampaniaId}
+                  onSelectCampania={handleSelectCampania}
+                  isExplicitlyPinned={isExplicitlyPinned}
+                  onPinCampania={handlePinCampania}
+                  availableCampaniasIds={availableCampaniasIds}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2 pb-1 border-t border-[#254731]/60 flex flex-col items-center">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                className="p-1.5 rounded-lg bg-black/25 hover:bg-black/40 border border-emerald-500/20 text-[#C9922E] text-[10px] font-mono font-bold transition cursor-pointer"
+                title={`Campaña Activa: ${activeCampaniaId} (Clic para expandir selector)`}
+              >
+                {activeCampaniaId === 'TODAS' ? 'TOD' : activeCampaniaId}
+              </button>
+            </div>
+          )}
+
+          {/* Punto Integrado 2: Nombre del Usuario */}
+          {!sidebarCollapsed ? (
+            <div className="pt-2">
+              <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 px-2 mb-1.5">
+                Usuario Conectado
+              </div>
+              <div className="px-2 py-2 rounded-xl bg-black/25 border border-emerald-500/20 flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-emerald-700 border border-[#C9922E] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                  {currentUser?.nombre ? currentUser.nombre.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-white truncate" title={currentUser?.nombre || 'Operario'}>
+                    {currentUser?.nombre || 'Operario de Planta'}
+                  </div>
+                  <div className="text-[10px] text-emerald-200/70 truncate">
+                    {isLoggedIn ? (currentUser?.rol || 'Jefe de Planta') : 'Planta Móvil · Acceso'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2 flex justify-center">
+              <div
+                className="w-8 h-8 rounded-full bg-emerald-700 border border-[#C9922E] flex items-center justify-center text-white font-bold text-xs shadow-xs cursor-pointer"
+                title={`${currentUser?.nombre || 'Operario'} (${isLoggedIn ? (currentUser?.rol || 'Jefe de Planta') : 'Planta Móvil'})`}
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                {currentUser?.nombre ? currentUser.nombre.charAt(0).toUpperCase() : 'U'}
+              </div>
+            </div>
+          )}
+
+          {/* Punto Integrado 3: Salida (reemplazando Cerrar Sesión) */}
+          <div className="pt-2 pb-1">
+            {isLoggedIn ? (
+              <button
+                id="sidebar-btn-salida"
+                type="button"
+                onClick={handleLogout}
+                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-rose-200 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 transition-all cursor-pointer shadow-xs ${
+                  sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+                }`}
+                title="Salida del sistema"
+              >
+                <LogOut className="w-4 h-4 shrink-0 text-rose-400" />
+                {!sidebarCollapsed && <span className="truncate">Salida</span>}
+              </button>
+            ) : (
+              <button
+                id="sidebar-btn-salida"
+                type="button"
+                onClick={() => setEnteredPlantaMovil(false)}
+                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-amber-200 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 transition-all cursor-pointer shadow-xs ${
+                  sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+                }`}
+                title="Salida al Acceso Principal"
+              >
+                <LogOut className="w-4 h-4 shrink-0 text-amber-400" />
+                {!sidebarCollapsed && <span className="truncate">Salida</span>}
+              </button>
+            )}
+          </div>
 
         </div>
 
@@ -2306,8 +2409,9 @@ export default function App() {
                 <span>Historial Salidas</span>
               </button>
 
+              {/* Separador de Sección: Datos & Sistema */}
               <div className="pt-3 pb-1 px-1 text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
-                Sistema
+                Datos & Sistema
               </div>
 
               <button
@@ -2339,6 +2443,79 @@ export default function App() {
                 <Upload className="w-4 h-4" />
                 <span>Importar Stock</span>
               </button>
+
+              {/* Mobile: Campaña Activa */}
+              <div className="pt-2 pb-1 border-t border-[#254731]/60">
+                <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 px-1 mb-1.5 flex items-center justify-between">
+                  <span>Campaña Activa</span>
+                  {isExplicitlyPinned ? (
+                    <span className="text-[8px] bg-[#C9922E] text-white px-1.5 py-0.2 rounded font-mono font-bold">Fijada</span>
+                  ) : (
+                    <span className="text-[8px] bg-emerald-700/60 text-emerald-200 px-1.5 py-0.2 rounded font-mono">Sugerida</span>
+                  )}
+                </div>
+                <div>
+                  <CampaniaSelector
+                    activeCampaniaId={activeCampaniaId}
+                    onSelectCampania={(id) => {
+                      handleSelectCampania(id);
+                      setMobileNavOpen(false);
+                    }}
+                    isExplicitlyPinned={isExplicitlyPinned}
+                    onPinCampania={handlePinCampania}
+                    availableCampaniasIds={availableCampaniasIds}
+                  />
+                </div>
+              </div>
+
+              {/* Mobile: Nombre del Usuario */}
+              <div className="pt-2">
+                <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 px-1 mb-1.5">
+                  Usuario Conectado
+                </div>
+                <div className="px-3 py-2 rounded-xl bg-black/25 border border-emerald-500/20 flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-emerald-700 border border-[#C9922E] flex items-center justify-center text-white font-bold text-xs shrink-0">
+                    {currentUser?.nombre ? currentUser.nombre.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-white truncate">
+                      {currentUser?.nombre || 'Operario de Planta'}
+                    </div>
+                    <div className="text-[10px] text-emerald-200/70 truncate">
+                      {isLoggedIn ? (currentUser?.rol || 'Jefe de Planta') : 'Planta Móvil · Acceso'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile: Salida */}
+              <div className="pt-2 pb-2">
+                {isLoggedIn ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileNavOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-rose-200 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 transition-all cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-400" />
+                    <span>Salida</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileNavOpen(false);
+                      setEnteredPlantaMovil(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-amber-200 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 transition-all cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-amber-400" />
+                    <span>Salida</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

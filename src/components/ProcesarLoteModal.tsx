@@ -10,6 +10,7 @@ import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
 import { getBolsonesFiltradosPorSilo } from '../utils/siloBolsones';
 import { validateSiloLoteMatch } from '../utils/siloValidation';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
+import { ModalVentanaOperacion } from './ModalVentanaOperacion';
 import { X, Check, CheckCircle2, Play, AlertTriangle, Building2, Package, Plus, Trash2, Warehouse, Layers, Scale } from 'lucide-react';
 
 const SILOS_DISPONIBLES: SiloId[] = ['Silo 1', 'Silo 2', 'Silo 3', 'Silo 4', 'Silo 5', 'Silo 6'];
@@ -341,48 +342,31 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
 
   const demandaCubierta = targetLotes.length > 1 || totalKgExtraidosOrigins >= kgTotales;
 
+  const modalTitle = targetLotes.length === 1
+    ? `Pasar Lote N° ${primaryLote.loteNro} a Realizado`
+    : `Pasar ${targetLotes.length} Lotes a Realizado`;
+
+  const modalSubtitle = targetLotes.length === 1
+    ? `${primaryLote.cliente} — ${primaryLote.especie} (${primaryLote.variedad})`
+    : `Lotes seleccionados: ${targetLotes.map(l => l.loteNro).join(', ')}`;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        
-        {/* Cabecera modal */}
-        <div className="bg-gradient-to-r from-emerald-950 via-[#00603C] to-slate-900 text-white px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/20 rounded-xl border border-amber-400/30 text-amber-300">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-serif font-bold text-lg leading-tight">
-                {targetLotes.length === 1
-                  ? `Pasar Lote N° ${primaryLote.loteNro} a Realizado`
-                  : `Pasar ${targetLotes.length} Lotes a Realizado`}
-              </h3>
-              <p className="text-xs text-emerald-100">
-                {targetLotes.length === 1
-                  ? `${primaryLote.cliente} — ${primaryLote.especie} (${primaryLote.variedad})`
-                  : `Lotes seleccionados: ${targetLotes.map(l => l.loteNro).join(', ')}`}
-              </p>
-            </div>
+    <ModalVentanaOperacion
+      isOpen={isOpen}
+      onClose={onClose}
+      title={modalTitle}
+      subtitle={modalSubtitle}
+      icon={CheckCircle2}
+      maxWidth="max-w-4xl"
+    >
+      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3.5 rounded-xl flex items-center gap-2.5">
+            <AlertTriangle className="w-4.5 h-4.5 text-red-500 shrink-0" />
+            <span className="font-bold">{errorMsg}</span>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-
-          {errorMsg && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3.5 rounded-xl flex items-center gap-2.5">
-              <AlertTriangle className="w-4.5 h-4.5 text-red-500 shrink-0" />
-              <span className="font-bold">{errorMsg}</span>
-            </div>
-          )}
+        )}
 
           {/* 1. Estado del Registro Destino */}
           <div className="bg-slate-900 text-white p-4 rounded-xl border border-slate-700 space-y-3">
@@ -789,7 +773,6 @@ export const ProcesarLoteModal: React.FC<ProcesarLoteModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalVentanaOperacion>
   );
 };

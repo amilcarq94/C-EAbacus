@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Lote, EstadoLoteType, EstadoRegistroLote, CategoriaType, TipoLoteType, TratamientoType, SiloId, LoteLimitsConfig } from '../types';
 import { X, Check, Edit2, AlertCircle, SlidersHorizontal, Building2, MapPin, Layers, Printer } from 'lucide-react';
 import { BatchPrintLotesModal } from './BatchPrintLotesModal';
+import { ModalVentanaOperacion } from './ModalVentanaOperacion';
 
 interface BulkEditLotesModalProps {
   isOpen: boolean;
@@ -168,34 +169,16 @@ export const BulkEditLotesModal: React.FC<BulkEditLotesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Encabezado */}
-        <div className="bg-[#00603C] text-white px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/10 rounded-xl">
-              <SlidersHorizontal className="w-5 h-5 text-[#C9922E]" />
-            </div>
-            <div>
-              <h3 className="font-serif font-bold text-lg leading-tight">
-                Edición Masiva de Lotes
-              </h3>
-              <p className="text-xs text-emerald-100">
-                Se aplicarán los cambios a <span className="font-bold text-amber-300 font-mono">{selectedLotes.length}</span> lotes seleccionados simultáneamente.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+    <ModalVentanaOperacion
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Edición Masiva de Lotes"
+      subtitle={`Se aplicarán los cambios a ${selectedLotes.length} lotes seleccionados simultáneamente.`}
+      icon={SlidersHorizontal}
+      maxWidth="max-w-3xl"
+    >
+      <div className="p-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
 
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-[#00603C] shrink-0 mt-0.5" />
@@ -508,6 +491,6 @@ export const BulkEditLotesModal: React.FC<BulkEditLotesModalProps> = ({
           onClose={() => setShowBatchPrintModal(false)}
         />
       </div>
-    </div>
+    </ModalVentanaOperacion>
   );
 };

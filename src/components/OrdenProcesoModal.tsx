@@ -9,6 +9,7 @@ import { getCampaniaIdFromDate } from '../utils/campanias';
 import { SilosSelector } from './SilosSelector';
 import { LotesOrigenSelector } from './LotesOrigenSelector';
 import { ClienteSelect } from './ClienteSelect';
+import { ModalVentanaOperacion } from './ModalVentanaOperacion';
 import { X, Factory, Truck, CheckCircle, AlertCircle, Save, Package, Plus, Trash2, Scale } from 'lucide-react';
 
 export function getKgPorEnvase(envaseStr: string): number {
@@ -290,44 +291,26 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
     onSave(ordenGuardar);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
-        
-        {/* Header with Modal Title and Entry Point Tabs */}
-        <div className={`px-6 py-5 text-white flex items-center justify-between ${
-          tipoOrden === 'PRODUCCION'
-            ? 'bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950'
-            : 'bg-gradient-to-r from-blue-900 via-slate-900 to-blue-950'
-        }`}>
-          <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              {tipoOrden === 'PRODUCCION' ? (
-                <>
-                  <Factory className="w-5 h-5 text-emerald-400" />
-                  {isEditing ? `Editar Orden de Proceso N° ${ordenAEditar?.numeroOrden}` : 'Nueva Orden de Proceso'}
-                </>
-              ) : (
-                <>
-                  <Truck className="w-5 h-5 text-blue-400" />
-                  {isEditing ? `Editar Orden de Movimiento N° ${ordenAEditar?.numeroOrden}` : 'Nueva Orden de Movimiento'}
-                </>
-              )}
-            </h2>
-            <p className="text-xs text-slate-200/80 mt-0.5">
-              {tipoOrden === 'PRODUCCION'
-                ? 'Complete los parámetros de la orden de proceso para control de producción y trazabilidad.'
-                : 'Complete los parámetros de la orden de movimiento entre sectores o tratamiento de semilla.'}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  const modalTitle = tipoOrden === 'PRODUCCION'
+    ? (isEditing ? `Editar Orden de Proceso N° ${ordenAEditar?.numeroOrden}` : 'Nueva Orden de Proceso')
+    : (isEditing ? `Editar Orden de Movimiento N° ${ordenAEditar?.numeroOrden}` : 'Nueva Orden de Movimiento');
 
+  const modalSubtitle = tipoOrden === 'PRODUCCION'
+    ? 'Complete los parámetros de la orden de proceso para control de producción y trazabilidad.'
+    : 'Complete los parámetros de la orden de movimiento entre sectores o tratamiento de semilla.';
+
+  const ModalIcon = tipoOrden === 'PRODUCCION' ? Factory : Truck;
+
+  return (
+    <ModalVentanaOperacion
+      isOpen={true}
+      onClose={onClose}
+      title={modalTitle}
+      subtitle={modalSubtitle}
+      icon={ModalIcon}
+      maxWidth="max-w-4xl"
+    >
+      <div>
         {/* Tab Selection if not editing */}
         {!isEditing && (
           <div className="bg-slate-50 border-b border-slate-200 px-6 pt-4 pb-0 flex gap-2">
@@ -881,8 +864,7 @@ export const OrdenProcesoModal: React.FC<OrdenProcesoModalProps> = ({
           </div>
 
         </form>
-
       </div>
-    </div>
+    </ModalVentanaOperacion>
   );
 };
