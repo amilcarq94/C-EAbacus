@@ -4,24 +4,21 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { Lote, OrdenProceso } from '../types';
 import { LogoSiloLoose } from './Logo';
-import { formatNumberArg, formatDateStr } from '../utils/formatters';
+import { QrTrazabilidadLote } from './QrTrazabilidadLote';
+import { formatNumberArg } from '../utils/formatters';
 import { exportCardAsJpg } from '../utils/exportImage';
+import { useFichaLoteData } from '../hooks/useFichaLoteData';
 import {
   Printer,
   Download,
-  Image as ImageIcon,
   Edit2,
   CheckCircle,
   RotateCcw,
   X,
   Eye,
-  Loader2,
   FileText,
-  Sparkles,
-  Info,
 } from 'lucide-react';
 
 export interface ImprimirFichaTecnicaProps {
@@ -34,27 +31,17 @@ export interface ImprimirFichaTecnicaProps {
 }
 
 /**
- * Obtiene la URL pública de trazabilidad basada en el ID del lote
- */
-const getTraceUrl = (loteId: string): string => {
-  if (typeof window !== 'undefined') {
-    return `${window.location.origin}${window.location.pathname}?lote=${encodeURIComponent(loteId)}`;
-  }
-  return `https://agroabacus.com/?lote=${encodeURIComponent(loteId)}`;
-};
-
-/**
  * Componente independiente para Imprimir Ficha Técnica de Lote.
  *
  * Características:
  * 1. Genera un layout A4 limpio, sobrio y de alta legibilidad para impresión y exportación.
- * 2. Utiliza la librería 'qrcode.react' para insertar el QR de trazabilidad oficial (300x300px, color #006837, nivel H).
- * 3. Gestiona el estado de edición interactivo para campos como 'observaciones', ubicación, cliente, etc.
- * 4. Permite impresión directa A4 con estilos print optimizados y descarga en formato .JPG en alta resolución.
+ * 2. Utiliza el componente oficial QrTrazabilidadLote (300x300px, color #006837, nivel H).
+ * 3. Centraliza datos con useFichaLoteData para garantizar coherencia con todas las vistas.
+ * 4. Gestiona edición interactiva de campos con límite de 200 caracteres en observaciones.
+ * 5. Sincroniza fuentes antes de lanzar window.print().
  */
 export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
   lote,
-  ordenesProceso,
   isOpen = true,
   onClose,
   onSaveLote,
@@ -69,6 +56,13 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
 
   const cardRef = useRef<HTMLDivElement>(null);
   const cardDomId = `ficha-tecnica-print-${draftLote.id || 'current'}`;
+
+  // Hook centralizado para datos y formateos de la Ficha
+  const {
+    stockKgNum,
+    stockBolsasNum,
+    tablaDatos,
+  } = useFichaLoteData(draftLote);
 
   if (!isOpen) return null;
 
@@ -94,9 +88,18 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
     }
   };
 
-  // Lanzar la impresión nativa del navegador con CSS A4 optimizado
-  const handlePrint = () => {
-    window.print();
+  // Lanzar la impresión nativa del navegador asegurando carga de fuentes y QR
+  const handlePrint = async () => {
+    try {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      window.print();
+    } catch {
+      window.print();
+    }
   };
 
   // Descargar como imagen JPG de alta definición (2x DPI)
@@ -116,109 +119,6 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
       setIsDownloadingJpg(false);
     }
   };
-
-  // Cálculos y formateos de campos para la Ficha
-  const fechaRealizadoDisplay =
-    formatDateStr(
-      draftLote.fechaIngreso ||
-      (draftLote.fechaHoraProduccion ? draftLote.fechaHoraProduccion.split('T')[0] : '')
-    ) || '14/08/2026';
-
-  const especieDisplay = draftLote.especie || 'Soja';
-
-  const variedadDisplay =
-    draftLote.variedad && draftLote.variedad !== 'Genérica' && draftLote.variedad !== 'Sin variedad'
-      ? draftLote.variedad
-      : '—';
-
-  const categoriaDisplay = draftLote.categoria || 'Pre básica';
-  const tipoLoteDisplay = draftLote.tipo || 'Intermedio';
-
-  const tratamientoDisplay = (() => {
-    let t = 'Sin Tratar';
-    if (Array.isArray(draftLote.tratamiento) && draftLote.tratamiento.length > 0) {
-      t = draftLote.tratamiento.join(', ');
-    } else if (typeof draftLote.tratamiento === 'string' && draftLote.tratamiento) {
-      t = draftLote.tratamiento;
-    }
-    if (draftLote.producto && draftLote.producto !== 'Ninguno' && draftLote.producto !== 'Sin Tratar') {
-      t += ` (${draftLote.producto})`;
-    }
-    return t;
-  })();
-
-  const ordenProcesoMovimientoDisplay =
-    draftLote.ordenProcesoId ||
-    (draftLote as any).ordenProceso ||
-    (draftLote as any).numeroOrden ||
-    draftLote.numeroOrdenMovimiento ||
-    (draftLote as any).ordenProcesoMovimiento ||
-    'Sin N°';
-
-  const bolsonOrigenDisplay =
-    (draftLote as any).numeroBolsonOrigen ||
-    (draftLote as any).bolsonOrigenNro ||
-    (draftLote.origenesBolson && draftLote.origenesBolson.length > 0
-      ? draftLote.origenesBolson.map((b) => b.bolsonNro || b.bolsonId).filter(Boolean).join(', ')
-      : '') ||
-    'Sin dato';
-
-  const sectorBolsonOrigenDisplay =
-    (draftLote as any).sectorBolsonOrigen ||
-    (draftLote.origenesBolson && draftLote.origenesBolson[0]?.sector
-      ? `Sector ${draftLote.origenesBolson[0].sector}`
-      : draftLote.ala && draftLote.sector
-      ? `Ala ${draftLote.ala} - Sector ${draftLote.sector}`
-      : draftLote.sector
-      ? `Sector ${draftLote.sector}`
-      : 'Ala A - Sector 1');
-
-  const stockBolsasNum = draftLote.stockBolsas !== undefined && draftLote.stockBolsas !== null ? draftLote.stockBolsas : 35;
-  const cantidadBolsasDisplay = `${formatNumberArg(stockBolsasNum, 0)} bolsas`;
-
-  const kgPorBolsaNum =
-    draftLote.kgPorBolsa ||
-    (stockBolsasNum > 0 && draftLote.stockKg ? Math.round(draftLote.stockKg / stockBolsasNum) : 800);
-  const kgPorBolsaDisplay = `${formatNumberArg(kgPorBolsaNum, 0)} kg`;
-
-  const ubicacionAcopioDisplay =
-    (draftLote as any).ubicacionAcopio ||
-    (draftLote.ala && draftLote.sector
-      ? `Ala ${draftLote.ala} - Sector ${draftLote.sector}`
-      : draftLote.sector
-      ? `Sector ${draftLote.sector}`
-      : 'Ala A - Sector 1');
-
-  const stockKgNum =
-    draftLote.stockKg !== undefined && draftLote.stockKg !== null
-      ? draftLote.stockKg
-      : stockBolsasNum * kgPorBolsaNum;
-
-  // Tabla estructurada con todos los parámetros técnicos
-  const tablaDatos: { label: string; valor: string }[] = [
-    { label: 'Fecha de realizado', valor: fechaRealizadoDisplay },
-    { label: 'Especie', valor: especieDisplay },
-    { label: 'Variedad', valor: variedadDisplay },
-    { label: 'Categoría', valor: categoriaDisplay },
-    { label: 'Tipo de lote', valor: tipoLoteDisplay },
-    { label: 'Tratamiento', valor: tratamientoDisplay },
-    { label: 'N° Orden de Proceso/Movimiento', valor: String(ordenProcesoMovimientoDisplay) },
-    { label: 'N° Bolsón de origen (trazabilidad)', valor: String(bolsonOrigenDisplay) },
-    { label: 'Sector de bolsón de origen', valor: String(sectorBolsonOrigenDisplay) },
-    { label: 'Cantidad de bolsas', valor: cantidadBolsasDisplay },
-    { label: 'Kg por bolsa', valor: kgPorBolsaDisplay },
-    { label: 'Ubicación de acopio', valor: String(ubicacionAcopioDisplay) },
-  ];
-
-  // Observaciones especiales gestionadas en el formulario de edición
-  if (draftLote.observaciones && draftLote.observaciones.trim()) {
-    tablaDatos.push({
-      label: 'Observaciones',
-      valor: draftLote.observaciones.trim(),
-    });
-  }
-
-  const qrTraceabilityUrl = getTraceUrl(draftLote.id);
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto p-2 sm:p-4 md:p-6 animate-in fade-in duration-200 print:p-0 print:bg-white print:static print:inset-auto print:z-auto">
@@ -250,7 +150,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
         }
       `}</style>
 
-      {/* 1. BARRA SUPERIOR DE ACCIONES (Controles, Modo Edición, Imprimir, Descargar JPG, Cerrar) */}
+      {/* 1. BARRA SUPERIOR DE ACCIONES */}
       <div className="w-full max-w-4xl bg-slate-900 text-white px-4 sm:px-6 py-3.5 rounded-2xl shadow-2xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4 sticky top-2 z-50 print:hidden">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-[#006837] rounded-xl text-white shadow-xs">
@@ -298,74 +198,74 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-lg border border-amber-500/30 transition cursor-pointer disabled:opacity-50"
             title="Descargar la Ficha Técnica completa como archivo de imagen .JPG"
           >
-            {isDownloadingJpg ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
-            ) : (
-              <ImageIcon className="w-3.5 h-3.5 text-[#C9922E]" />
-            )}
+            <Download className="w-3.5 h-3.5" />
             <span>{isDownloadingJpg ? 'Generando...' : 'Descargar JPG'}</span>
           </button>
 
-          {/* Botón Imprimir A4 */}
+          {/* Botón Imprimir A4 Oficial */}
           <button
             type="button"
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#006837] hover:bg-[#254731] text-white font-black text-xs uppercase tracking-wider rounded-lg border border-emerald-500/40 shadow-sm transition cursor-pointer"
-            title="Imprimir documento en formato A4"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#006837] hover:bg-[#254731] text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-md transition cursor-pointer border border-emerald-400/40"
+            title="Imprimir Ficha Técnica de Lote Oficial en hoja A4"
           >
             <Printer className="w-3.5 h-3.5 text-[#C9922E]" />
             <span>Imprimir A4</span>
           </button>
 
-          {/* Botón Cerrar */}
+          {/* Botón Cerrar Modal */}
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
-              title="Cerrar ventana"
+              className="p-1.5 bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition cursor-pointer ml-1"
+              title="Cerrar ventana de impresión"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. PANEL DESPLEGABLE DE EDICIÓN DE CAMPOS (OBSERVACIONES, DATOS TÉCNICOS, STOCK) */}
+      {/* 2. PANEL DE EDICIÓN FLOTANTE / EXPANDIBLE (Solo visible cuando isEditing === true) */}
       {isEditing && (
-        <div className="w-full max-w-4xl bg-white rounded-2xl p-5 shadow-xl border border-gray-200 mb-4 print:hidden animate-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
-            <div className="flex items-center gap-2 text-[#00603C]">
-              <Edit2 className="w-4 h-4 text-[#C9922E]" />
-              <h4 className="font-serif font-black text-xs uppercase tracking-wider">
-                Panel de Edición Rápida de la Ficha Técnica
+        <div className="w-full max-w-4xl bg-white text-slate-900 p-5 rounded-2xl shadow-xl border border-gray-200 mb-4 animate-in fade-in slide-in-from-top-2 duration-200 print:hidden">
+          <div className="flex items-center justify-between border-b border-gray-200 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Edit2 className="w-4 h-4 text-[#006837]" />
+              <h4 className="font-bold text-sm text-gray-900 uppercase tracking-wide">
+                Modificar Campos Técnicos para la Ficha
               </h4>
             </div>
+
             <div className="flex items-center gap-2">
               {isModified && (
                 <button
                   type="button"
                   onClick={handleResetToOriginal}
-                  className="text-xs text-red-600 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
+                  className="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 transition cursor-pointer"
+                  title="Restablecer datos a los originales guardados del lote"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restablecer Original</span>
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Restablecer</span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  handleSaveDraft();
-                  setIsEditing(false);
-                }}
-                className="px-3 py-1 bg-[#00603C] hover:bg-[#254731] text-white text-xs font-bold uppercase tracking-wider rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer"
-              >
-                <CheckCircle className="w-3.5 h-3.5 text-[#C9922E]" />
-                <span>Aplicar a Vista Previa</span>
-              </button>
+
+              {onSaveLote && isModified && (
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-800 font-bold px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition cursor-pointer"
+                  title="Guardar estos cambios en la base de datos principal"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Guardar en Base de Datos</span>
+                </button>
+              )}
             </div>
           </div>
 
+          {/* Formulario de Campos Editables */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div>
               <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">N° de Lote</label>
@@ -373,7 +273,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.loteNro || ''}
                 onChange={(e) => handleUpdateField('loteNro', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 focus:bg-white focus:border-[#00603C] focus:outline-none font-mono"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -382,7 +282,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.cliente || ''}
                 onChange={(e) => handleUpdateField('cliente', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -391,7 +291,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.especie || ''}
                 onChange={(e) => handleUpdateField('especie', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -400,7 +300,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.variedad || ''}
                 onChange={(e) => handleUpdateField('variedad', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
 
@@ -410,7 +310,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.categoria || ''}
                 onChange={(e) => handleUpdateField('categoria', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -419,7 +319,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.tipo || ''}
                 onChange={(e) => handleUpdateField('tipo', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -428,7 +328,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={Array.isArray(draftLote.tratamiento) ? draftLote.tratamiento.join(', ') : (draftLote.tratamiento as any) || ''}
                 onChange={(e) => handleUpdateField('tratamiento', e.target.value.split(',').map(s => s.trim()))}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
                 placeholder="Sin Tratar, Curado..."
               />
             </div>
@@ -438,7 +338,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.producto || ''}
                 onChange={(e) => handleUpdateField('producto', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
                 placeholder="Ninguno, Maxim XL..."
               />
             </div>
@@ -449,7 +349,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={draftLote.ordenProcesoId || (draftLote as any).numeroOrdenMovimiento || (draftLote as any).ordenProceso || ''}
                 onChange={(e) => handleUpdateField('ordenProcesoId', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -458,8 +358,8 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={(draftLote as any).numeroBolsonOrigen || (draftLote as any).bolsonOrigenNro || ''}
                 onChange={(e) => handleUpdateField('numeroBolsonOrigen', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
-                placeholder="Ej: B-12"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
+                placeholder="Ej: B-102, B-103"
               />
             </div>
             <div>
@@ -468,17 +368,17 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="text"
                 value={(draftLote as any).sectorBolsonOrigen || ''}
                 onChange={(e) => handleUpdateField('sectorBolsonOrigen', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
-                placeholder="Ej: Ala A - Sector 1"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
+                placeholder="Ej: Sector 1"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Ubicación de Acopio</label>
+              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Ubicación Acopio</label>
               <input
                 type="text"
-                value={(draftLote as any).ubicacionAcopio || (draftLote.ala && draftLote.sector ? `Ala ${draftLote.ala} - Sector ${draftLote.sector}` : '')}
+                value={(draftLote as any).ubicacionAcopio || ''}
                 onChange={(e) => handleUpdateField('ubicacionAcopio', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
                 placeholder="Ej: Ala A - Sector 1"
               />
             </div>
@@ -490,7 +390,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 min="0"
                 value={draftLote.stockBolsas || 0}
                 onChange={(e) => handleUpdateField('stockBolsas', Math.max(0, parseInt(e.target.value, 10) || 0))}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -498,9 +398,9 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
               <input
                 type="number"
                 min="1"
-                value={draftLote.kgPorBolsa || 40}
+                value={draftLote.kgPorBolsa || 800}
                 onChange={(e) => handleUpdateField('kgPorBolsa', Math.max(1, parseInt(e.target.value, 10) || 0))}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
@@ -509,31 +409,36 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                 type="date"
                 value={draftLote.fechaIngreso || ''}
                 onChange={(e) => handleUpdateField('fechaIngreso', e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Stock Total (Kg)</label>
               <input
                 type="number"
-                value={draftLote.stockKg !== undefined ? draftLote.stockKg : (draftLote.stockBolsas || 0) * (draftLote.kgPorBolsa || 40)}
+                value={draftLote.stockKg !== undefined ? draftLote.stockKg : (draftLote.stockBolsas || 0) * (draftLote.kgPorBolsa || 800)}
                 onChange={(e) => handleUpdateField('stockKg', parseInt(e.target.value, 10) || 0)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#00603C] focus:outline-none"
+                className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg font-bold text-gray-900 font-mono focus:bg-white focus:border-[#006837] focus:outline-none"
               />
             </div>
 
-            {/* Campo clave: Observaciones / Notas de la Ficha Técnica */}
+            {/* Campo clave: Observaciones con límite de 200 caracteres */}
             <div className="sm:col-span-2 md:col-span-4">
-              <label className="block text-[10px] font-bold uppercase text-[#00603C] mb-1 flex items-center justify-between">
-                <span>Observaciones / Notas Especiales de la Ficha Técnica</span>
-                <span className="text-[9px] text-gray-400 font-normal">Aparece en la tabla técnica del documento</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold uppercase text-[#006837]">
+                  Observaciones / Notas Especiales de la Ficha Técnica
+                </label>
+                <span className={`text-[9px] font-mono font-bold ${(draftLote.observaciones || '').length > 180 ? 'text-amber-600' : 'text-gray-400'}`}>
+                  {(draftLote.observaciones || '').length}/200 caracteres
+                </span>
+              </div>
               <textarea
                 rows={2}
+                maxLength={200}
                 value={draftLote.observaciones || ''}
-                onChange={(e) => handleUpdateField('observaciones', e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 text-xs focus:bg-white focus:border-[#00603C] focus:outline-none resize-none"
-                placeholder="Ingrese observaciones técnicas, destino o especificaciones especiales de curado o acopio..."
+                onChange={(e) => handleUpdateField('observaciones', e.target.value.slice(0, 200))}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-semibold text-gray-800 text-xs focus:bg-white focus:border-[#006837] focus:outline-none resize-none"
+                placeholder="Ingrese observaciones técnicas, destino o especificaciones especiales de curado o acopio (máx. 200 caracteres)..."
               />
             </div>
           </div>
@@ -550,12 +455,12 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
         </div>
       )}
 
-      {/* 3. CONTENEDOR DE LA FICHA TÉCNICA (LAYOUT A4 LIMPIO) */}
-      <div className="w-full max-w-4xl flex justify-center print:w-full print:max-w-none">
+      {/* 3. VISTA PREVIA / HOJA OFICIAL A4 IMPRIMIBLE */}
+      <div className="w-full flex justify-center print:w-full print:block">
         <div
           ref={cardRef}
           id={cardDomId}
-          className="bg-white rounded-2xl border-[1.5px] border-[#006837] shadow-xl relative text-[#0F172A] font-sans ficha-tecnica-a4-container"
+          className="bg-white rounded-2xl border-[1.5px] border-[#006837] shadow-2xl relative text-[#0F172A] font-sans overflow-visible print:border-none print:shadow-none"
           style={{
             boxSizing: 'border-box',
             width: '100%',
@@ -595,7 +500,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
             </h2>
           </div>
 
-          {/* HERO BOX: DATOS PRINCIPALES + CÓDIGO QR TRAZABILIDAD OFICIAL 300x300px CON COLOR #006837 */}
+          {/* HERO BOX: DATOS PRINCIPALES + CÓDIGO QR TRAZABILIDAD OFICIAL */}
           <div className="bg-[#F8FAFC] rounded-xl p-4 mb-2.5 border border-[#E2E8F0] flex items-center justify-between gap-5">
             {/* Columna Izquierda: N° DE LOTE (60px) y CLIENTE (60px) */}
             <div className="flex-1 min-w-0 text-left space-y-2.5">
@@ -628,33 +533,13 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
               </div>
             </div>
 
-            {/* Columna Derecha: CÓDIGO QR TRAZABILIDAD (300x300px renderizado con qrcode.react en color #006837) */}
+            {/* Columna Derecha: CÓDIGO QR TRAZABILIDAD OFICIAL */}
             <div className="shrink-0 flex flex-col items-center justify-center">
-              <div
-                className="bg-white p-3 rounded-2xl border border-[#E2E8F0] shadow-xs flex flex-col items-center justify-center w-[185px] h-[185px]"
-                style={{ boxSizing: 'border-box' }}
-              >
-                <div
-                  className="flex items-center justify-center overflow-hidden w-full h-full"
-                  style={{ maxWidth: '100%', maxHeight: '100%' }}
-                >
-                  <QRCodeSVG
-                    value={qrTraceabilityUrl}
-                    size={300}
-                    bgColor="#FFFFFF"
-                    fgColor="#006837"
-                    level="H"
-                    includeMargin={true}
-                    className="w-full h-full aspect-square block"
-                  />
-                </div>
-                <span
-                  className="font-sans font-bold text-[#475569] uppercase tracking-wider mt-1.5 text-center block whitespace-nowrap"
-                  style={{ fontSize: '10px', lineHeight: 1.2, letterSpacing: '0.08em' }}
-                >
-                  QR TRAZABILIDAD
-                </span>
-              </div>
+              <QrTrazabilidadLote
+                loteId={draftLote.id}
+                size={300}
+                className="w-[185px] h-[185px]"
+              />
             </div>
           </div>
 
@@ -669,7 +554,7 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                     style={{
                       backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC',
                       borderBottom: idx === tablaDatos.length - 1 ? 'none' : '1px solid #E2E8F0',
-                      height: '22px',
+                      minHeight: '22px',
                     }}
                   >
                     <td
@@ -679,7 +564,9 @@ export const ImprimirFichaTecnica: React.FC<ImprimirFichaTecnicaProps> = ({
                       {fila.label}
                     </td>
                     <td
-                      className="py-0.5 px-3.5 font-bold text-[#0F172A] align-middle break-words"
+                      className={`py-0.5 px-3.5 font-bold text-[#0F172A] align-middle ${
+                        fila.label === 'Observaciones' ? 'break-words' : 'truncate max-w-[320px]'
+                      }`}
                       style={{ width: '58%' }}
                       title={fila.valor}
                     >

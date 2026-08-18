@@ -4,10 +4,10 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, collection, doc, writeBatch, getDocs, runTransaction, onSnapshot } from 'firebase/firestore';
+import { initializeFirestore, collection, doc, writeBatch, getDocs, getDoc, setDoc, updateDoc, runTransaction, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { Lote, MovimientoStock, SalidaRegistrada, OrdenCarga, MovimientoSilo, Chofer, BolsonCampo } from '../types';
+import { Lote, MovimientoStock, SalidaRegistrada, OrdenCarga, MovimientoSilo, Chofer, BolsonCampo, SiloId, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT } from '../types';
 import { getCampaniaIdFromDate } from '../utils/campanias';
 
 // Configuración de Firebase obtenida de firebase-applet-config.json
@@ -367,5 +367,80 @@ export async function seedBolsonesIfEmpty(initialBolsones: BolsonCampo[]): Promi
     console.warn('Error en seeding de bolsones:', error);
   }
 }
+
+/**
+ * Seed o inicialización de Estados de Silos en Firestore si no existe.
+ */
+export async function seedSilosEstadoIfEmpty(initialEstados?: SilosEstadoMap): Promise<void> {
+  try {
+    const estadoDocRef = doc(db, 'silos_estado', 'estados');
+    const docSnap = await getDoc(estadoDocRef);
+    if (!docSnap.exists()) {
+      console.log('Inicializando estados de silos en Firestore...');
+      const baseEstados = initialEstados || SILOS_ESTADO_DEFAULT;
+      await setDoc(estadoDocRef, {
+        estados: baseEstados,
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'Sistema'
+      });
+      console.log('Inicialización de estados de silos completada con éxito.');
+    }
+  } catch (error) {
+    console.warn('Error en inicialización de estados de silos:', error);
+  }
+}
+
+/**
+ * Guardar/Actualizar el estado manual de un silo específico en Firestore.
+ */
+export async function guardarSiloEstadoFirestore(
+  siloId: SiloId,
+  estado: EstadoSiloManual,
+  usuarioNombre?: string
+): Promise<void> {
+  try {
+    const estadoDocRef = doc(db, 'silos_estado', 'estados');
+    await setDoc(
+      estadoDocRef,
+      {
+        estados: {
+          [siloId]: estado
+        },
+        [`estado_${siloId.replace(/\s+/g, '_')}`]: estado,
+        updatedAt: new Date().toISOString(),
+        updatedBy: usuarioNombre || 'Operador'
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error al persistir estado de silo en Firestore:', error);
+    throw error;
+  }
+}
+
+/**
+ * Guardar/Actualizar el mapa completo de estados de silos en Firestore.
+ */
+export async function guardarSilosEstadoMapFirestore(
+  estadosMap: SilosEstadoMap,
+  usuarioNombre?: string
+): Promise<void> {
+  try {
+    const estadoDocRef = doc(db, 'silos_estado', 'estados');
+    await setDoc(
+      estadoDocRef,
+      {
+        estados: estadosMap,
+        updatedAt: new Date().toISOString(),
+        updatedBy: usuarioNombre || 'Operador'
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error al persistir mapa de estados de silos en Firestore:', error);
+    throw error;
+  }
+}
+
 
 

@@ -88,6 +88,128 @@ export const LogoSiloLoose: React.FC<LogoProps> = ({ size = 48, className = '', 
 };
 
 /**
+ * Logo 3: Ícono de Silo Industrial (Diagrama Oficial: Escotilla superior, techo cónico, costillas curvas, tolva y patas)
+ * Aplica tamaño estándar de 24x24px y color institucional verde #00603C por defecto.
+ */
+export const SiloIcon: React.FC<LogoProps> = ({ size = 24, className = '', color = '#00603C', ...props }) => {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`silo-icon-institucional ${className}`}
+      {...props}
+    >
+      {/* 1. Tapa / Escotilla superior */}
+      <path
+        d="M42 12 H58 V18 H42 Z"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+
+      {/* 2. Techo cónico */}
+      <path
+        d="M42 18 L16 36"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M58 18 L84 36"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* 3. Paredes laterales verticales */}
+      <path
+        d="M16 36 L16 76"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M84 36 L84 76"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* 4. Costillas / Anillos horizontales curvos (5 líneas que dividen el cuerpo cilíndrico en 4 franjas) */}
+      <path
+        d="M16 36 Q50 44 84 36"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 46 Q50 54 84 46"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 56 Q50 64 84 56"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 66 Q50 74 84 66"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16 76 Q50 84 84 76"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* 5. Tolva cónica inferior en V */}
+      <path
+        d="M16 76 L50 96 L84 76"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* 6. Patas de apoyo estructurales a ambos lados */}
+      <path
+        d="M16 76 V96 H22 V79.5"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M84 76 V96 H78 V79.5"
+        stroke={color}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
+/**
  * Header Brand Logo Component combining LogoSiloSquare and typography
  */
 export const HeaderBrand: React.FC = () => {
@@ -99,7 +221,7 @@ export const HeaderBrand: React.FC = () => {
           AGRO ABACUS
         </span>
         <span className="text-[10px] md:text-xs font-sans font-medium tracking-widest text-[#C9922E] uppercase mt-1">
-          PLANTA CLASIFICADORA · LA BARRANCOSA
+          PLANTA CLASIFICADORA
         </span>
       </div>
     </div>

@@ -12,3 +12,46 @@
   background-color: #ffffff;
 }
 
+/* Clase CSS dedicada para garantizar tamaño uniforme (24x24px) y alineación en iconos de silos */
+.silo-icon-institucional {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Animación de pulso suave (soft pulse) para el indicador de sincronización en tiempo real */
+@keyframes softPulseSyncDotGreen {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7), 0 0 4px rgba(16, 185, 129, 0.5);
+  }
+  50% {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0), 0 0 8px rgba(16, 185, 129, 0.8);
+  }
+}
+
+@keyframes softPulseSyncDotRed {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8), 0 0 4px rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    transform: scale(1.22);
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0), 0 0 10px rgba(239, 68, 68, 0.9);
+  }
+}
+
+.sync-dot-pulse-green {
+  animation: softPulseSyncDotGreen 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.sync-dot-pulse-red {
+  animation: softPulseSyncDotRed 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+

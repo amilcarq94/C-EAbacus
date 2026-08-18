@@ -8,6 +8,7 @@ import { Lote, OrdenProceso, TipoLoteType, CategoriaType, TratamientoType, LoteL
 import { formatKg } from '../utils/formatters';
 import { validateLoteLimits, getLoteLimits } from '../utils/loteLimits';
 import { getCampaniaIdFromDate } from '../utils/campanias';
+import { generarLoteId } from '../utils/loteId';
 import {
   PackagePlus,
   CheckCircle2,
@@ -144,8 +145,12 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
     const lotesToPrint: Lote[] = selectedDraftsToPrint.map(draft => {
       const stockKgCalculado = draft.stockBolsas * draft.kgPorBolsa;
       const normNro = draft.loteNro.trim() || 'S/N';
-      const existing = lotes.find(l => l.loteNro?.trim().toLowerCase() === normNro.toLowerCase());
-      const loteId = existing ? existing.id : (normNro !== 'S/N' ? normNro : `LOTE-${draft.id}`);
+      const calculatedId = generarLoteId(cliente, normNro);
+      const existing = lotes.find(
+        l => l.loteNro?.trim().toLowerCase() === normNro.toLowerCase() ||
+             l.id.toLowerCase() === calculatedId.toLowerCase()
+      );
+      const loteId = existing ? existing.id : calculatedId;
       return {
         id: loteId,
         loteNro: normNro,
@@ -310,11 +315,12 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
       for (const draft of draftLotes) {
         const stockKgCalculado = draft.stockBolsas * draft.kgPorBolsa;
         const normNro = draft.loteNro.trim();
+        const calculatedId = generarLoteId(cliente, normNro);
 
         // Buscar si ya existe
         const existingLote = lotes.find(
           l => l.loteNro?.trim().toLowerCase() === normNro.toLowerCase() ||
-               l.id.toLowerCase() === `${cliente.replace(/\s+/g, '_')}_${normNro}`.toLowerCase()
+               l.id.toLowerCase() === calculatedId.toLowerCase()
         );
 
         let loteToSave: Lote;
@@ -360,7 +366,7 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
           };
         } else {
           // Alta nuevo
-          const uniqueDocId = `${cliente.replace(/\s+/g, '_')}_${normNro}`;
+          const uniqueDocId = calculatedId;
           const nuevoMov: MovimientoStock = {
             id: `MOV-PRE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             fecha: fechaActual,
@@ -861,15 +867,21 @@ export const GenerarLoteView: React.FC<GenerarLoteViewProps> = ({
 
         {/* Sección 3: Observaciones de Tanda */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-            Observaciones de Tanda (Opcional)
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold text-slate-700 uppercase">
+              Observaciones de Tanda (Opcional)
+            </label>
+            <span className={`text-[10px] font-mono font-bold ${observaciones.length > 180 ? 'text-amber-600' : 'text-slate-400'}`}>
+              {observaciones.length}/200 caracteres
+            </span>
+          </div>
           <textarea
             rows={2}
+            maxLength={200}
             value={observaciones}
-            onChange={(e) => setObservaciones(e.target.value)}
-            placeholder="Observaciones generales para los lotes cargados..."
-            className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900"
+            onChange={(e) => setObservaciones(e.target.value.slice(0, 200))}
+            placeholder="Observaciones generales para los lotes cargados (máx. 200 caracteres)..."
+            className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#00603C]"
           />
         </div>
 

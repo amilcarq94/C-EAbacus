@@ -24,18 +24,43 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     if (isOpen && lotes.length > 0) {
-      const timer = setTimeout(() => {
-        window.print();
-      }, 350);
-      return () => clearTimeout(timer);
+      (async () => {
+        try {
+          if (document.fonts?.ready) {
+            await document.fonts.ready;
+          }
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          if (isMounted) {
+            window.print();
+          }
+        } catch {
+          if (isMounted) {
+            window.print();
+          }
+        }
+      })();
     }
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, lotes]);
 
   if (!isOpen || lotes.length === 0) return null;
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    try {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      window.print();
+    } catch {
+      window.print();
+    }
   };
 
   const handleDownloadSingleJpg = async (lote: Lote, index: number) => {
@@ -163,9 +188,7 @@ export const BatchPrintLotesModal: React.FC<BatchPrintLotesModalProps> = ({
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            height: 275mm !important;
-            max-height: 275mm !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             box-sizing: border-box !important;
             margin-bottom: 0 !important;
             display: flex !important;

@@ -162,13 +162,28 @@ export interface Chofer {
 
 export type SiloId = 'Silo 1' | 'Silo 2' | 'Silo 3' | 'Silo 4' | 'Silo 5' | 'Silo 6';
 
+export const SILOS_DISPONIBLES: SiloId[] = ['Silo 1', 'Silo 2', 'Silo 3', 'Silo 4', 'Silo 5', 'Silo 6'];
+export const SILOS_PHYSICAL_ORDER: SiloId[] = ['Silo 4', 'Silo 3', 'Silo 5', 'Silo 2', 'Silo 6', 'Silo 1'];
+
+export type EstadoSiloManual = 'OCUPADO' | 'VACIO_SUCIO' | 'VACIO_LIMPIO';
+export type SilosEstadoMap = Record<SiloId, EstadoSiloManual>;
+
+export const SILOS_ESTADO_DEFAULT: SilosEstadoMap = {
+  'Silo 1': 'VACIO_LIMPIO',
+  'Silo 2': 'VACIO_LIMPIO',
+  'Silo 3': 'VACIO_LIMPIO',
+  'Silo 4': 'VACIO_LIMPIO',
+  'Silo 5': 'VACIO_LIMPIO',
+  'Silo 6': 'VACIO_LIMPIO',
+};
+
 export interface SiloExtraccion {
   siloId: SiloId;
   kgExtraidos: number;
   kg?: number;
 }
 
-export type MotivoSalidaManual = 'Consumo a granel' | 'Manipulación' | 'Traslado a silo' | 'Descontaminación varietal';
+export type MotivoSalidaManual = 'Consumo a granel' | 'Manipulación' | 'Traslado a silo' | 'Descarte' | 'Descontaminación varietal';
 
 export type TipoMovimientoSilo = 'INGRESO' | 'EGRESO_OP' | 'EGRESO_MANUAL' | 'EGRESO_LOTE' | 'EGRESO' | 'AJUSTE_ZERO';
 

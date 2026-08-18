@@ -120,5 +120,10 @@ service cloud.firestore {
     match /bolsones_campo/{bolsonId} {
       allow read, write: if true;
     }
+
+    // 8. Colección de Estados de Silos (silos_estado)
+    match /silos_estado/{docId} {
+      allow read, write: if true;
+    }
   }
 }

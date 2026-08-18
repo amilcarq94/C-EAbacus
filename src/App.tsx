@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { LogoSiloLoose, LogoSiloSquare, HeaderBrand } from './components/Logo';
+import { LogoSiloLoose, LogoSiloSquare, HeaderBrand, SiloIcon } from './components/Logo';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { LotesView } from './components/LotesView';
@@ -13,7 +13,7 @@ import { LoteForm } from './components/LoteForm';
 import { ImportarStock } from './components/ImportarStock';
 import { RegistrarSalida } from './components/RegistrarSalida';
 import { SalidasList } from './components/SalidasList';
-import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer, BolsonCampo } from './types';
+import { Lote, SalidaRegistrada, MovimientoStock, EstadoLoteType, AuditLogEntry, OrdenCarga, OrdenProceso, EstadoOrdenProceso, MovimientoSilo, SiloId, CAPACIDAD_MAX_SILO, Chofer, BolsonCampo, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT } from './types';
 import { getLoteAuditoria } from './utils/audit';
 import { LOTES_INICIALES, SALIDAS_INICIALES, CLIENTES_PRECARGADOS, ESPECIES_PRECARGADAS, ORDENES_CARGA_INICIALES, ORDENES_PROCESO_INICIALES, MOVIMIENTOS_SILO_INICIALES, CHOFERES_INICIALES, BOLSONES_INICIALES } from './data/mockData';
 import { LayoutDashboard, Layers, ArrowDownRight, History, Upload, LogOut, LogIn, CheckCircle, QrCode, ClipboardCheck, Factory, ClipboardList, Warehouse, AlertTriangle, Truck, Database, PackagePlus, BarChart3, Smartphone, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -31,7 +31,7 @@ import { getActiveCampaniaIdStored, setActiveCampaniaIdStored, getCampaniaIdFrom
 import { findExistingChofer, mergeChoferData } from './utils/choferes';
 import { getLoteLimits } from './utils/loteLimits';
 import { LoteLimitsConfig } from './types';
-import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, seedBolsonesIfEmpty, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
+import { db, getLoteDocId, uploadBase64ToStorage, seedLotesIfEmpty, seedOrdenesProcesoIfEmpty, seedMovimientosSiloIfEmpty, seedChoferesIfEmpty, seedBolsonesIfEmpty, seedSilosEstadoIfEmpty, guardarSiloEstadoFirestore, registrarMovimientoTransaccion, mapFirestoreToLote, mapLoteToFirestore } from './lib/firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 
 export default function App() {
@@ -82,6 +82,15 @@ export default function App() {
   const [movimientosSilo, setMovimientosSilo] = useState<MovimientoSilo[]>([]);
   const [choferes, setChoferes] = useState<Chofer[]>([]);
   const [bolsones, setBolsones] = useState<BolsonCampo[]>([]);
+  const [silosEstadoManual, setSilosEstadoManual] = useState<SilosEstadoMap>(() => {
+    try {
+      const saved = localStorage.getItem('agro_abacus_silos_estado_manual');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return SILOS_ESTADO_DEFAULT;
+  });
   const [loteLimits, setLoteLimits] = useState<LoteLimitsConfig>(() => getLoteLimits());
   const [clientes, setClientes] = useState<string[]>([]);
   const [especies, setEspecies] = useState<string[]>([]);
@@ -216,6 +225,11 @@ export default function App() {
   }, [siloStocks]);
 
   const tieneAlertaSilo95 = silosConAlerta95.length > 0;
+
+  // Peso total acumulado almacenado en todos los silos (para tooltips y métricas rápidas)
+  const totalSilosKgStored = useMemo(() => {
+    return Object.values(siloStocks).reduce((acc: number, val) => acc + (Number(val) || 0), 0);
+  }, [siloStocks]);
 
   // 3. Control de Vistas
   // 'modo-planta' | 'dashboard' | 'reporte-produccion' | 'generar-lote' | 'ordenes-proceso' | 'ingreso-silos' | 'lotes' | 'alta-lote' | 'importar' | 'registrar-salida' | 'salidas-registradas' | 'despachos' | 'choferes'
@@ -360,6 +374,27 @@ export default function App() {
       setIsFirebaseConnected(false);
     });
 
+    // 9. Suscribirse en tiempo real a 'silos_estado' (Estados manuales: Ocupado, Vacío Sucio, Vacío Limpio)
+    seedSilosEstadoIfEmpty(SILOS_ESTADO_DEFAULT);
+    const unsubSilosEstado = onSnapshot(doc(db, 'silos_estado', 'estados'), (snapshot) => {
+      setIsFirebaseConnected(true);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const map = (data.estados || {}) as SilosEstadoMap;
+        setSilosEstadoManual(prev => {
+          const updated = { ...prev, ...map };
+          try {
+            localStorage.setItem('agro_abacus_silos_estado_manual', JSON.stringify(updated));
+          } catch (e) {
+            console.error(e);
+          }
+          return updated;
+        });
+      }
+    }, (error) => {
+      console.error("Error subscribing to 'silos_estado':", error);
+    });
+
     // Listeners para el estado de internet del navegador
     const handleOnline = () => {
       setIsOnline(true);
@@ -403,6 +438,7 @@ export default function App() {
       unsubMovimientosSilo();
       unsubChoferes();
       unsubBolsones();
+      unsubSilosEstado();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -1355,6 +1391,30 @@ export default function App() {
     }
   };
 
+  const handleUpdateSiloEstadoManual = async (siloId: SiloId, nuevoEstado: EstadoSiloManual) => {
+    setSilosEstadoManual((prev) => {
+      const next = { ...prev, [siloId]: nuevoEstado };
+      try {
+        localStorage.setItem('agro_abacus_silos_estado_manual', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+
+    try {
+      await guardarSiloEstadoFirestore(siloId, nuevoEstado, currentUser?.nombre);
+      const nombresEstados = {
+        'OCUPADO': 'Ocupado (Amarillo)',
+        'VACIO_SUCIO': 'Vacío Sucio (Rojo)',
+        'VACIO_LIMPIO': 'Vacío Limpio (Verde)'
+      };
+      showNotification(`${siloId}: estado manual guardado en Firestore (${nombresEstados[nuevoEstado] || nuevoEstado})`);
+    } catch (err) {
+      console.error('Error al guardar estado de silo en Firestore:', err);
+    }
+  };
+
   // 7. Operación de Despacho (Salidas)
   const handleSaveSalida = async (
     nuevaSalida: SalidaRegistrada,
@@ -1656,10 +1716,10 @@ export default function App() {
         <LogoSiloSquare size={520} color="#00603C" />
       </div>
       
-      {/* 1. HEADER FIJO (Logo + Toggle Menú a la Izquierda, Controles a la Derecha) */}
+      {/* 1. HEADER FIJO (Solo Logo "agro abacus" con bajada "planta clasificadora") */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 px-3 sm:px-4 md:px-6 flex items-center justify-between z-40 shadow-xs print:hidden">
-        <div className="flex items-center gap-2.5 sm:gap-4">
-          {/* Botón de Minimizar/Expandir Menú (Toggle Sidebar / Mobile Drawer) */}
+        <div className="flex items-center gap-3">
+          {/* Botón de Menú Móvil */}
           <button
             id="sidebar-toggle-btn"
             type="button"
@@ -1670,120 +1730,32 @@ export default function App() {
                 toggleSidebar();
               }
             }}
-            className="p-2 rounded-xl text-[#00603C] hover:bg-[#E3EFE7] active:bg-[#C2E0CC] transition cursor-pointer flex items-center justify-center border border-[#00603C]/20 shadow-xs shrink-0"
-            title={sidebarCollapsed ? "Expandir menú de navegación lateral" : "Minimizar menú de navegación lateral"}
+            className="p-2 rounded-xl text-[#00603C] hover:bg-[#E3EFE7] active:bg-[#C2E0CC] transition cursor-pointer flex items-center justify-center border border-[#00603C]/20 shadow-xs shrink-0 md:hidden"
+            title="Alternar menú de navegación"
             aria-label="Alternar menú de navegación"
           >
             <Menu className="w-5 h-5 text-[#00603C]" />
           </button>
 
+          {/* Logo "agro abacus" con bajada "planta clasificadora" */}
           <HeaderBrand />
-          
-          {/* Indicador de Conexión en Tiempo Real */}
-          {isOnline && isFirebaseConnected ? (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E3EFE7] border border-[#C2E0CC]/50 text-[#00603C] text-[10px] md:text-[11px] font-sans font-bold shadow-xs select-none transition-all duration-300" title="Conexión en tiempo real activa con Firestore">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2E8B57] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00603C]"></span>
-              </span>
-              <span>CONECTADO</span>
-            </div>
-          ) : (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FFF5F5] border border-[#FED7D7] text-red-600 text-[10px] md:text-[11px] font-sans font-bold shadow-xs select-none animate-pulse transition-all duration-300" title="Sin conexión a la base de datos. Los cambios locales se guardan offline y se sincronizarán al reconectar.">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
-              </span>
-              <span>DESCONECTADO</span>
-            </div>
-          )}
-        </div>
-        
-        {/* Lado derecho del header: CampaniaSelector + Operario/Login + Planta Móvil + QR + Salir */}
-        <div className="flex items-center gap-1.5 sm:gap-3">
-          {/* Selector y Fijador de Campaña Activa */}
-          <CampaniaSelector
-            activeCampaniaId={activeCampaniaId}
-            onSelectCampania={handleSelectCampania}
-            isExplicitlyPinned={isExplicitlyPinned}
-            onPinCampania={handlePinCampania}
-            availableCampaniasIds={availableCampaniasIds}
-          />
-
-          {/* Operario Activo o Badge de Acceso Libre */}
-          {isLoggedIn ? (
-            <div className="hidden lg:flex flex-col text-right mr-1 leading-tight border-r border-gray-100 pr-3">
-              <span className="text-xs font-bold text-gray-800">{currentUser.nombre}</span>
-              <span className="text-[9px] text-[#00603C] font-semibold uppercase tracking-wider">{currentUser.rol}</span>
-            </div>
-          ) : (
-            <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
-              <span>PLANTA MÓVIL (PÚBLICO)</span>
-            </div>
-          )}
-
-          <LogoSiloLoose size={32} color="#00603C" className="opacity-80 hidden xl:block" />
-          
-          <button
-            onClick={() => navigateTo('modo-planta')}
-            className={`flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider px-2.5 sm:px-3 py-1.5 rounded-lg transition shadow-xs ${
-              activeView === 'modo-planta'
-                ? 'bg-emerald-500 text-slate-950 ring-2 ring-emerald-300'
-                : 'bg-emerald-800 text-white hover:bg-emerald-700'
-            }`}
-            title="Acceso a Planta Móvil"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-300" />
-            <span className="hidden sm:inline">PLANTA MÓVIL</span>
-          </button>
-
-          <button
-            onClick={() => setShowQrScanner(true)}
-            className="flex items-center gap-1.5 text-[10px] font-sans font-bold tracking-wider bg-[#00603C] hover:bg-[#254731] text-white px-2.5 sm:px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer"
-            title="Escanear Código QR con Cámara"
-          >
-            <QrCode className="w-3.5 h-3.5 text-[#C9922E]" />
-            <span className="hidden sm:inline">QR</span>
-          </button>
-
-          {isLoggedIn ? (
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1 text-[10px] font-sans font-bold tracking-wider text-[#A0522D] hover:bg-[#F5E5DC] px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#A0522D]/20 transition cursor-pointer"
-              title="Cerrar Sesión del Operario"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">SALIR</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setEnteredPlantaMovil(false);
-              }}
-              className="flex items-center gap-1 text-[10px] font-sans font-bold tracking-wider bg-slate-900 hover:bg-slate-800 text-white px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-700 transition cursor-pointer"
-              title="Iniciar Sesión Administrativa"
-            >
-              <LogIn className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden md:inline">LOGIN</span>
-            </button>
-          )}
         </div>
       </header>
 
       {/* 2. PANEL DE NAVEGACIÓN VERTICAL (SIDEBAR) - DESKTOP */}
       <aside
         id="main-sidebar"
-        className={`fixed top-16 bottom-0 left-0 z-30 bg-[#00603C] text-white flex flex-col border-r border-[#254731] transition-all duration-300 print:hidden hidden md:flex shadow-lg ${
+        className={`fixed top-16 bottom-0 left-0 z-30 bg-[#00603C] text-white flex flex-col border-r border-[#254731] print:hidden hidden md:flex shadow-lg transition-all duration-300 ${
           sidebarCollapsed ? 'w-20' : 'w-64'
         }`}
       >
-        {/* Cabecera del Sidebar con Botón de Minimizar / Expandir */}
-        <div className={`px-3 py-2.5 border-b border-[#254731] flex items-center bg-black/10 transition-all ${
-          sidebarCollapsed ? 'justify-center' : 'justify-between'
+        {/* Cabecera del Sidebar: Botón Minimizar/Expandir sin leyenda */}
+        <div className={`py-3 border-b border-[#254731] flex items-center bg-black/10 transition-all ${
+          sidebarCollapsed ? 'px-2 justify-center' : 'px-4 justify-between'
         }`}>
           {!sidebarCollapsed && (
-            <div className="flex items-center gap-2 text-emerald-200">
-              <span className="text-[11px] font-mono font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-emerald-200 truncate">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider truncate">
                 Navegación
               </span>
               <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-400/30">
@@ -1791,36 +1763,33 @@ export default function App() {
               </span>
             </div>
           )}
+
+          {/* Botón único de minimizar / expandir (Solo botón, sin leyenda) */}
           <button
-            id="btn-toggle-sidebar"
+            id="sidebar-minimize-btn"
             type="button"
             onClick={toggleSidebar}
-            className={`p-1.5 rounded-lg hover:bg-white/10 text-emerald-200 hover:text-white transition cursor-pointer flex items-center justify-center ${
-              sidebarCollapsed ? 'mx-auto' : ''
-            }`}
-            title={sidebarCollapsed ? "Expandir panel de navegación" : "Minimizar panel a solo íconos"}
+            className="p-2 rounded-xl text-emerald-200 hover:text-white hover:bg-white/10 active:bg-white/20 transition cursor-pointer flex items-center justify-center border border-emerald-400/20 shadow-xs"
+            title={sidebarCollapsed ? "Expandir panel de navegación" : "Minimizar panel de navegación"}
             aria-label={sidebarCollapsed ? "Expandir panel" : "Minimizar panel"}
           >
             {sidebarCollapsed ? (
-              <ChevronRight className="w-4 h-4 text-emerald-300 hover:scale-110 transition-transform" />
+              <ChevronRight className="w-5 h-5" />
             ) : (
-              <div className="flex items-center gap-1 text-xs text-emerald-300 font-semibold hover:text-white">
-                <ChevronLeft className="w-4 h-4" />
-                <span className="text-[10px] uppercase font-bold">Minimizar</span>
-              </div>
+              <ChevronLeft className="w-5 h-5" />
             )}
           </button>
         </div>
 
         {/* Lista de Navegación Vertical */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-emerald-700/60">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 space-y-1.5 scrollbar-thin scrollbar-thumb-emerald-700/60">
           
           {/* Tab 1: Planta Móvil */}
           <button
             id="nav-tab-planta-movil"
             onClick={() => navigateTo('modo-planta')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3 justify-between'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-bold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'justify-between px-3 py-2.5'
             } ${
               activeView === 'modo-planta'
                 ? 'bg-emerald-400 text-slate-950 font-black shadow-[0_0_16px_rgba(52,211,153,0.8)] ring-2 ring-emerald-300'
@@ -1828,8 +1797,8 @@ export default function App() {
             }`}
             title="Planta Móvil: Acceso público a Silos y Operaciones"
           >
-            <div className="flex items-center gap-2.5 truncate">
-              <Smartphone className="w-4 h-4 shrink-0 text-emerald-300" />
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5 truncate'}`}>
+              <Smartphone className="w-5 h-5 shrink-0 text-emerald-300" />
               {!sidebarCollapsed && <span className="truncate">Planta Móvil</span>}
             </div>
             {!sidebarCollapsed && (
@@ -1840,20 +1809,18 @@ export default function App() {
           </button>
 
           {/* Separador de Sección */}
-          {!sidebarCollapsed ? (
-            <div className="pt-2 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
-              Operaciones & Planta
-            </div>
-          ) : (
-            <div className="my-1 border-t border-[#254731]/60" />
-          )}
+          <div className={`pt-2 pb-1 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60 ${
+            sidebarCollapsed ? 'text-center' : 'px-2'
+          }`}>
+            {!sidebarCollapsed ? 'Operaciones & Planta' : '•••'}
+          </div>
 
           {/* Tab 2: Dashboard (Control) */}
           <button
             id="nav-tab-dashboard"
             onClick={() => navigateTo('dashboard')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'dashboard'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
@@ -1861,7 +1828,7 @@ export default function App() {
             }`}
             title="Panel de Control General"
           >
-            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            <LayoutDashboard className="w-5 h-5 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Control</span>}
           </button>
 
@@ -1869,8 +1836,8 @@ export default function App() {
           <button
             id="nav-tab-reporte-produccion"
             onClick={() => navigateTo('reporte-produccion')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'reporte-produccion'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
@@ -1878,7 +1845,7 @@ export default function App() {
             }`}
             title="Reporte de Producción: Rendimiento diario y lotes realizados"
           >
-            <Factory className="w-4 h-4 shrink-0 text-amber-300" />
+            <Factory className="w-5 h-5 shrink-0 text-amber-300" />
             {!sidebarCollapsed && <span className="truncate">Producción</span>}
           </button>
 
@@ -1886,8 +1853,8 @@ export default function App() {
           <button
             id="nav-tab-ordenes-proceso"
             onClick={() => navigateTo('ordenes-proceso')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'ordenes-proceso'
                 ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
@@ -1895,7 +1862,7 @@ export default function App() {
             }`}
             title="Órdenes de Proceso y Movimiento"
           >
-            <ClipboardList className="w-4 h-4 shrink-0" />
+            <ClipboardList className="w-5 h-5 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Órdenes Proceso</span>}
           </button>
 
@@ -1903,49 +1870,78 @@ export default function App() {
           <button
             id="nav-tab-ingreso-silos"
             onClick={() => navigateTo('ingreso-silos')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3 justify-between'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transform-gpu transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+              sidebarCollapsed ? 'justify-center p-3' : 'justify-between px-3 py-2.5'
             } ${
               activeView === 'ingreso-silos'
-                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-sm ring-1.5 ring-[#C9922E]/60'
+                ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-md ring-1.5 ring-[#C9922E]/80 brightness-105'
                 : tieneAlertaSilo95
-                ? 'text-white bg-red-900/50 border border-red-500/80 shadow-[0_0_12px_rgba(239,68,68,0.5)]'
-                : 'text-white hover:bg-white/10'
+                ? 'text-white bg-red-900/50 border border-red-500/80 shadow-[0_0_12px_rgba(239,68,68,0.5)] hover:bg-red-900/70 hover:border-red-400'
+                : 'text-white hover:bg-white/15 hover:shadow-xs'
             }`}
             title={
               tieneAlertaSilo95
                 ? `¡ALERTA!: ${silosConAlerta95.join(', ')} al 95%+ de capacidad (>=171.000 kg)`
-                : 'Ingreso a Silos'
+                : undefined
             }
           >
-            <div className="flex items-center gap-2.5 truncate">
-              <Warehouse className={`w-4 h-4 shrink-0 ${tieneAlertaSilo95 ? 'text-red-400 animate-pulse' : 'text-[#C9922E]'}`} />
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5 truncate'}`}>
+              <div className="relative group/silo-icon inline-flex items-center justify-center shrink-0">
+                <SiloIcon
+                  size={24}
+                  color={tieneAlertaSilo95 ? '#f87171' : activeView === 'ingreso-silos' ? '#00603C' : '#C9922E'}
+                  className="silo-icon-institucional shrink-0 transition-transform duration-200 group-hover/silo-icon:scale-110"
+                />
+
+                {/* Tooltip con resumen rápido del peso total almacenado en todos los silos */}
+                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover/silo-icon:flex flex-col items-start bg-slate-900/95 text-white text-[10px] font-sans px-3 py-2 rounded-xl shadow-2xl border border-emerald-500/30 pointer-events-none whitespace-nowrap z-50 animate-in fade-in-0 zoom-in-95 duration-150 backdrop-blur-md">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase text-[9px] tracking-wider mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>Stock Total en Silos</span>
+                  </div>
+                  <div className="font-mono font-black text-sm text-white tracking-tight">
+                    {totalSilosKgStored.toLocaleString('es-AR')} <span className="text-[10px] font-sans font-medium text-emerald-300">kg</span>
+                  </div>
+                  <div className="text-[9px] text-slate-300 font-mono mt-0.5">
+                    {(totalSilosKgStored / 1000).toFixed(1)} Tn / 1.080 Tn ({( (totalSilosKgStored / (6 * CAPACIDAD_MAX_SILO)) * 100 ).toFixed(1)}%)
+                  </div>
+                  {/* Flechita decorativa hacia el ícono */}
+                  <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900 rotate-45 border-l border-b border-emerald-500/30"></div>
+                </div>
+
+                {/* Indicador de estado de conexión en tiempo real con Firebase con animación de pulso suave */}
+                <span
+                  id="silos-firebase-sync-dot"
+                  title={isFirebaseConnected && isOnline ? 'Sincronización activa en tiempo real con Firebase' : 'Sin conexión con Firebase'}
+                  className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white shadow-xs transition-all duration-300 ${
+                    isFirebaseConnected && isOnline
+                      ? 'bg-emerald-500 sync-dot-pulse-green'
+                      : 'bg-red-500 sync-dot-pulse-red'
+                  }`}
+                />
+              </div>
               {!sidebarCollapsed && <span className="truncate">Ingreso Silos</span>}
             </div>
 
-            {tieneAlertaSilo95 && (
+            {!sidebarCollapsed && tieneAlertaSilo95 && (
               <span className="flex items-center gap-1 shrink-0">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                 </span>
-                {!sidebarCollapsed && (
-                  <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full border border-red-300">
-                    95%+
-                  </span>
-                )}
+                <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full border border-red-300">
+                  95%+
+                </span>
               </span>
             )}
           </button>
 
-          {/* Separador de Sección */}
-          {!sidebarCollapsed ? (
-            <div className="pt-2 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
-              Inventario & Lotes
-            </div>
-          ) : (
-            <div className="my-1 border-t border-[#254731]/60" />
-          )}
+          {/* Separador de Sección: Inventario & Lotes */}
+          <div className={`pt-2 pb-1 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60 ${
+            sidebarCollapsed ? 'text-center' : 'px-2'
+          }`}>
+            {!sidebarCollapsed ? 'Inventario & Lotes' : '•••'}
+          </div>
 
           {/* Tab 6: Lotes */}
           <button
@@ -1954,8 +1950,8 @@ export default function App() {
             aria-selected={activeView === 'lotes' || Boolean(loteSeleccionado)}
             aria-label={`Pestaña Lotes. Gestión de inventario de semillas`}
             onClick={handleLotesClick}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3 justify-between'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'justify-between px-3 py-2.5'
             } ${
               activeView === 'lotes' || loteSeleccionado
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
@@ -1996,12 +1992,12 @@ export default function App() {
               ))}
             </span>
 
-            <div className="flex items-center gap-2.5 truncate">
-              <Layers className={`w-4 h-4 shrink-0 transition-transform duration-300 ${isLotesSpinning ? 'animate-spin' : ''}`} />
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2.5 truncate'}`}>
+              <Layers className={`w-5 h-5 shrink-0 transition-transform duration-300 ${isLotesSpinning ? 'animate-spin' : ''}`} />
               {!sidebarCollapsed && <span className="truncate">Lotes</span>}
             </div>
             
-            {criticalLotesCount > 0 && (
+            {!sidebarCollapsed && criticalLotesCount > 0 && (
               <span 
                 className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-xs shrink-0"
                 style={{ backgroundColor: '#A0522D' }}
@@ -2016,8 +2012,8 @@ export default function App() {
           <button
             id="nav-tab-generar-lote"
             onClick={() => navigateTo('generar-lote')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-extrabold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'generar-lote'
                 ? 'bg-amber-400 text-slate-950 font-black shadow-[0_0_16px_rgba(251,191,36,0.8)] ring-2 ring-amber-300'
@@ -2025,7 +2021,7 @@ export default function App() {
             }`}
             title="Alta rápida individual o múltiple de lotes en Precarga"
           >
-            <PackagePlus className="w-4 h-4 shrink-0" />
+            <PackagePlus className="w-5 h-5 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Generar Lote</span>}
           </button>
           
@@ -2033,8 +2029,8 @@ export default function App() {
           <button
             id="nav-tab-despachos"
             onClick={() => navigateTo('despachos')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'despachos'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
@@ -2042,7 +2038,7 @@ export default function App() {
             }`}
             title="Despachos y Órdenes de Carga"
           >
-            <ClipboardCheck className="w-4 h-4 shrink-0" />
+            <ClipboardCheck className="w-5 h-5 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Despachos</span>}
           </button>
 
@@ -2050,8 +2046,8 @@ export default function App() {
           <button
             id="nav-tab-historial-salidas"
             onClick={() => navigateTo('salidas-registradas')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'salidas-registradas'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
@@ -2059,25 +2055,23 @@ export default function App() {
             }`}
             title="Historial de Salidas Registradas"
           >
-            <History className="w-4 h-4 shrink-0" />
+            <History className="w-5 h-5 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Historial Salidas</span>}
           </button>
 
           {/* Separador de Sección: Datos & Sistema */}
-          {!sidebarCollapsed ? (
-            <div className="pt-3 pb-1 px-2 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60">
-              Datos & Sistema
-            </div>
-          ) : (
-            <div className="my-1 border-t border-[#254731]/60" />
-          )}
+          <div className={`pt-3 pb-1 text-[9px] font-mono font-bold uppercase tracking-wider text-emerald-300/70 border-t border-[#254731]/60 ${
+            sidebarCollapsed ? 'text-center' : 'px-2'
+          }`}>
+            {!sidebarCollapsed ? 'Datos & Sistema' : '•••'}
+          </div>
 
           {/* Tab 10: Data Bases (Choferes y Bolsones) */}
           <button
             id="nav-tab-choferes"
             onClick={() => navigateTo('choferes')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'choferes'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
@@ -2085,7 +2079,7 @@ export default function App() {
             }`}
             title="Bases de Datos: Choferes, Camiones y Bolsones"
           >
-            <Database className="w-4 h-4 shrink-0 text-[#C9922E]" />
+            <Database className="w-5 h-5 shrink-0 text-[#C9922E]" />
             {!sidebarCollapsed && <span className="truncate">Data Bases</span>}
           </button>
 
@@ -2093,8 +2087,8 @@ export default function App() {
           <button
             id="nav-tab-importar"
             onClick={() => navigateTo('importar')}
-            className={`w-full group relative flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-              sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+            className={`w-full group relative flex items-center rounded-xl text-xs font-semibold font-sans uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+              sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
             } ${
               activeView === 'importar'
                 ? 'bg-[#F6EFDC] text-[#00603C] shadow-sm font-bold ring-1.5 ring-[#C9922E]/60'
@@ -2102,7 +2096,7 @@ export default function App() {
             }`}
             title="Importar Stock desde Planilla Excel (Ctrl+I)"
           >
-            <Upload className="w-4 h-4 shrink-0" />
+            <Upload className="w-5 h-5 shrink-0" />
             {!sidebarCollapsed && <span className="truncate">Importar Stock</span>}
           </button>
 
@@ -2128,15 +2122,10 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="pt-2 pb-1 border-t border-[#254731]/60 flex flex-col items-center">
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(false)}
-                className="p-1.5 rounded-lg bg-black/25 hover:bg-black/40 border border-emerald-500/20 text-[#C9922E] text-[10px] font-mono font-bold transition cursor-pointer"
-                title={`Campaña Activa: ${activeCampaniaId} (Clic para expandir selector)`}
-              >
-                {activeCampaniaId === 'TODAS' ? 'TOD' : activeCampaniaId}
-              </button>
+            <div className="pt-2 pb-1 border-t border-[#254731]/60 flex justify-center" title={`Campaña Activa: ${activeCampaniaId}`}>
+              <div className="px-2 py-1 rounded bg-black/30 border border-emerald-500/30 text-[9px] font-mono font-bold text-emerald-300">
+                {activeCampaniaId.replace('20', '')}
+              </div>
             </div>
           )}
 
@@ -2161,30 +2150,26 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="pt-2 flex justify-center">
-              <div
-                className="w-8 h-8 rounded-full bg-emerald-700 border border-[#C9922E] flex items-center justify-center text-white font-bold text-xs shadow-xs cursor-pointer"
-                title={`${currentUser?.nombre || 'Operario'} (${isLoggedIn ? (currentUser?.rol || 'Jefe de Planta') : 'Planta Móvil'})`}
-                onClick={() => setSidebarCollapsed(false)}
-              >
+            <div className="pt-2 flex justify-center" title={`${currentUser?.nombre || 'Operario'} (${currentUser?.rol || 'Planta'})`}>
+              <div className="w-8 h-8 rounded-full bg-emerald-700 border border-[#C9922E] flex items-center justify-center text-white font-bold text-xs shadow-xs">
                 {currentUser?.nombre ? currentUser.nombre.charAt(0).toUpperCase() : 'U'}
               </div>
             </div>
           )}
 
-          {/* Punto Integrado 3: Salida (reemplazando Cerrar Sesión) */}
+          {/* Punto Integrado 3: Salida */}
           <div className="pt-2 pb-1">
             {isLoggedIn ? (
               <button
                 id="sidebar-btn-salida"
                 type="button"
                 onClick={handleLogout}
-                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-rose-200 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 transition-all cursor-pointer shadow-xs ${
-                  sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+                className={`w-full flex items-center rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-rose-200 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 transition-all cursor-pointer shadow-xs ${
+                  sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
                 }`}
                 title="Salida del sistema"
               >
-                <LogOut className="w-4 h-4 shrink-0 text-rose-400" />
+                <LogOut className="w-5 h-5 shrink-0 text-rose-400" />
                 {!sidebarCollapsed && <span className="truncate">Salida</span>}
               </button>
             ) : (
@@ -2192,12 +2177,12 @@ export default function App() {
                 id="sidebar-btn-salida"
                 type="button"
                 onClick={() => setEnteredPlantaMovil(false)}
-                className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-amber-200 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 transition-all cursor-pointer shadow-xs ${
-                  sidebarCollapsed ? 'justify-center px-2' : 'px-3'
+                className={`w-full flex items-center rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-amber-200 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/40 transition-all cursor-pointer shadow-xs ${
+                  sidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
                 }`}
                 title="Salida al Acceso Principal"
               >
-                <LogOut className="w-4 h-4 shrink-0 text-amber-400" />
+                <LogOut className="w-5 h-5 shrink-0 text-amber-400" />
                 {!sidebarCollapsed && <span className="truncate">Salida</span>}
               </button>
             )}
@@ -2206,17 +2191,13 @@ export default function App() {
         </div>
 
         {/* Pie del Sidebar */}
-        <div className="p-3 border-t border-[#254731] bg-black/10 text-center">
-          {!sidebarCollapsed ? (
+        {!sidebarCollapsed && (
+          <div className="p-3 border-t border-[#254731] bg-black/10 text-center">
             <div className="text-[10px] text-emerald-200/80 font-sans tracking-wide">
               Agro Abacus · La Barrancosa
             </div>
-          ) : (
-            <div className="text-[9px] font-mono text-emerald-300 font-bold">
-              AA
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </aside>
 
       {/* 2.b MENÚ DESPLEGABLE PARA MÓVILES (MOBILE DRAWER) */}
@@ -2323,12 +2304,22 @@ export default function App() {
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition ${
                   activeView === 'ingreso-silos'
-                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold'
+                    ? 'bg-[#F6EFDC] text-[#00603C] font-bold shadow-xs'
                     : 'text-white hover:bg-white/10'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Warehouse className="w-4 h-4 text-[#C9922E]" />
+                  <div className="relative inline-flex items-center justify-center shrink-0">
+                    <SiloIcon size={24} color={activeView === 'ingreso-silos' ? '#00603C' : '#C9922E'} className="silo-icon-institucional shrink-0" />
+                    <span
+                      title={isFirebaseConnected && isOnline ? 'Sincronizado con Firebase' : 'Sin conexión con Firebase'}
+                      className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white shadow-xs transition-all duration-300 ${
+                        isFirebaseConnected && isOnline
+                          ? 'bg-emerald-500 sync-dot-pulse-green'
+                          : 'bg-red-500 sync-dot-pulse-red'
+                      }`}
+                    />
+                  </div>
                   <span>Ingreso a Silos</span>
                 </div>
                 {tieneAlertaSilo95 && (
@@ -2522,11 +2513,9 @@ export default function App() {
       )}
 
       {/* 3. ÁREA DE CONTENIDO PRINCIPAL */}
-      <main
-        className={`flex-grow pt-20 pb-16 px-3 sm:px-4 md:px-6 w-full relative z-10 transition-all duration-300 print:pt-2 print:pb-2 print:px-0 ${
-          sidebarCollapsed ? 'md:pl-24' : 'md:pl-68'
-        }`}
-      >
+      <main className={`flex-grow pt-20 pb-16 px-3 sm:px-4 md:px-6 w-full relative z-10 print:pt-2 print:pb-2 print:px-0 transition-all duration-300 ${
+        sidebarCollapsed ? 'md:pl-24' : 'md:pl-68'
+      }`}>
         <div className="max-w-7xl mx-auto">
         
         {/* RUTA DE COMPONENTES SEGÚN VISTA ACTIVA */}
@@ -2616,6 +2605,8 @@ export default function App() {
             currentUser={currentUser}
             choferes={choferes}
             bolsones={bolsones}
+            silosEstadoManual={silosEstadoManual}
+            onUpdateSiloEstadoManual={handleUpdateSiloEstadoManual}
             onRegistrarIngreso={handleRegistrarIngresoSilo}
             onRegistrarIngresosMultiple={handleRegistrarIngresosMultipleSilo}
             onRegistrarSalidaManual={handleRegistrarSalidaManualSilo}
@@ -2730,6 +2721,8 @@ export default function App() {
             especies={especies}
             currentUser={currentUser}
             ordenesCarga={filteredOrdenesByCampania}
+            silosEstadoManual={silosEstadoManual}
+            onUpdateSiloEstadoManual={handleUpdateSiloEstadoManual}
             onRegistrarIngresoSilo={handleRegistrarIngresoSilo}
             onUpdateLoteEstado={(lote, nuevoEstado) => {
               const updatedLote = { ...lote, estadoRegistro: nuevoEstado };

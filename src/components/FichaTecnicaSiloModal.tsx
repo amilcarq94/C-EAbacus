@@ -21,8 +21,17 @@ export const FichaTecnicaSiloModal: React.FC<FichaTecnicaSiloModalProps> = ({
 
   if (!ficha) return null;
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    try {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      window.print();
+    } catch {
+      window.print();
+    }
   };
 
   const handleDownloadPng = async () => {

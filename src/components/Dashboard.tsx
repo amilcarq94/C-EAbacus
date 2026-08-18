@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { Lote, SalidaRegistrada, SiloId, MovimientoSilo, CAPACIDAD_MAX_SILO } from '../types';
+import { Lote, SalidaRegistrada, SiloId, MovimientoSilo, CAPACIDAD_MAX_SILO, SILOS_PHYSICAL_ORDER } from '../types';
+import { SiloIcon } from './Logo';
 import { formatNumberArg } from '../utils/formatters';
 import { getPreviousCampaniaId, getCampaniaIdFromDate } from '../utils/campanias';
 import {
@@ -884,7 +885,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {(['Silo 1', 'Silo 2', 'Silo 3', 'Silo 4', 'Silo 5', 'Silo 6'] as SiloId[]).map((siloId) => {
+          {SILOS_PHYSICAL_ORDER.map((siloId) => {
             const stockSiloKg = activeSiloStocks[siloId] || 0;
             let ingKg = 0;
             let egKg = 0;
@@ -931,9 +932,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
               >
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <span className="font-mono text-xs font-black uppercase tracking-wider text-gray-800">
-                      {siloId}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <SiloIcon size={16} color={stockSiloKg > 0 ? '#00603C' : '#6b7280'} className="shrink-0" />
+                      <span className="font-mono text-xs font-black uppercase tracking-wider text-gray-800">
+                        {siloId}
+                      </span>
+                    </div>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       isFullAlert 
                         ? 'bg-red-100 text-red-700 animate-pulse' 

@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "Lote": {
+      "title": "Lote",
+      "description": "Lote de semillas procesadas o en proceso en planta",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "especie": { "type": "string" },
+        "variedad": { "type": "string" },
+        "numeroLote": { "type": "string" },
+        "cliente": { "type": "string" },
+        "tipoLote": { "type": "string" },
+        "categoria": { "type": "string" },
+        "stockBolsas": { "type": "number" },
+        "kgPorBolsa": { "type": "number" },
+        "stockKgTotal": { "type": "number" },
+        "estado": { "type": "string" },
+        "fechaIngreso": { "type": "string" }
+      },
+      "required": ["id", "especie", "cliente", "numeroLote"]
+    },
+    "SilosEstado": {
+      "title": "SilosEstado",
+      "description": "Estado operativo manual de los 6 silos físicos (OCUPADO, VACIO_SUCIO, VACIO_LIMPIO)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "estados": { "type": "object" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "MovimientoSilo": {
+      "title": "MovimientoSilo",
+      "description": "Registro de ingreso o egreso de stock en silos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "siloId": { "type": "string" },
+        "fecha": { "type": "string" },
+        "tipo": { "type": "string" },
+        "kg": { "type": "number" }
+      },
+      "required": ["id", "siloId", "fecha", "tipo", "kg"]
+    }
+  },
+  "firestore": {
+    "/lotes/{loteId}": {
+      "schema": "Lote",
+      "description": "Colección de lotes de granos"
+    },
+    "/silos_estado/{docId}": {
+      "schema": "SilosEstado",
+      "description": "Estado manual de silos (Ocupado, Vacío Sucio, Vacío Limpio)"
+    },
+    "/movimientos_silo/{movId}": {
+      "schema": "MovimientoSilo",
+      "description": "Movimientos de ingreso y egreso de silos"
+    }
+  }
+}

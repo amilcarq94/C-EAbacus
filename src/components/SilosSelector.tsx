@@ -6,7 +6,8 @@
 import React from 'react';
 import { SiloId, SiloExtraccion, MovimientoSilo } from '../types';
 import { validateSiloLoteMatch } from '../utils/siloValidation';
-import { Plus, Trash2, AlertTriangle, CheckCircle2, Warehouse } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { SiloIcon } from './Logo';
 
 export const SILOS_DISPONIBLES: SiloId[] = [
   'Silo 1',
@@ -95,8 +96,8 @@ export const SilosSelector: React.FC<SilosSelectorProps> = ({
     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
         <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-            <Warehouse className="w-4 h-4 text-emerald-600" />
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <SiloIcon size={24} color="#00603C" className="silo-icon-institucional shrink-0" />
             {label}
           </h4>
           <p className="text-[11px] text-slate-500 mt-0.5">{description}</p>

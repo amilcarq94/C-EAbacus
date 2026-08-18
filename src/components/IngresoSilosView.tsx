@@ -5,13 +5,14 @@
 
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual, BolsonCampo } from '../types';
+import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual, BolsonCampo, SILOS_PHYSICAL_ORDER, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { findExistingChofer, mergeChoferData } from '../utils/choferes';
 import { getSiloActiveData } from '../utils/siloValidation';
 import { formatKg } from '../utils/formatters';
+import { SiloIcon, LogoSiloLoose } from './Logo';
 import { Warehouse, Plus, RotateCcw, History, FileText, Calendar, ArrowUpRight, ArrowDownRight, AlertTriangle, User, CheckCircle2, Search, Filter, ShieldAlert, MapPin, Droplets, Eye, Download, Printer, X, FileSpreadsheet, Lock, KeyRound, ShieldCheck, BarChart3, Trash2, QrCode, Truck, Upload, Edit, CreditCard, Building2, Scale, Layers, Grid3X3 } from 'lucide-react';
 import { ClienteSelect } from './ClienteSelect';
 import { CargaMultipleCamionesForm } from './CargaMultipleCamionesForm';
@@ -96,6 +97,8 @@ interface IngresoSilosViewProps {
   currentUser: { nombre: string; rol: string };
   choferes?: Chofer[];
   bolsones?: BolsonCampo[];
+  silosEstadoManual?: SilosEstadoMap;
+  onUpdateSiloEstadoManual?: (siloId: SiloId, estado: EstadoSiloManual) => void;
   onRegistrarIngreso: (movimiento: MovimientoSilo) => void;
   onRegistrarIngresosMultiple?: (movimientos: MovimientoSilo[]) => void;
   onRegistrarSalidaManual?: (movimiento: MovimientoSilo) => void;
@@ -114,6 +117,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   currentUser,
   choferes = [],
   bolsones = [],
+  silosEstadoManual: silosEstadoManualProp,
+  onUpdateSiloEstadoManual,
   onRegistrarIngreso,
   onRegistrarIngresosMultiple,
   onRegistrarSalidaManual,
@@ -126,6 +131,34 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 }) => {
   // Silo activo seleccionado (Silo 1 a Silo 6)
   const [activeSilo, setActiveSilo] = useState<SiloId>('Silo 1');
+
+  // Estado manual de Silos con 3 opciones: Ocupado (Amarillo), Vacío Sucio (Rojo), Vacío Limpio (Verde)
+  const [localSilosEstadoManual, setLocalSilosEstadoManual] = useState<SilosEstadoMap>(() => {
+    try {
+      const saved = localStorage.getItem('agro_abacus_silos_estado_manual');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return SILOS_ESTADO_DEFAULT;
+  });
+
+  const silosEstadoManual = silosEstadoManualProp || localSilosEstadoManual;
+
+  const handleSetEstadoManual = (siloId: SiloId, estado: EstadoSiloManual) => {
+    if (onUpdateSiloEstadoManual) {
+      onUpdateSiloEstadoManual(siloId, estado);
+    }
+    setLocalSilosEstadoManual((prev) => {
+      const next = { ...prev, [siloId]: estado };
+      try {
+        localStorage.setItem('agro_abacus_silos_estado_manual', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
 
   // Modo de ingreso: Individual (1 camión) o Carga Múltiple de Camiones
   const [modoIngreso, setModoIngreso] = useState<'INDIVIDUAL' | 'MULTIPLE'>('INDIVIDUAL');
@@ -189,7 +222,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     
     const stockActual = getStockSilo(selectedSilo);
     if (isDescontaminacion) {
-      setMotivoSalidaManual('Descontaminación varietal');
+      setMotivoSalidaManual('Descarte');
       setDescontaminacionVarietal(true);
       setKgSalidaManual(stockActual > 0 ? stockActual : '');
     } else {
@@ -242,7 +275,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         'Sector': m.bolsonOrigenSector || m.sector || '-',
         'Humedad': m.humedad !== undefined ? `${m.humedad}%` : '-',
         'Tipo Movimiento': m.tipo === 'INGRESO' ? 'Ingreso' : m.tipo === 'EGRESO_MANUAL' ? `Salida Manual (${m.motivoManual || 'Manual'})` : m.tipo === 'EGRESO_LOTE' ? `Salida por Lote (${m.loteNro || ''})` : 'Egreso',
-        'Descontaminación Varietal': m.descontaminacionVarietal ? 'Sí' : 'No',
+        'Descarte / Limpieza': m.descontaminacionVarietal || m.motivoManual === 'Descarte' || m.motivoManual === 'Descontaminación varietal' ? 'Sí' : 'No',
         'Observaciones': m.observaciones || m.motivoZero || m.motivoAjuste || '-'
       };
     });
@@ -907,7 +940,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
 
     const idMov = `SALIDA-MANUAL-${siloSalidaManual.replace(/\s+/g, '')}-${Date.now()}`;
     const fichaActual = getSiloFichaData(siloSalidaManual);
-    const isDescontam = descontaminacionVarietal || motivoSalidaManual === 'Descontaminación varietal';
+    const isDescontam = descontaminacionVarietal || motivoSalidaManual === 'Descarte' || motivoSalidaManual === 'Descontaminación varietal';
 
     const movSalida: MovimientoSilo = {
       id: idMov,
@@ -933,7 +966,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
     }
 
     setShowModalSalidaManual(false);
-    setExportNoticeMsg(`Salida manual de ${Number(kgSalidaManual).toLocaleString('es-AR')} kg en ${siloSalidaManual} (${isDescontam ? 'Descontaminación Varietal' : motivoSalidaManual}) registrada correctamente.`);
+    setExportNoticeMsg(`Salida manual de ${Number(kgSalidaManual).toLocaleString('es-AR')} kg en ${siloSalidaManual} (${isDescontam ? 'Descarte' : motivoSalidaManual}) registrada correctamente.`);
     setTimeout(() => setExportNoticeMsg(''), 4000);
   };
 
@@ -987,8 +1020,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-900 text-[10px] font-black uppercase tracking-wider rounded-md border border-emerald-200 flex items-center gap-1">
-              <Warehouse className="w-3.5 h-3.5 text-emerald-700" /> Control de Acopio y Silos
+            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-900 text-[10px] font-black uppercase tracking-wider rounded-md border border-emerald-200 flex items-center gap-1.5">
+              <SiloIcon size={24} color="#00603C" className="silo-icon-institucional shrink-0" /> Control de Acopio y Silos
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold font-serif text-slate-900 flex items-center gap-2">
@@ -1000,340 +1033,62 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         </div>
       </div>
 
-      {/* DASHBOARD DE STOCK DE SILOS */}
-      {(() => {
-        const capacidadTotalPlanta = SILOS_DISPONIBLES.length * CAPACIDAD_MAX_SILO; // 1.080.000 kg
-        const stockTotalOcupado = SILOS_DISPONIBLES.reduce((acc, id) => acc + getStockSilo(id), 0);
-        const capacidadTotalLibre = capacidadTotalPlanta - stockTotalOcupado;
-        const pctOcupacionTotal = (stockTotalOcupado / capacidadTotalPlanta) * 100;
-
-        const silosLlenos = SILOS_DISPONIBLES.filter(id => getStockSilo(id) >= CAPACIDAD_MAX_SILO).length;
-        const silosCriticos = SILOS_DISPONIBLES.filter(id => {
-          const s = getStockSilo(id);
-          return s >= CAPACIDAD_MAX_SILO * 0.95 && s < CAPACIDAD_MAX_SILO;
-        }).length;
-        const silosAlerta = SILOS_DISPONIBLES.filter(id => {
-          const s = getStockSilo(id);
-          return s >= UMBRAL_ALERTA_SILO && s < CAPACIDAD_MAX_SILO * 0.95;
-        }).length;
-        const silosOperativos = SILOS_DISPONIBLES.length - silosLlenos - silosCriticos - silosAlerta;
-
-        // Distribución por Especie
-        const stockPorEspecie: Record<string, number> = {};
-        SILOS_DISPONIBLES.forEach(id => {
-          const st = getStockSilo(id);
-          if (st > 0) {
-            const ultIngreso = movimientosSilo
-              .filter(m => m.siloId === id && m.tipo === 'INGRESO' && m.especie)
-              .sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-            const esp = ultIngreso?.especie || 'Sin Clasificar';
-            stockPorEspecie[esp] = (stockPorEspecie[esp] || 0) + st;
-          }
-        });
-
-        return (
-          <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 rounded-2xl p-5 md:p-6 text-white border border-slate-800 shadow-xl space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-400">
-                  <Warehouse className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                    Métricas Globales de Acopio
-                  </div>
-                  <h2 className="text-xl md:text-2xl font-black font-serif text-white">
-                    Dashboard de Stock de Silos
-                  </h2>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300 font-medium">Capacidad por Silo:</span>
-                <span className="px-2.5 py-1 bg-emerald-950 border border-emerald-500/50 text-emerald-300 rounded-lg text-xs font-mono font-bold">
-                  180.000 kg (180 Tn)
-                </span>
-              </div>
-            </div>
-
-            {/* KPIs Principales */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {/* Ocupación Total */}
-              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Stock Total en Silos
-                </span>
-                <div className="mt-2">
-                  <div className="text-2xl md:text-3xl font-black font-mono text-emerald-400">
-                    {stockTotalOcupado.toLocaleString('es-AR')} <span className="text-xs font-sans text-slate-300">kg</span>
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    {(stockTotalOcupado / 1000).toFixed(1)} Tn acumuladas
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <div className="flex justify-between text-[10px] font-bold text-slate-300 mb-1">
-                    <span>Ocupación Planta</span>
-                    <span>{pctOcupacionTotal.toFixed(1)}%</span>
-                  </div>
-                  <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        pctOcupacionTotal >= 95 ? 'bg-red-500' : pctOcupacionTotal >= 80 ? 'bg-amber-400' : 'bg-emerald-400'
-                      }`}
-                      style={{ width: `${Math.min(100, pctOcupacionTotal)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Capacidad Libre */}
-              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Capacidad Libre Total
-                </span>
-                <div className="mt-2">
-                  <div className="text-2xl md:text-3xl font-black font-mono text-blue-300">
-                    {capacidadTotalLibre.toLocaleString('es-AR')} <span className="text-xs font-sans text-slate-300">kg</span>
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    {(capacidadTotalLibre / 1000).toFixed(1)} Tn disponibles
-                  </div>
-                </div>
-                <div className="mt-3 text-[11px] text-slate-400">
-                  De un total instalada de <strong className="text-white">1.080 Tn</strong> (6 silos)
-                </div>
-              </div>
-
-              {/* Estado de Silos */}
-              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Estado de Capacidad Silos
-                </span>
-                <div className="mt-2 space-y-1.5 text-xs font-bold">
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span> Operativos (&lt;150 Tn)
-                    </span>
-                    <span className="font-mono text-white">{silosOperativos} silos</span>
-                  </div>
-                  <div className="flex items-center justify-between text-amber-300">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-400"></span> Alerta (&ge;150 Tn)
-                    </span>
-                    <span className="font-mono">{silosAlerta} silos</span>
-                  </div>
-                  <div className="flex items-center justify-between text-red-300">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-red-500"></span> Críticos / Llenos (&ge;171 Tn)
-                    </span>
-                    <span className="font-mono">{silosCriticos + silosLlenos} silos</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Distribución por Especie */}
-              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Stock por Especie en Silos
-                </span>
-                <div className="mt-2 space-y-1">
-                  {Object.keys(stockPorEspecie).length === 0 ? (
-                    <span className="text-xs text-slate-400 italic">Sin cereal acumulado en silos</span>
-                  ) : (
-                    Object.entries(stockPorEspecie).map(([esp, kg]) => (
-                      <div key={esp} className="flex items-center justify-between text-xs">
-                        <span className="font-medium text-slate-200">{esp}</span>
-                        <span className="font-mono font-bold text-emerald-300">
-                          {(kg / 1000).toFixed(1)} Tn
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-2">
-                  Cálculo basado en últimos ingresos activos
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* GRÁFICO DE BARRAS DE CAPACIDAD Y % DE LLENADO DE SILOS (RECHARTS) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
-              <BarChart3 className="w-5 h-5 text-emerald-700" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm sm:text-base text-slate-900 font-serif flex items-center gap-2">
-                Porcentaje de Llenado y Ocupación por Silo
-              </h3>
-              <p className="text-xs text-slate-500">
-                Comparativa visual de stock actual frente a la capacidad máxima de {CAPACIDAD_MAX_SILO / 1000} Tn por silo
-              </p>
-            </div>
+      {/* Selectores de Pestañas / Secciones por Silo (Disposición Física Real: Fila 1: Silo 4 | Silo 3, Fila 2: Silo 5 | Silo 2, Fila 3: Silo 6 | Silo 1) */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <SiloIcon size={24} color="#00603C" className="silo-icon-institucional shrink-0" />
+            <span className="text-sm">Disposición Física de Silos (Planta La Barrancosa)</span>
           </div>
 
-          {/* Selector de Métrica del Gráfico */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold shrink-0 self-start sm:self-auto">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setChartMetric('PORCENTAJE')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                chartMetric === 'PORCENTAJE'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
+              onClick={() => setShowGrillaSeisSilos(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#005E38] hover:bg-[#004D2E] text-white text-xs font-bold rounded-xl shadow-2xs transition active:scale-95 cursor-pointer self-start sm:self-auto"
+              title="Imprimir las 6 Fichas Técnicas de Silo en una única hoja A4 (Grilla 2x3)"
             >
-              % Llenado
-            </button>
-            <button
-              type="button"
-              onClick={() => setChartMetric('TONELADAS')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                chartMetric === 'TONELADAS'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Stock (Tn)
+              <Grid3X3 className="w-3.5 h-3.5" />
+              <span>Imprimir 6 Silos (Hoja A4)</span>
             </button>
           </div>
         </div>
 
-        {/* Leyenda e Indicadores de Umbral */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 px-1 pt-1">
-          <div className="flex items-center gap-4 flex-wrap text-[11px] font-bold">
-            <span className="flex items-center gap-1.5 text-emerald-700">
-              <span className="w-3 h-3 rounded-md bg-emerald-500 inline-block"></span>
-              Operativo (&lt;83.3%)
-            </span>
-            <span className="flex items-center gap-1.5 text-amber-700">
-              <span className="w-3 h-3 rounded-md bg-amber-500 inline-block"></span>
-              Alerta (&ge;150 Tn / 83.3%)
-            </span>
-            <span className="flex items-center gap-1.5 text-red-700">
-              <span className="w-3 h-3 rounded-md bg-red-600 inline-block"></span>
-              Crítico / Lleno (&ge;180 Tn / 100%)
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-500">
-              <span className="w-3 h-3 rounded-md bg-slate-400 inline-block"></span>
-              Vacío (0 Tn)
-            </span>
-          </div>
-
-          <span className="text-[11px] text-slate-400 italic">
-            Haga clic en una barra para abrir y gestionar el silo
-          </span>
-        </div>
-
-        {/* Recharts BarChart Container */}
-        <div className="h-72 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartSilosData}
-              margin={{ top: 22, right: 20, left: -10, bottom: 5 }}
-              onClick={(state: any) => {
-                if (state && state.activePayload && state.activePayload.length) {
-                  const siloClicked = state.activePayload[0].payload.siloId as SiloId;
-                  openSiloDrawer(siloClicked);
-                }
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis
-                dataKey="siloId"
-                tick={{ fill: '#334155', fontSize: 12, fontWeight: 700 }}
-                axisLine={{ stroke: '#cbd5e1' }}
-                tickLine={false}
-              />
-              <YAxis
-                domain={chartMetric === 'PORCENTAJE' ? [0, 100] : [0, 200]}
-                unit={chartMetric === 'PORCENTAJE' ? '%' : ' Tn'}
-                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
-                axisLine={{ stroke: '#cbd5e1' }}
-                tickLine={false}
-              />
-              <Tooltip content={<CustomTooltipSilosChart />} />
-
-              {/* Línea de Referencia Capacidad Máxima (100% / 180 Tn) */}
-              <ReferenceLine
-                y={chartMetric === 'PORCENTAJE' ? 100 : 180}
-                stroke="#ef4444"
-                strokeDasharray="4 4"
-                strokeWidth={2}
-                label={{
-                  value: chartMetric === 'PORCENTAJE' ? '100% Capacidad Máxima' : 'Cap. Máx: 180 Tn',
-                  fill: '#dc2626',
-                  fontSize: 10,
-                  fontWeight: 800,
-                  position: 'top'
-                }}
-              />
-
-              {/* Línea de Referencia Umbral Alerta (83.3% / 150 Tn) */}
-              <ReferenceLine
-                y={chartMetric === 'PORCENTAJE' ? 83.3 : 150}
-                stroke="#f59e0b"
-                strokeDasharray="3 3"
-                strokeWidth={1.5}
-                label={{
-                  value: chartMetric === 'PORCENTAJE' ? 'Umbral Alerta: 83.3%' : 'Alerta: 150 Tn',
-                  fill: '#d97706',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  position: 'insideTopRight'
-                }}
-              />
-
-              <Bar
-                dataKey={chartMetric === 'PORCENTAJE' ? 'porcentaje' : 'stockTn'}
-                radius={[8, 8, 0, 0]}
-                className="cursor-pointer transition-all duration-200 hover:opacity-85"
-              >
-                {chartSilosData.map((entry) => (
-                  <Cell key={entry.siloId} fill={entry.color} />
-                ))}
-                <LabelList
-                  dataKey={chartMetric === 'PORCENTAJE' ? 'porcentaje' : 'stockTn'}
-                  position="top"
-                  formatter={(val: number) => (chartMetric === 'PORCENTAJE' ? `${val}%` : `${val} Tn`)}
-                  style={{ fill: '#0f172a', fontSize: 11, fontWeight: 800 }}
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Selectores de Pestañas / Secciones por Silo (Silo 1 a Silo 6) */}
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
-          <div className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <Warehouse className="w-4 h-4 text-emerald-700" />
-            <span>Seleccionar Silo (Visualización de Estado y Operaciones)</span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowGrillaSeisSilos(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#005E38] hover:bg-[#004D2E] text-white text-xs font-bold rounded-xl shadow-2xs transition active:scale-95 cursor-pointer self-start sm:self-auto"
-            title="Imprimir las 6 Fichas Técnicas de Silo en una única hoja A4 (Grilla 2x3)"
-          >
-            <Grid3X3 className="w-3.5 h-3.5" />
-            <span>Imprimir 6 Silos (Hoja A4)</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {SILOS_DISPONIBLES.map((siloId) => {
+        {/* Grilla física 2x3 de silos con marcos circulares */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto py-2">
+          {SILOS_PHYSICAL_ORDER.map((siloId) => {
             const stock = getStockSilo(siloId);
             const isSelected = activeSilo === siloId;
             const pct = Math.min(100, (stock / CAPACIDAD_MAX_SILO) * 100);
-            const isFull = stock >= CAPACIDAD_MAX_SILO;
-            const isNearLimit = stock >= UMBRAL_ALERTA_SILO && !isFull;
+            const estadoManual = silosEstadoManual[siloId] || 'VACIO_LIMPIO';
+
+            // Configuración de la Luz según el Check Manual
+            // 1. Silo Ocupado: Luz Amarilla
+            // 2. Silo Vacío Sucio: Luz Roja
+            // 3. Silo Vacío Limpio: Luz Verde
+            const luzConfig = estadoManual === 'OCUPADO'
+              ? {
+                  color: 'bg-amber-400',
+                  glow: 'shadow-[0_0_16px_rgba(251,191,36,0.9)] ring-2 ring-amber-300',
+                  border: 'border-amber-500',
+                  texto: 'Silo Ocupado',
+                  pillClass: 'bg-amber-100 text-amber-900 border-amber-300'
+                }
+              : estadoManual === 'VACIO_SUCIO'
+              ? {
+                  color: 'bg-red-500',
+                  glow: 'shadow-[0_0_16px_rgba(239,68,68,0.9)] ring-2 ring-red-400 animate-pulse',
+                  border: 'border-red-600',
+                  texto: 'Silo Vacío Sucio',
+                  pillClass: 'bg-red-100 text-red-900 border-red-300'
+                }
+              : {
+                  color: 'bg-emerald-500',
+                  glow: 'shadow-[0_0_16px_rgba(16,185,129,0.9)] ring-2 ring-emerald-300',
+                  border: 'border-emerald-600',
+                  texto: 'Silo Vacío Limpio',
+                  pillClass: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                };
 
             return (
               <div
@@ -1352,143 +1107,149 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                     setFormSuccess('');
                   }
                 }}
-                className={`p-4 rounded-2xl border text-left transition relative overflow-hidden flex flex-col justify-between cursor-pointer ${
+                className={`w-full max-w-[330px] aspect-square rounded-full border-4 text-center transition-all duration-300 relative overflow-hidden flex flex-col items-center justify-between p-4 sm:p-5 cursor-pointer mx-auto ${
                   isSelected
-                    ? 'bg-slate-900 border-slate-900 text-white shadow-xl ring-2 ring-emerald-500 scale-[1.02]'
-                    : isFull
-                    ? 'bg-red-50/70 border-red-300 text-slate-900 hover:border-red-400'
-                    : isNearLimit
-                    ? 'bg-amber-50/70 border-amber-300 text-slate-900 hover:border-amber-400'
-                    : 'bg-white border-slate-200 hover:border-slate-400 text-slate-900 hover:shadow'
+                    ? 'bg-slate-900 border-[#00603C] text-white shadow-2xl ring-4 ring-emerald-400/50 scale-[1.02]'
+                    : 'bg-white border-slate-300 hover:border-[#00603C] text-slate-900 shadow-md hover:shadow-xl'
                 }`}
               >
-                {/* NOMBRE Y NÚMERO DE SILO GRANDE Y DESTACADO */}
-                <div className="flex items-center justify-between border-b border-slate-200/50 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-lg sm:text-2xl font-black font-serif tracking-tight ${
-                      isSelected ? 'text-emerald-400' : 'text-slate-900'
+                {/* 1. LUZ DE ESTADO Y ETIQUETA EN LA PARTE SUPERIOR */}
+                <div className="flex flex-col items-center gap-1 mt-1 z-10">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-4 h-4 rounded-full border-2 border-white ${luzConfig.color} ${luzConfig.glow} transition-all duration-300`}
+                      title={`${siloId}: ${luzConfig.texto}`}
+                    />
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${
+                      isSelected
+                        ? 'bg-slate-800 text-slate-200 border-slate-700'
+                        : luzConfig.pillClass
                     }`}>
-                      {siloId}
+                      {luzConfig.texto}
                     </span>
                   </div>
-                  <span
-                    className={`w-3.5 h-3.5 rounded-full shrink-0 border ${
-                      isFull
-                        ? 'bg-red-600 border-red-700 animate-ping'
-                        : isNearLimit
-                        ? 'bg-amber-500 border-amber-600 animate-pulse'
-                        : stock > 0
-                        ? 'bg-emerald-500 border-emerald-600'
-                        : 'bg-slate-300 border-slate-400'
-                    }`}
-                    title={
-                      isFull
-                        ? 'Silo Lleno (180.000 kg)'
-                        : isNearLimit
-                        ? 'Cerca del Límite (>= 150.000 kg)'
-                        : 'Stock Normal'
-                    }
-                  />
                 </div>
 
-                <div className="mt-3">
-                  <div className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
-                    isSelected ? 'text-white' : isFull ? 'text-red-700' : isNearLimit ? 'text-amber-800' : 'text-slate-900'
+                {/* 2. CENTRO: ÍCONO DEL SILO + NOMBRE + STOCK */}
+                <div className="flex flex-col items-center justify-center my-auto z-10">
+                  <div className="p-1.5 rounded-full bg-emerald-500/10 mb-1 flex items-center justify-center">
+                    <SiloIcon
+                      size={24}
+                      color="#00603C"
+                      className="silo-icon-institucional shrink-0"
+                    />
+                  </div>
+                  
+                  <h3 className={`text-xl sm:text-2xl font-black font-serif tracking-tight ${
+                    isSelected ? 'text-emerald-400' : 'text-slate-900'
+                  }`}>
+                    {siloId}
+                  </h3>
+
+                  <div className={`text-base sm:text-lg font-black font-mono tracking-tight mt-0.5 ${
+                    isSelected ? 'text-white' : 'text-slate-900'
                   }`}>
                     {stock.toLocaleString('es-AR')} <span className="text-xs font-normal opacity-80">kg</span>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs font-semibold mt-1">
+                  <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold mt-0.5">
                     <span className={isSelected ? 'text-slate-300' : 'text-slate-500'}>
                       {(stock / 1000).toFixed(1)} / 180 Tn
                     </span>
                     <span className={`font-mono font-bold ${
-                      isFull ? 'text-red-600' : isNearLimit ? 'text-amber-700' : isSelected ? 'text-emerald-300' : 'text-emerald-700'
+                      isSelected ? 'text-emerald-300' : 'text-emerald-700'
                     }`}>
                       {pct.toFixed(0)}%
                     </span>
                   </div>
+                </div>
 
-                  {/* Barra de Capacidad */}
-                  <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        isFull ? 'bg-red-600' : isNearLimit ? 'bg-amber-500' : 'bg-emerald-500'
+                {/* 3. PARTE INFERIOR: SELECTOR DE CHECK MANUAL (3 OPCIONES) */}
+                <div className="flex flex-col items-center gap-1.5 w-full mb-1 z-10">
+                  <div
+                    className={`flex items-center justify-center gap-1 p-1 rounded-full border shadow-inner ${
+                      isSelected ? 'bg-slate-800/90 border-slate-700' : 'bg-slate-100 border-slate-200'
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Opción 1: Silo Ocupado (Amarillo) */}
+                    <button
+                      type="button"
+                      title="Activar Silo Ocupado (Luz Amarilla)"
+                      onClick={() => handleSetEstadoManual(siloId, 'OCUPADO')}
+                      className={`px-2 py-1 rounded-full text-[9px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        estadoManual === 'OCUPADO'
+                          ? 'bg-amber-400 text-amber-950 font-black shadow-xs ring-1 ring-amber-500'
+                          : isSelected
+                          ? 'text-slate-300 hover:text-white hover:bg-slate-700'
+                          : 'text-slate-600 hover:bg-slate-200'
                       }`}
-                      style={{ width: `${pct}%` }}
-                    />
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-500 border border-amber-600 inline-block"></span>
+                      <span>Ocupado</span>
+                    </button>
+
+                    {/* Opción 2: Silo Vacío Sucio (Rojo) */}
+                    <button
+                      type="button"
+                      title="Activar Silo Vacío Sucio (Luz Roja)"
+                      onClick={() => handleSetEstadoManual(siloId, 'VACIO_SUCIO')}
+                      className={`px-2 py-1 rounded-full text-[9px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        estadoManual === 'VACIO_SUCIO'
+                          ? 'bg-red-500 text-white font-black shadow-xs ring-1 ring-red-600'
+                          : isSelected
+                          ? 'text-slate-300 hover:text-white hover:bg-slate-700'
+                          : 'text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-600 border border-white inline-block"></span>
+                      <span>V. Sucio</span>
+                    </button>
+
+                    {/* Opción 3: Silo Vacío Limpio (Verde) */}
+                    <button
+                      type="button"
+                      title="Activar Silo Vacío Limpio (Luz Verde)"
+                      onClick={() => handleSetEstadoManual(siloId, 'VACIO_LIMPIO')}
+                      className={`px-2 py-1 rounded-full text-[9px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                        estadoManual === 'VACIO_LIMPIO'
+                          ? 'bg-emerald-500 text-white font-black shadow-xs ring-1 ring-emerald-600'
+                          : isSelected
+                          ? 'text-slate-300 hover:text-white hover:bg-slate-700'
+                          : 'text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 border border-white inline-block"></span>
+                      <span>V. Limpio</span>
+                    </button>
                   </div>
 
-                  {/* Acciones Rápidas de Ficha y Panel Lateral */}
-                  <div className="mt-3 pt-2 border-t border-slate-200/40 flex items-center justify-between text-[10px] font-bold">
+                  {/* Acciones Rápidas (Historial / Ficha) */}
+                  <div className="flex items-center justify-center gap-3 text-[9px] font-bold">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         openSiloDrawer(siloId);
                       }}
-                      className={`flex items-center gap-1 hover:underline ${
-                        isSelected ? 'text-amber-300 font-extrabold' : 'text-amber-700 font-extrabold'
+                      className={`hover:underline flex items-center gap-0.5 ${
+                        isSelected ? 'text-amber-300' : 'text-amber-700'
                       }`}
-                      title="Ver Historial de Movimientos en Panel Lateral"
                     >
-                      <History className="w-3 h-3" /> Historial
+                      <History className="w-2.5 h-2.5" /> Historial
                     </button>
-
+                    <span className={isSelected ? 'text-slate-600' : 'text-slate-300'}>•</span>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         openFichaModal(siloId);
                       }}
-                      className={`flex items-center gap-1 hover:underline ${
+                      className={`hover:underline flex items-center gap-0.5 ${
                         isSelected ? 'text-emerald-300' : 'text-emerald-700'
                       }`}
-                      title="Ver Ficha Técnica"
                     >
-                      <Eye className="w-3 h-3" /> Ficha
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleExportFichaCSV(getSiloFichaData(siloId));
-                      }}
-                      className={`flex items-center gap-1 hover:underline ${
-                        isSelected ? 'text-slate-300' : 'text-slate-600'
-                      }`}
-                      title="Exportar CSV"
-                    >
-                      <Download className="w-3 h-3" /> CSV
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openModalSalidaManual(siloId);
-                      }}
-                      className={`flex items-center gap-1 hover:underline ${
-                        isSelected ? 'text-amber-200 font-black' : 'text-amber-800 font-extrabold'
-                      }`}
-                      title="Registrar Salida Manual de este silo"
-                    >
-                      <ArrowUpRight className="w-3 h-3 text-amber-600" /> Salida
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openModalLimpiezaVarietal(siloId);
-                      }}
-                      className={`flex items-center gap-1 hover:underline ${
-                        isSelected ? 'text-amber-300 font-black' : 'text-amber-900 font-black'
-                      }`}
-                      title="Ejecutar Limpieza Varietal de este silo"
-                    >
-                      <RotateCcw className="w-3 h-3 text-amber-600" /> Limpieza
+                      <Eye className="w-2.5 h-2.5" /> Ficha
                     </button>
                   </div>
                 </div>
@@ -1504,18 +1265,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         {/* Encabezado del Silo Seleccionado */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3.5">
-            <div className={`p-3.5 rounded-2xl border ${
-              currentSiloStock >= CAPACIDAD_MAX_SILO
-                ? 'bg-red-50 border-red-200 text-red-800'
-                : currentSiloStock >= UMBRAL_ALERTA_SILO
-                ? 'bg-amber-50 border-amber-200 text-amber-800'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}>
-              <Warehouse className="w-8 h-8" />
+            <div className="p-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 flex items-center justify-center shrink-0">
+              <SiloIcon size={24} color="#00603C" className="silo-icon-institucional shrink-0" />
             </div>
             <div>
               <div className="text-xs font-black uppercase tracking-widest text-emerald-800">
-                Detalle y Operaciones del Silo Seleccionado · Capacidad Máx: 180.000 kg (180 Tn)
+                Detalle y Operaciones de silos
               </div>
               <h2 className="text-2xl sm:text-3xl font-black font-serif text-slate-900 flex items-center gap-3 flex-wrap mt-0.5">
                 <span>{activeSilo}</span>
@@ -1533,6 +1288,49 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Control Rápido de Estado Manual en la Cabecera de Operaciones */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs mr-1">
+              <button
+                type="button"
+                onClick={() => handleSetEstadoManual(activeSilo, 'OCUPADO')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  silosEstadoManual[activeSilo] === 'OCUPADO'
+                    ? 'bg-amber-400 text-amber-950 font-black shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
+                title="Silo Ocupado (Luz Amarilla)"
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                <span>Ocupado</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetEstadoManual(activeSilo, 'VACIO_SUCIO')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  silosEstadoManual[activeSilo] === 'VACIO_SUCIO'
+                    ? 'bg-red-500 text-white font-black shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
+                title="Silo Vacío Sucio (Luz Roja)"
+              >
+                <span className="w-2 h-2 rounded-full bg-red-600 inline-block"></span>
+                <span>V. Sucio</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetEstadoManual(activeSilo, 'VACIO_LIMPIO')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  silosEstadoManual[activeSilo] === 'VACIO_LIMPIO'
+                    ? 'bg-emerald-500 text-white font-black shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200'
+                }`}
+                title="Silo Vacío Limpio (Luz Verde)"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+                <span>V. Limpio</span>
+              </button>
+            </div>
+
             <button
               onClick={handleExportMovimientosExcel}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
@@ -1581,10 +1379,10 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             <button
               onClick={() => openModalLimpiezaVarietal(activeSilo)}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer border border-amber-700"
-              title="Ejecutar Limpieza Varietal (Vaciar stock a 0 kg y desvincular Especie, Variedad, Cliente y Bolsón)"
+              title="Ejecutar Limpieza de Descarte (Vaciar stock a 0 kg y desvincular Especie, Variedad, Cliente y Bolsón)"
             >
               <RotateCcw className="w-4 h-4 text-amber-300" />
-              <span>Limpieza Varietal</span>
+              <span>Limpieza de Descarte</span>
             </button>
           </div>
         </div>
@@ -2239,7 +2037,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                                 <span>Salida Manual: {m.motivoManual || 'Manual'}</span>
                                 {m.descontaminacionVarietal && (
                                   <span className="px-1.5 py-0.5 bg-purple-100 text-purple-900 border border-purple-300 text-[9px] font-extrabold rounded">
-                                    Descontaminación Varietal
+                                    Descarte
                                   </span>
                                 )}
                               </div>
@@ -2337,7 +2135,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       {showModalSalidaManual && (() => {
         const stockActualSilo = getStockSilo(siloSalidaManual);
         const fichaSilo = getSiloFichaData(siloSalidaManual);
-        const isDescontamActive = descontaminacionVarietal || motivoSalidaManual === 'Descontaminación varietal';
+        const isDescontamActive = descontaminacionVarietal || motivoSalidaManual === 'Descarte' || motivoSalidaManual === 'Descontaminación varietal';
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
@@ -2424,7 +2222,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                         const newSilo = e.target.value as SiloId;
                         setSiloSalidaManual(newSilo);
                         const newStock = getStockSilo(newSilo);
-                        if (descontaminacionVarietal || motivoSalidaManual === 'Descontaminación varietal') {
+                        if (descontaminacionVarietal || motivoSalidaManual === 'Descarte' || motivoSalidaManual === 'Descontaminación varietal') {
                           setKgSalidaManual(newStock > 0 ? newStock : '');
                         }
                       }}
@@ -2491,7 +2289,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       onChange={(e) => {
                         const newMotivo = e.target.value as MotivoSalidaManual;
                         setMotivoSalidaManual(newMotivo);
-                        if (newMotivo === 'Descontaminación varietal') {
+                        if (newMotivo === 'Descarte' || newMotivo === 'Descontaminación varietal') {
                           setDescontaminacionVarietal(true);
                           if (stockActualSilo > 0) setKgSalidaManual(stockActualSilo);
                         }
@@ -2502,12 +2300,12 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       <option value="Consumo a granel">Consumo a granel</option>
                       <option value="Manipulación">Manipulación</option>
                       <option value="Traslado a silo">Traslado a silo</option>
-                      <option value="Descontaminación varietal">Descontaminación varietal</option>
+                      <option value="Descarte">Descarte</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Checkbox Descontaminación Varietal */}
+                {/* Checkbox Descarte / Limpieza de Silo */}
                 <div className={`p-3.5 rounded-xl border transition ${
                   isDescontamActive
                     ? 'bg-purple-50/90 border-purple-300 shadow-2xs'
@@ -2522,10 +2320,10 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                         const checked = e.target.checked;
                         setDescontaminacionVarietal(checked);
                         if (checked) {
-                          setMotivoSalidaManual('Descontaminación varietal');
+                          setMotivoSalidaManual('Descarte');
                           if (stockActualSilo > 0) setKgSalidaManual(stockActualSilo);
                         } else {
-                          if (motivoSalidaManual === 'Descontaminación varietal') {
+                          if (motivoSalidaManual === 'Descarte' || motivoSalidaManual === 'Descontaminación varietal') {
                             setMotivoSalidaManual('Consumo a granel');
                           }
                         }
@@ -2533,9 +2331,9 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer mt-0.5"
                     />
                     <label htmlFor="descontaminacionVarietal" className="text-xs font-bold text-slate-900 cursor-pointer select-none">
-                      Descontaminación Varietal / Limpieza de Silo
+                      Descarte / Limpieza de Silo
                       <span className="block text-[11px] font-normal text-slate-600 mt-0.5">
-                        Registra la salida del stock remanente ({stockActualSilo.toLocaleString('es-AR')} kg) asociado a <strong className="text-slate-900 font-semibold">{fichaSilo.cliente}</strong> — <strong className="text-slate-900 font-semibold">{fichaSilo.especie} ({fichaSilo.variedad})</strong>.
+                        Registra la salida por descarte del stock remanente ({stockActualSilo.toLocaleString('es-AR')} kg) asociado a <strong className="text-slate-900 font-semibold">{fichaSilo.cliente}</strong> — <strong className="text-slate-900 font-semibold">{fichaSilo.especie} ({fichaSilo.variedad})</strong>.
                       </span>
                     </label>
                   </div>
@@ -3191,8 +2989,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               {/* Encabezado del Panel Lateral */}
               <div className="bg-slate-900 text-white p-5 border-b border-slate-800 flex items-center justify-between shrink-0 shadow-md">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-400">
-                    <Warehouse className="w-6 h-6" />
+                  <div className="p-2 bg-emerald-950/80 border border-emerald-500/40 rounded-xl flex items-center justify-center">
+                    <SiloIcon size={24} color="#00603C" className="silo-icon-institucional shrink-0" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -3479,7 +3277,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                               <span>Motivo: <strong className="text-amber-900">{mov.motivoManual || 'Manual'}</strong></span>
                               {mov.descontaminacionVarietal && (
                                 <span className="text-purple-900 bg-purple-100 px-2 py-0.5 rounded border border-purple-300 text-[10px] font-extrabold">
-                                  Descontaminación Varietal
+                                  Descarte
                                 </span>
                               )}
                             </div>
@@ -3562,7 +3360,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
         );
       })()}
 
-      {/* MODAL DE CONFIRMACIÓN DE LIMPIEZA VARIETAL DE SILO */}
+      {/* MODAL DE CONFIRMACIÓN DE LIMPIEZA DE DESCARTE DE SILO */}
       {siloLimpiezaTarget && (() => {
         const targetFicha = getSiloFichaData(siloLimpiezaTarget);
         return (
@@ -3571,7 +3369,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2 text-amber-900 font-black text-lg font-serif">
                   <RotateCcw className="w-5 h-5 text-amber-600" />
-                  <span>Limpieza Varietal — {siloLimpiezaTarget}</span>
+                  <span>Limpieza de Descarte — {siloLimpiezaTarget}</span>
                 </div>
                 <button
                   type="button"
@@ -3585,10 +3383,10 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 space-y-2">
                 <div className="font-bold flex items-center gap-1.5 text-amber-900">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Confirmar Vaciamiento y Descontaminación de Silo</span>
+                  <span>Confirmar Vaciamiento y Descarte de Silo</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-amber-900/90">
-                  Esta acción ejecutará la <strong>Limpieza Varietal</strong> en <strong className="font-bold">{siloLimpiezaTarget}</strong>:
+                  Esta acción ejecutará la <strong>Limpieza de Descarte</strong> en <strong className="font-bold">{siloLimpiezaTarget}</strong>:
                 </p>
                 <ul className="list-disc list-inside text-[11px] space-y-1 font-medium text-amber-900">
                   <li>Pondrá el stock remanente en <strong>0 kg</strong> (Actual: {targetFicha.stockKg.toLocaleString('es-AR')} kg).</li>
@@ -3630,7 +3428,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                     type="text"
                     value={limpiezaMotivo}
                     onChange={(e) => setLimpiezaMotivo(e.target.value)}
-                    placeholder="Ej: Limpieza Varietal - Cambio de variedad en silo"
+                    placeholder="Ej: Limpieza de descarte - Cambio de variedad en silo"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-sans text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
                   />
                 </div>
@@ -3654,7 +3452,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <RotateCcw className="w-4 h-4 text-amber-200" />
-                  <span>Ejecutar Limpieza Varietal</span>
+                  <span>Ejecutar Limpieza de Descarte</span>
                 </button>
               </div>
             </div>
