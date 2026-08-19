@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lote, MovimientoSilo, SiloId, Chofer, BolsonCampo, OrdenCarga, SILOS_PHYSICAL_ORDER, CAPACIDAD_MAX_SILO, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT } from '../types';
+import { Lote, MovimientoSilo, SiloId, Chofer, BolsonCampo, OrdenCarga, SILOS_PHYSICAL_ORDER, SILOS_MOBILE_ORDER, CAPACIDAD_MAX_SILO, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
 import { getSiloDetailedInfo, SiloFullInfo } from '../utils/siloValidation';
 import { formatNumberArg, formatKg } from '../utils/formatters';
@@ -401,21 +401,21 @@ export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
             </div>
           </div>
 
-          {/* DISPOSICIÓN FÍSICA DE SILOS (6 SILOS EN FORMATO CIRCULAR 2x3 CON CHECK MANUAL Y LUCES) */}
+          {/* DISPOSICIÓN EN PLANTA MÓVIL: FILA ÚNICA ORDENADA DESCENDENTE (SILO 6 A SILO 1) */}
           <div className="space-y-4">
             <div className="flex items-center justify-between px-1">
               <div className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                 <SiloIcon size={24} color="#00603C" className="silo-icon-institucional shrink-0" />
-                <span>Disposición Física de Silos (Planta La Barrancosa)</span>
+                <span>Sector Silos (Silo 6 al Silo 1 - Fila Única)</span>
               </div>
               <span className="text-[10px] text-slate-500 font-medium">
-                Toque un silo para ver su detalle
+                Deslice horizontalmente · Toque para ver detalle
               </span>
             </div>
 
-            {/* Grilla física 2x3 de silos con marcos circulares */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto py-2">
-              {SILOS_PHYSICAL_ORDER.map((siloId) => {
+            {/* Fila única de silos ordenados en forma descendente desde Silo 6 hasta Silo 1 */}
+            <div className="flex flex-row overflow-x-auto gap-4 py-2 px-1 pb-4 snap-x custom-scrollbar">
+              {SILOS_MOBILE_ORDER.map((siloId) => {
                 const info = silosInfoMap[siloId];
                 const isSelected = siloSeleccionado === siloId;
                 const stock = info.stockKg;
@@ -461,7 +461,7 @@ export const ModoPlantaMobileView: React.FC<ModoPlantaMobileViewProps> = ({
                         setSiloSeleccionado(siloId);
                       }
                     }}
-                    className={`w-full max-w-[330px] aspect-square rounded-full border-4 text-center transition-all duration-300 relative overflow-hidden flex flex-col items-center justify-between p-4 sm:p-5 cursor-pointer mx-auto ${
+                    className={`min-w-[260px] max-w-[280px] sm:min-w-[290px] aspect-square rounded-full border-4 text-center transition-all duration-300 relative overflow-hidden flex flex-col items-center justify-between p-4 sm:p-5 cursor-pointer shrink-0 snap-center ${
                       isSelected
                         ? 'bg-slate-900 border-[#00603C] text-white shadow-2xl ring-4 ring-emerald-400/50 scale-[1.02]'
                         : 'bg-white border-slate-300 hover:border-[#00603C] text-slate-900 shadow-md hover:shadow-xl'

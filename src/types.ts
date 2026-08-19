@@ -9,7 +9,27 @@ export type TipoLoteType = 'Intermedio' | 'Final' | 'Procesado' | 'Semilla' | 'D
 
 export type TratamientoType = 'Tratado' | 'Sin Tratar' | 'Curado Completo' | 'Fungicida' | 'Insecticida' | 'Inoculado' | 'Polímero' | string;
 
-export type CategoriaType = 'FUNDADORA' | 'PREBA' | 'ORIGINAL' | 'PRIMU' | 'Fundadora' | 'Preba' | 'Original' | 'Primera' | string;
+export type CategoriaType = 'Fundadora' | 'PreBase' | 'Original' | 'Primera Multiplicación (PRIMU)' | string;
+
+export const CATEGORIAS_OFICIALES = [
+  'Fundadora',
+  'PreBase',
+  'Original',
+  'Primera Multiplicación (PRIMU)'
+] as const;
+
+export const SECTORES_BOLSON_OPCIONES = [
+  'Sector A',
+  'Sector B',
+  'Sector C',
+  'Sector D',
+  'Sector E',
+  'Sector F',
+  'Sector G',
+  'Sector H',
+  'Sector I',
+  'Todos'
+] as const;
 
 export const CAPACIDAD_MAX_SILO = 180000; // 180.000 kg por silo
 export const UMBRAL_ALERTA_SILO = 150000; // Alerta desde 150.000 kg (83.3%)
@@ -164,6 +184,7 @@ export type SiloId = 'Silo 1' | 'Silo 2' | 'Silo 3' | 'Silo 4' | 'Silo 5' | 'Sil
 
 export const SILOS_DISPONIBLES: SiloId[] = ['Silo 1', 'Silo 2', 'Silo 3', 'Silo 4', 'Silo 5', 'Silo 6'];
 export const SILOS_PHYSICAL_ORDER: SiloId[] = ['Silo 4', 'Silo 3', 'Silo 5', 'Silo 2', 'Silo 6', 'Silo 1'];
+export const SILOS_MOBILE_ORDER: SiloId[] = ['Silo 6', 'Silo 5', 'Silo 4', 'Silo 3', 'Silo 2', 'Silo 1'];
 
 export type EstadoSiloManual = 'OCUPADO' | 'VACIO_SUCIO' | 'VACIO_LIMPIO';
 export type SilosEstadoMap = Record<SiloId, EstadoSiloManual>;

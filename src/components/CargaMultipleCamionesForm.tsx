@@ -19,19 +19,22 @@ import {
   Printer,
   Download
 } from 'lucide-react';
-import { Chofer, BolsonCampo, MovimientoSilo, SiloId } from '../types';
+import { Chofer, BolsonCampo, MovimientoSilo, SiloId, CATEGORIAS_OFICIALES, SECTORES_BOLSON_OPCIONES } from '../types';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
 import { ClienteSelect } from './ClienteSelect';
 
+export type ModalidadTransporteType = 'TERCEROS_CHOFER' | 'TERCEROS_MONTANER' | 'PROPIO_AA';
+
 export interface CamionItem {
   id: string;
+  modalidadTransporte: ModalidadTransporteType;
   tipoTransporte: 'CHOFER' | 'FLETE';
   choferNombre: string;
   choferCuit: string;
   choferPatentes: string;
   choferTransporte: string;
-  fleteOpcion: 'Flete Montaner' | 'Flete Agro Abacus';
+  fleteOpcion: 'Flete Montaner' | 'Flete AA' | 'Flete Agro Abacus';
   brutoKg: number | '';
   taraKg: number | '';
   netoKg: number | '';
@@ -56,6 +59,7 @@ export interface CargaMultipleCamionesFormProps {
 
 const createNewCamionItem = (defaultHumedad: number | '' = 13.5): CamionItem => ({
   id: `camion-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  modalidadTransporte: 'TERCEROS_CHOFER',
   tipoTransporte: 'CHOFER',
   choferNombre: '',
   choferCuit: '',
@@ -88,14 +92,14 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
   const [cliente, setCliente] = useState(clientes[0] || 'San Diego Semilla');
   const [especie, setEspecie] = useState<string>('Soja');
   const [variedad, setVariedad] = useState('P46A03');
-  const [categoria, setCategoria] = useState<string>('FUNDADORA');
+  const [categoria, setCategoria] = useState<string>('Fundadora');
 
   const [campoOrigenSelect, setCampoOrigenSelect] = useState('La Barrancosa');
   const [campoOrigenManual, setCampoOrigenManual] = useState('');
 
   const [bolsonOrigenId, setBolsonOrigenId] = useState('');
   const [bolsonOrigenNro, setBolsonOrigenNro] = useState('');
-  const [bolsonOrigenSector, setBolsonOrigenSector] = useState('');
+  const [bolsonOrigenSector, setBolsonOrigenSector] = useState<string>('Sector A');
   const [depositoOrigen, setDepositoOrigen] = useState('Depósito Central');
   const [humedadDefault, setHumedadDefault] = useState<number | ''>(13.5);
 
@@ -147,11 +151,17 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
         if (c.id !== id) return c;
         const updated = { ...c, ...updates };
 
-        // Si se actualizan bruto o tara, recalcular neto automáticamente si corresponde
-        if ('brutoKg' in updates || 'taraKg' in updates) {
+        // Si se actualiza Neto o Tara: el Bruto se carga automáticamente con la Tara registrada + el Neto manual
+        if ('netoKg' in updates || 'taraKg' in updates) {
+          const t = typeof updated.taraKg === 'number' ? updated.taraKg : 0;
+          const n = typeof updated.netoKg === 'number' ? updated.netoKg : 0;
+          if (n > 0 || t > 0) {
+            updated.brutoKg = t + n;
+          }
+        } else if ('brutoKg' in updates) {
           const b = typeof updated.brutoKg === 'number' ? updated.brutoKg : 0;
           const t = typeof updated.taraKg === 'number' ? updated.taraKg : 0;
-          if (b > 0 && t > 0 && b > t) {
+          if (b > 0 && t > 0 && b >= t) {
             updated.netoKg = b - t;
           }
         }
@@ -353,19 +363,16 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
           {/* Categoría */}
           <div>
             <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-              Categoría
+              Categoría *
             </label>
             <select
               value={categoria}
               onChange={(e) => setCategoria(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-900"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="ORIGINAL">ORIGINAL</option>
-              <option value="FUNDADORA">FUNDADORA</option>
-              <option value="REGISTRADA">REGISTRADA</option>
-              <option value="CERTIFICADA">CERTIFICADA</option>
-              <option value="PRIMERA MULTIPLICACIÓN">PRIMERA MULTIPLICACIÓN</option>
-              <option value="SEGUNDA MULTIPLICACIÓN">SEGUNDA MULTIPLICACIÓN</option>
+              {CATEGORIAS_OFICIALES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </div>
 
@@ -424,10 +431,27 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
             />
           </div>
 
+          {/* Sector del Bolsón de Origen */}
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-emerald-600" />
+              Sector del Bolsón de Origen *
+            </label>
+            <select
+              value={bolsonOrigenSector}
+              onChange={(e) => setBolsonOrigenSector(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500"
+            >
+              {SECTORES_BOLSON_OPCIONES.map((sec) => (
+                <option key={sec} value={sec}>{sec}</option>
+              ))}
+            </select>
+          </div>
+
           {/* % Humedad por Defecto */}
           <div>
             <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-              % Humedad Inicial por Defecto
+              % Humedad Inicial (Informativa)
             </label>
             <div className="relative">
               <input
@@ -506,30 +530,53 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
                       Camión {idx + 1}
                     </span>
 
-                    {/* Selector Chofer vs Flete */}
-                    <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 text-[10px] font-bold ml-2">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateCamion(camion.id, { tipoTransporte: 'CHOFER' })}
-                        className={`px-2 py-0.5 rounded ${
-                          camion.tipoTransporte === 'CHOFER'
-                            ? 'bg-emerald-700 text-white'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
+                    {/* Selector Desplegable de Flete / Transporte */}
+                    <div className="flex items-center gap-1.5 ml-2">
+                      <select
+                        value={camion.modalidadTransporte || (camion.tipoTransporte === 'FLETE' ? (camion.fleteOpcion === 'Flete Montaner' ? 'TERCEROS_MONTANER' : 'PROPIO_AA') : 'TERCEROS_CHOFER')}
+                        onChange={(e) => {
+                          const mod = e.target.value as ModalidadTransporteType;
+                          if (mod === 'TERCEROS_CHOFER') {
+                            handleUpdateCamion(camion.id, {
+                              modalidadTransporte: 'TERCEROS_CHOFER',
+                              tipoTransporte: 'CHOFER',
+                              choferNombre: '',
+                              choferTransporte: '',
+                              choferCuit: '',
+                              choferPatentes: ''
+                            });
+                          } else if (mod === 'TERCEROS_MONTANER') {
+                            handleUpdateCamion(camion.id, {
+                              modalidadTransporte: 'TERCEROS_MONTANER',
+                              tipoTransporte: 'FLETE',
+                              fleteOpcion: 'Flete Montaner',
+                              choferNombre: 'Flete Montaner',
+                              choferTransporte: 'Flete Montaner',
+                              choferCuit: '—',
+                              choferPatentes: '—'
+                            });
+                          } else {
+                            handleUpdateCamion(camion.id, {
+                              modalidadTransporte: 'PROPIO_AA',
+                              tipoTransporte: 'FLETE',
+                              fleteOpcion: 'Flete AA',
+                              choferNombre: 'Flete AA',
+                              choferTransporte: 'Flete AA (Agro Abacus)',
+                              choferCuit: '—',
+                              choferPatentes: '—'
+                            });
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                       >
-                        Chofer Individual
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateCamion(camion.id, { tipoTransporte: 'FLETE' })}
-                        className={`px-2 py-0.5 rounded ${
-                          camion.tipoTransporte === 'FLETE'
-                            ? 'bg-amber-600 text-white'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        Flete Empresa
-                      </button>
+                        <optgroup label="Flete Interno Terceros">
+                          <option value="TERCEROS_CHOFER">Flete Terceros: Chofer Precargado</option>
+                          <option value="TERCEROS_MONTANER">Flete Terceros: Flete Montaner</option>
+                        </optgroup>
+                        <optgroup label="Flete Interno Propio">
+                          <option value="PROPIO_AA">Flete Propio: Flete AA</option>
+                        </optgroup>
+                      </select>
                     </div>
                   </div>
 
@@ -633,53 +680,26 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-amber-50/50 p-2.5 rounded-lg border border-amber-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-emerald-50/60 p-3 rounded-lg border border-emerald-200">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-900 mb-1">
-                        Empresa de Flete
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-950 mb-1">
+                        Modalidad de Flete Activa
                       </label>
-                      <select
-                        value={camion.fleteOpcion}
-                        onChange={(e) =>
-                          handleUpdateCamion(camion.id, {
-                            fleteOpcion: e.target.value as 'Flete Montaner' | 'Flete Agro Abacus',
-                          })
-                        }
-                        className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-bold text-amber-950"
-                      >
-                        <option value="Flete Montaner">Flete Montaner</option>
-                        <option value="Flete Agro Abacus">Flete Agro Abacus</option>
-                      </select>
+                      <div className="font-bold text-sm text-emerald-900 flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-emerald-700" />
+                        <span>
+                          {camion.modalidadTransporte === 'PROPIO_AA' ? 'Flete Interno Propio (Flete AA)' : 'Flete Interno Terceros (Flete Montaner)'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center text-[11px] text-amber-800">
-                      <span>Modo Flete: asignación rápida sin datos obligatorios de chofer individual.</span>
+                    <div className="flex items-center text-[11px] text-emerald-800">
+                      <span>Los kilos ingresados sumarán al stock del {activeSilo} sin alterar el peso por humedad agregada.</span>
                     </div>
                   </div>
                 )}
 
                 {/* Pesaje y Humedad */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 text-xs pt-1 border-t border-slate-200/50">
-                  {/* Bruto (kg) */}
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-0.5">
-                      Bruto (kg)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        placeholder="ej: 44500"
-                        value={camion.brutoKg}
-                        onChange={(e) =>
-                          handleUpdateCamion(camion.id, {
-                            brutoKg: e.target.value !== '' ? Number(e.target.value) : '',
-                          })
-                        }
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-mono text-slate-900 pr-6 h-[34px]"
-                      />
-                      <span className="absolute right-2 top-2 text-[9px] font-bold text-slate-400">kg</span>
-                    </div>
-                  </div>
-
                   {/* Tara (kg) */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase text-slate-600 mb-0.5">
@@ -704,7 +724,7 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
                   {/* Kilos Netos * */}
                   <div>
                     <label className="block text-[10px] font-black uppercase text-emerald-800 mb-0.5">
-                      Kilos Netos *
+                      Kilos Netos * (Manual)
                     </label>
                     <div className="relative">
                       <input
@@ -720,6 +740,27 @@ export const CargaMultipleCamionesForm: React.FC<CargaMultipleCamionesFormProps>
                         required
                       />
                       <span className="absolute right-2 top-2 text-[9px] font-black text-emerald-700">kg</span>
+                    </div>
+                  </div>
+
+                  {/* Bruto (kg) - Auto: Tara + Neto */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-0.5">
+                      Bruto (kg) <span className="text-emerald-700 text-[9px] lowercase font-normal">(auto)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        placeholder="ej: 44500"
+                        value={camion.brutoKg}
+                        onChange={(e) =>
+                          handleUpdateCamion(camion.id, {
+                            brutoKg: e.target.value !== '' ? Number(e.target.value) : '',
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg font-mono font-semibold text-slate-900 pr-6 h-[34px]"
+                      />
+                      <span className="absolute right-2 top-2 text-[9px] font-bold text-slate-400">kg</span>
                     </div>
                   </div>
 

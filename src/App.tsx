@@ -1893,20 +1893,30 @@ export default function App() {
                   className="silo-icon-institucional shrink-0 transition-transform duration-200 group-hover/silo-icon:scale-110"
                 />
 
-                {/* Tooltip con resumen rápido del peso total almacenado en todos los silos */}
-                <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover/silo-icon:flex flex-col items-start bg-slate-900/95 text-white text-[10px] font-sans px-3 py-2 rounded-xl shadow-2xl border border-emerald-500/30 pointer-events-none whitespace-nowrap z-50 animate-in fade-in-0 zoom-in-95 duration-150 backdrop-blur-md">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase text-[9px] tracking-wider mb-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>Stock Total en Silos</span>
+                {/* Tooltip con resumen rápido del peso total almacenado en todos los silos con glassmorphism pronunciado y máximo contraste */}
+                <div className="absolute left-full ml-3.5 top-1/2 -translate-y-1/2 hidden group-hover/silo-icon:flex flex-col items-start bg-slate-950/85 backdrop-blur-xl backdrop-saturate-150 text-white text-[10px] font-sans px-3.5 py-2.5 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.55)] border border-white/20 ring-1 ring-emerald-400/20 pointer-events-none whitespace-nowrap z-50 animate-in fade-in-0 zoom-in-95 duration-150">
+                  <div className="flex items-center gap-1.5 text-emerald-300 font-bold uppercase text-[9px] tracking-wider mb-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]"></span>
+                    <span className="drop-shadow-xs">Stock Total en Silos</span>
                   </div>
-                  <div className="font-mono font-black text-sm text-white tracking-tight">
-                    {totalSilosKgStored.toLocaleString('es-AR')} <span className="text-[10px] font-sans font-medium text-emerald-300">kg</span>
+                  <div className="font-mono font-black text-base text-white tracking-tight leading-tight flex items-baseline gap-1">
+                    <span className="text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      {totalSilosKgStored.toLocaleString('es-AR')}
+                    </span>
+                    <span className="text-[11px] font-sans font-bold text-emerald-300 drop-shadow-xs">kg</span>
                   </div>
-                  <div className="text-[9px] text-slate-300 font-mono mt-0.5">
-                    {(totalSilosKgStored / 1000).toFixed(1)} Tn / 1.080 Tn ({( (totalSilosKgStored / (6 * CAPACIDAD_MAX_SILO)) * 100 ).toFixed(1)}%)
+                  <div className="flex items-center gap-1.5 mt-1 pt-1 border-t border-white/10 text-[9.5px] font-mono">
+                    <span className="text-amber-300 font-bold drop-shadow-xs">
+                      {(totalSilosKgStored / 1000).toFixed(1)} Tn
+                    </span>
+                    <span className="text-white/60">/</span>
+                    <span className="text-slate-200 font-medium">1.080 Tn</span>
+                    <span className="text-emerald-300 font-bold ml-1 bg-emerald-950/60 border border-emerald-400/30 px-1.5 py-0.2 rounded-md">
+                      {( (totalSilosKgStored / (6 * CAPACIDAD_MAX_SILO)) * 100 ).toFixed(1)}%
+                    </span>
                   </div>
-                  {/* Flechita decorativa hacia el ícono */}
-                  <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900 rotate-45 border-l border-b border-emerald-500/30"></div>
+                  {/* Flechita decorativa hacia el ícono con glassmorphism */}
+                  <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-slate-950/85 backdrop-blur-xl rotate-45 border-l border-b border-white/20"></div>
                 </div>
 
                 {/* Indicador de estado de conexión en tiempo real con Firebase con animación de pulso suave */}

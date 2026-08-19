@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual, BolsonCampo, SILOS_PHYSICAL_ORDER, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT } from '../types';
+import { SiloId, MovimientoSilo, EspecieType, CategoriaType, CAPACIDAD_MAX_SILO, UMBRAL_ALERTA_SILO, Chofer, MotivoSalidaManual, BolsonCampo, SILOS_PHYSICAL_ORDER, EstadoSiloManual, SilosEstadoMap, SILOS_ESTADO_DEFAULT, CATEGORIAS_OFICIALES, SECTORES_BOLSON_OPCIONES } from '../types';
 import { SILOS_DISPONIBLES } from './SilosSelector';
 import { ChoferSearchSelector } from './ChoferSearchSelector';
 import { BolsonSearchSelector } from './BolsonSearchSelector';
@@ -183,6 +183,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
   const [humedad, setHumedad] = useState<number | ''>(13.5);
 
   // Estados de datos de chofer y flete en Ingreso
+  const [modalidadTransporte, setModalidadTransporte] = useState<'FLETE_TERCEROS' | 'FLETE_PROPIO'>('FLETE_TERCEROS');
+  const [subTipoTerceros, setSubTipoTerceros] = useState<'CHOFER' | 'FLETE_MONTANER'>('CHOFER');
   const [tipoTransporte, setTipoTransporte] = useState<'CHOFER' | 'FLETE'>('CHOFER');
   const [fleteOpcion, setFleteOpcion] = useState<'Flete Montaner' | 'Flete Agro Abacus'>('Flete Montaner');
   const [selectedChoferId, setSelectedChoferId] = useState('');
@@ -863,10 +865,16 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       return;
     }
 
-    const choferVal = tipoTransporte === 'FLETE' ? fleteOpcion : choferNombre.trim();
-    const cuitVal = tipoTransporte === 'FLETE' ? '' : choferCuit.trim();
-    const patentesVal = tipoTransporte === 'FLETE' ? '' : choferPatentes.trim();
-    const transporteVal = tipoTransporte === 'FLETE' ? fleteOpcion : (choferTransporte.trim() || 'Sin Transporte');
+    const isFleteInternoPropio = modalidadTransporte === 'FLETE_PROPIO';
+    const isFleteMontaner = modalidadTransporte === 'FLETE_TERCEROS' && subTipoTerceros === 'FLETE_MONTANER';
+    const isFlete = isFleteInternoPropio || isFleteMontaner || tipoTransporte === 'FLETE';
+
+    const fleteNombreFinal = isFleteInternoPropio ? 'Flete AA' : (isFleteMontaner ? 'Flete Montaner' : fleteOpcion);
+
+    const choferVal = isFlete ? fleteNombreFinal : choferNombre.trim();
+    const cuitVal = isFlete ? '' : choferCuit.trim();
+    const patentesVal = isFlete ? '' : choferPatentes.trim();
+    const transporteVal = isFlete ? fleteNombreFinal : (choferTransporte.trim() || 'Sin Transporte');
 
     const nuevoIngreso: MovimientoSilo = {
       id: `ING-SILO-${Date.now()}`,
@@ -884,7 +892,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       bolsonOrigenSector: bolsonOrigenSector.trim(),
       depositoOrigen: depositoOrigen.trim(),
       humedad: typeof humedad === 'number' ? humedad : 13.5,
-      tipoTransporte,
+      tipoTransporte: isFlete ? 'FLETE' : 'CHOFER',
       chofer: choferVal,
       cuit: cuitVal,
       patentes: patentesVal,
@@ -893,7 +901,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       bruto: typeof choferTara === 'number' ? (choferTara + kgNuevos) : undefined,
     };
 
-    if (tipoTransporte === 'CHOFER' && choferNombre.trim() && onSaveChofer) {
+    if (!isFlete && choferNombre.trim() && onSaveChofer) {
       const candidateData = {
         nombre: choferNombre.trim(),
         cuit: choferCuit.trim(),
@@ -1099,6 +1107,8 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   setActiveSilo(siloId);
                   setFormError('');
                   setFormSuccess('');
+                  const el = document.getElementById('detalle-operaciones-silos');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1260,7 +1270,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
       </div>
 
       {/* Contenedor del Silo Activo */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+      <div id="detalle-operaciones-silos" className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6 scroll-mt-6">
         
         {/* Encabezado del Silo Seleccionado */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -1287,13 +1297,13 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center justify-center sm:justify-end gap-2 flex-wrap">
             {/* Control Rápido de Estado Manual en la Cabecera de Operaciones */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs mr-1">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
               <button
                 type="button"
                 onClick={() => handleSetEstadoManual(activeSilo, 'OCUPADO')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
                   silosEstadoManual[activeSilo] === 'OCUPADO'
                     ? 'bg-amber-400 text-amber-950 font-black shadow-xs'
                     : 'text-slate-600 hover:bg-slate-200'
@@ -1306,7 +1316,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleSetEstadoManual(activeSilo, 'VACIO_SUCIO')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
                   silosEstadoManual[activeSilo] === 'VACIO_SUCIO'
                     ? 'bg-red-500 text-white font-black shadow-xs'
                     : 'text-slate-600 hover:bg-slate-200'
@@ -1319,7 +1329,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleSetEstadoManual(activeSilo, 'VACIO_LIMPIO')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
                   silosEstadoManual[activeSilo] === 'VACIO_LIMPIO'
                     ? 'bg-emerald-500 text-white font-black shadow-xs'
                     : 'text-slate-600 hover:bg-slate-200'
@@ -1337,7 +1347,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               title="Exportar todos los Ingresos y Egresos de Silos a Excel"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
-              <span>Exportar Excel (Ingresos/Egresos)</span>
+              <span>Exportar Excel</span>
             </button>
 
             <button
@@ -1346,7 +1356,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               title="Abrir panel lateral con el historial detallado de ingresos y egresos de este silo"
             >
               <History className="w-4 h-4 text-amber-400" />
-              <span>Panel Historial Movimientos</span>
+              <span>Historial</span>
             </button>
 
             <button
@@ -1356,15 +1366,6 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
             >
               <Eye className="w-4 h-4 text-emerald-300" />
               <span>Ver Ficha</span>
-            </button>
-
-            <button
-              onClick={() => setShowGrillaSeisSilos(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#005E38] hover:bg-[#004D2E] text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
-              title="Imprimir las 6 Fichas Técnicas de Silo en una única hoja A4 (Grilla 2x3)"
-            >
-              <Grid3X3 className="w-4 h-4 text-emerald-300" />
-              <span>Imprimir 6 Silos (A4)</span>
             </button>
 
             <button
@@ -1382,7 +1383,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               title="Ejecutar Limpieza de Descarte (Vaciar stock a 0 kg y desvincular Especie, Variedad, Cliente y Bolsón)"
             >
               <RotateCcw className="w-4 h-4 text-amber-300" />
-              <span>Limpieza de Descarte</span>
+              <span>Limpieza Descarte</span>
             </button>
           </div>
         </div>
@@ -1601,12 +1602,11 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               <select
                 value={categoria}
                 onChange={(e) => setCategoria(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="FUNDADORA">FUNDADORA</option>
-                <option value="PREBA">PREBA</option>
-                <option value="ORIGINAL">ORIGINAL</option>
-                <option value="PRIMU">PRIMU</option>
+                {CATEGORIAS_OFICIALES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
               </select>
             </div>
 
@@ -1669,13 +1669,16 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
                 Sector de Bolsón Origen
               </label>
-              <input
-                type="text"
-                placeholder="ej: Sector A, Fila 3..."
+              <select
                 value={bolsonOrigenSector}
                 onChange={(e) => setBolsonOrigenSector(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-900"
-              />
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Seleccionar Sector...</option>
+                {SECTORES_BOLSON_OPCIONES.map((sec) => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
+              </select>
             </div>
 
             {/* Total kg ingresados */}
@@ -1732,44 +1735,76 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
               />
             </div>
 
-            {/* Sección Chofer y Transporte (con Selector ON/OFF Chofer / Flete) */}
+            {/* Sección Chofer y Transporte (Flete Terceros vs Flete Propio) */}
             <div className="sm:col-span-2 lg:col-span-4 p-4 bg-white border border-slate-200 rounded-xl space-y-3.5 shadow-2xs">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-emerald-700" />
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    Datos de Movimiento / Transporte
+                    Modalidad de Transporte
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Botón ON/OFF Selector de Tipo de Transporte */}
-                  <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setTipoTransporte('CHOFER')}
-                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition ${
-                        tipoTransporte === 'CHOFER'
-                          ? 'bg-emerald-700 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Chofer Conductor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTipoTransporte('FLETE')}
-                      className={`px-3 py-1 text-[11px] font-bold rounded-md transition ${
-                        tipoTransporte === 'FLETE'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Flete Montaner / Flete AA
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Selector Desplegable de Modalidad de Flete */}
+                  <select
+                    value={modalidadTransporte}
+                    onChange={(e) => {
+                      const val = e.target.value as 'FLETE_TERCEROS' | 'FLETE_PROPIO';
+                      setModalidadTransporte(val);
+                      if (val === 'FLETE_PROPIO') {
+                        setTipoTransporte('FLETE');
+                        setFleteOpcion('Flete Agro Abacus');
+                      } else {
+                        if (subTipoTerceros === 'FLETE_MONTANER') {
+                          setTipoTransporte('FLETE');
+                          setFleteOpcion('Flete Montaner');
+                        } else {
+                          setTipoTransporte('CHOFER');
+                        }
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-none cursor-pointer"
+                  >
+                    <option value="FLETE_TERCEROS">Flete Interno Terceros</option>
+                    <option value="FLETE_PROPIO">Flete Interno Propio (Flete AA)</option>
+                  </select>
 
-                  {tipoTransporte === 'CHOFER' && (
+                  {modalidadTransporte === 'FLETE_TERCEROS' && (
+                    <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubTipoTerceros('CHOFER');
+                          setTipoTransporte('CHOFER');
+                        }}
+                        className={`px-3 py-1 text-[11px] font-bold rounded-md transition ${
+                          subTipoTerceros === 'CHOFER'
+                            ? 'bg-emerald-700 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Chofer Precargado / Manual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubTipoTerceros('FLETE_MONTANER');
+                          setTipoTransporte('FLETE');
+                          setFleteOpcion('Flete Montaner');
+                        }}
+                        className={`px-3 py-1 text-[11px] font-bold rounded-md transition ${
+                          subTipoTerceros === 'FLETE_MONTANER'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Flete Montaner
+                      </button>
+                    </div>
+                  )}
+
+                  {modalidadTransporte === 'FLETE_TERCEROS' && subTipoTerceros === 'CHOFER' && (
                     <label className="cursor-pointer px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg border border-slate-300 transition flex items-center gap-1.5">
                       <Upload className="w-3.5 h-3.5 text-slate-600" />
                       <span>Importar Excel</span>
@@ -1779,35 +1814,37 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                 </div>
               </div>
 
-              {importNoticeChoferes && tipoTransporte === 'CHOFER' && (
+              {importNoticeChoferes && modalidadTransporte === 'FLETE_TERCEROS' && subTipoTerceros === 'CHOFER' && (
                 <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-lg flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{importNoticeChoferes}</span>
                 </div>
               )}
 
-              {tipoTransporte === 'FLETE' ? (
-                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-amber-700" />
-                    Seleccionar Empresa de Flete *
-                  </label>
-                  <select
-                    value={fleteOpcion}
-                    onChange={(e) => setFleteOpcion(e.target.value as 'Flete Montaner' | 'Flete Agro Abacus')}
-                    className="w-full sm:w-80 px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-xs font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 shadow-2xs outline-none h-[38px]"
-                  >
-                    <option value="Flete Montaner">Flete Montaner</option>
-                    <option value="Flete Agro Abacus">Flete Agro Abacus</option>
-                  </select>
+              {modalidadTransporte === 'FLETE_PROPIO' ? (
+                <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
+                    <Truck className="w-4 h-4 text-emerald-700" />
+                    <span>Flete Interno Propio: Flete AA (Agro Abacus)</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 font-medium">
+                    Ingreso por logística propia interna de planta. No se requieren datos individuales de chofer.
+                  </p>
+                </div>
+              ) : subTipoTerceros === 'FLETE_MONTANER' ? (
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                    <Truck className="w-4 h-4 text-amber-700" />
+                    <span>Flete Interno Terceros: Flete Montaner</span>
+                  </div>
                   <p className="text-[11px] text-amber-800 font-medium">
-                    Modo Flete Seleccionado: No se requieren ni solicitan datos individuales del chofer (CUIT, patentes, etc.).
+                    Ingreso tercerizado mediante Flete Montaner. Los kilos ingresados se sumarán al silo sin exigir datos individuales de chofer.
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-start">
                   {/* Chofer Search Selector */}
-                  <div>
+                  <div className="lg:col-span-2">
                     <ChoferSearchSelector
                       choferes={choferes}
                       selectedChoferNombre={choferNombre}
@@ -1854,7 +1891,7 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1 h-[20px]">
                       <Truck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Patente Camión / Acoplado</span>
+                      <span>Patente Camión</span>
                     </label>
                     <input
                       type="text"
@@ -1862,21 +1899,6 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                       value={choferPatentes}
                       onChange={(e) => setChoferPatentes(e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px]"
-                    />
-                  </div>
-
-                  {/* Empresa de Transporte */}
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1 h-[20px]">
-                      <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Empresa / Transporte</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="ej: Transportes El Rapido..."
-                      value={choferTransporte}
-                      onChange={(e) => setChoferTransporte(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px]"
                     />
                   </div>
 
@@ -1895,6 +1917,29 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none shadow-2xs h-[38px] pr-8"
                       />
                       <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-slate-400 font-mono">kg</span>
+                    </div>
+                  </div>
+
+                  {/* Peso Bruto (Cálculo Automático: Tara + Neto) */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800 mb-1 flex items-center gap-1 h-[20px]">
+                      <Scale className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span>Peso Bruto (kg)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        readOnly
+                        value={
+                          typeof choferTara === 'number' && typeof totalKgIngresados === 'number'
+                            ? (choferTara + totalKgIngresados).toLocaleString('es-AR') + ' kg'
+                            : typeof totalKgIngresados === 'number'
+                            ? totalKgIngresados.toLocaleString('es-AR') + ' kg'
+                            : '—'
+                        }
+                        className="w-full px-3 py-2 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs font-mono font-bold text-emerald-950 outline-none shadow-2xs h-[38px]"
+                        title="Peso Bruto = Tara + Neto"
+                      />
                     </div>
                   </div>
                 </div>
@@ -2620,12 +2665,15 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   {/* Categoría */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Categoría</label>
-                    <input
-                      type="text"
+                    <select
                       value={editCategoria}
                       onChange={(e) => setEditCategoria(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
+                    >
+                      {CATEGORIAS_OFICIALES.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Humedad */}
@@ -2665,12 +2713,16 @@ export const IngresoSilosView: React.FC<IngresoSilosViewProps> = ({
                   {/* Sector Bolsón */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase text-slate-700 mb-1">Sector Bolsón</label>
-                    <input
-                      type="text"
+                    <select
                       value={editBolsonOrigenSector}
                       onChange={(e) => setEditBolsonOrigenSector(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
+                    >
+                      <option value="">Sin Sector...</option>
+                      {SECTORES_BOLSON_OPCIONES.map((sec) => (
+                        <option key={sec} value={sec}>{sec}</option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Depósito Origen */}

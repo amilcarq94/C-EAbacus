@@ -30,7 +30,9 @@ import {
   Grid,
   List,
   Calendar as CalendarIcon,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  Users
 } from 'lucide-react';
 
 interface OrdenesProcesoViewProps {
@@ -165,6 +167,9 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
   // Accordion for expanded lots trace per order
   const [expandedOrdenId, setExpandedOrdenId] = useState<string | null>(null);
 
+  // Group by client toggle (defaults to true as requested)
+  const [agruparPorCliente, setAgruparPorCliente] = useState<boolean>(true);
+
   // Filtered Ordenes list
   const filteredOrdenes = useMemo(() => {
     return ordenes.filter(ord => {
@@ -226,6 +231,36 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
     ordenes.forEach(o => o.producto && set.add(o.producto));
     return Array.from(set).sort();
   }, [ordenes]);
+
+  // Grouped by client calculation
+  const groupedByCliente = useMemo(() => {
+    const map = new Map<string, OrdenProceso[]>();
+    filteredOrdenes.forEach(ord => {
+      const c = ord.cliente?.trim() || 'Sin Cliente Asignado';
+      if (!map.has(c)) {
+        map.set(c, []);
+      }
+      map.get(c)!.push(ord);
+    });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([cliente, ordenesCliente]) => {
+        const totalBB = ordenesCliente.reduce((acc, o) => acc + (o.bbPedidos || 0), 0);
+        const hechosBB = ordenesCliente.reduce((acc, o) => acc + (o.hechos || 0), 0);
+        const terminadas = ordenesCliente.filter(o => o.estado === 'TERMINADO').length;
+        const enCurso = ordenesCliente.filter(o => o.estado === 'EN CURSO').length;
+        const sinIniciar = ordenesCliente.filter(o => o.estado === 'SIN INICIAR').length;
+        return {
+          cliente,
+          ordenes: ordenesCliente,
+          totalBB,
+          hechosBB,
+          terminadas,
+          enCurso,
+          sinIniciar,
+        };
+      });
+  }, [filteredOrdenes]);
 
   // Summary Counters
   const counts = useMemo(() => {
@@ -416,35 +451,51 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
               ))}
             </select>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 ml-auto lg:ml-0">
+            {/* View Mode Toggle & Grouping Toggle */}
+            <div className="flex items-center gap-2 ml-auto lg:ml-0 flex-wrap">
               <button
-                onClick={() => setViewMode('cards')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
-                  viewMode === 'cards' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+                type="button"
+                onClick={() => setAgruparPorCliente(!agruparPorCliente)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border cursor-pointer ${
+                  agruparPorCliente
+                    ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                 }`}
-                title="Vista en Tarjetas"
+                title="Agrupar las órdenes por cliente"
               >
-                <Grid className="w-4 h-4" />
+                <Layers className="w-3.5 h-3.5" />
+                <span>Agrupar por Cliente</span>
               </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
-                  viewMode === 'table' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
-                }`}
-                title="Vista en Tabla"
-              >
-                <List className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('calendar')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
-                  viewMode === 'calendar' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
-                }`}
-                title="Vista en Calendario"
-              >
-                <CalendarIcon className="w-4 h-4" />
-              </button>
+
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewMode === 'cards' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="Vista en Tarjetas"
+                >
+                  <Grid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewMode === 'table' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="Vista en Tabla"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('calendar')}
+                  className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewMode === 'calendar' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="Vista en Calendario"
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
           </div>
@@ -470,300 +521,630 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
           </div>
         </div>
       ) : viewMode === 'cards' ? (
-        /* Grid of Cards */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredOrdenes.map(orden => {
-            // Find lots generated for this order
-            const linkedLotes = lotes.filter(l => l.ordenProcesoId === orden.id);
-            const isExpanded = expandedOrdenId === orden.id;
-
-            return (
-              <div
-                key={orden.id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all duration-200 flex flex-col overflow-hidden group"
-              >
-                {/* Card Header */}
-                <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      {orden.tipoOrden === 'PRODUCCION' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <Factory className="w-3 h-3" />
-                          PRODUCCIÓN
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
-                          <Truck className="w-3 h-3" />
-                          MOVIMIENTO
-                        </span>
-                      )}
-
-                      {orden.tipoMovimiento && (
-                        <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-200 text-slate-700 rounded-md">
-                          {orden.tipoMovimiento}
-                        </span>
-                      )}
+        /* Cards View (Grouped by Client or Flat Grid) */
+        agruparPorCliente ? (
+          <div className="space-y-6">
+            {groupedByCliente.map(grupo => (
+              <div key={grupo.cliente} className="bg-slate-50/80 rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                {/* Client Group Header Banner */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                      <Building2 className="w-5 h-5 text-emerald-100" />
                     </div>
-
-                    <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                      N° {orden.numeroOrden}
-                      {orden.numeroOrdenMovimiento && (
-                        <span className="text-xs font-mono font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                          {orden.numeroOrdenMovimiento}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-extrabold text-slate-900 tracking-tight">{grupo.cliente}</h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          {grupo.ordenes.length} {grupo.ordenes.length === 1 ? 'orden' : 'órdenes'}
                         </span>
-                      )}
-                    </h3>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        Progreso acumulado: <span className="font-bold text-slate-800">{grupo.hechosBB}</span> de <span className="font-bold text-slate-800">{grupo.totalBB} BB</span> ({grupo.totalBB > 0 ? Math.round((grupo.hechosBB / grupo.totalBB) * 100) : 0}%)
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Status Dropdown */}
-                  <select
-                    value={orden.estado}
-                    onChange={(e) => onUpdateEstadoOrden(orden.id, e.target.value as EstadoOrdenProceso)}
-                    className={`text-xs font-black px-2.5 py-1 rounded-lg border shadow-2xs transition-colors cursor-pointer ${
-                      orden.estado === 'TERMINADO'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
-                        : orden.estado === 'EN CURSO'
-                        ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                        : 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
-                    }`}
-                  >
-                    <option value="SIN INICIAR">🔴 SIN INICIAR</option>
-                    <option value="EN CURSO">🟡 EN CURSO</option>
-                    <option value="TERMINADO">🟢 TERMINADO</option>
-                  </select>
+                  <div className="flex items-center gap-2 text-xs font-bold flex-wrap">
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-100/80 text-emerald-800 border border-emerald-200">
+                      🟢 {grupo.terminadas} Terminado
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-100/80 text-amber-800 border border-amber-200">
+                      🟡 {grupo.enCurso} En curso
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-rose-100/80 text-rose-800 border border-rose-200">
+                      🔴 {grupo.sinIniciar} Sin Iniciar
+                    </span>
+                  </div>
                 </div>
 
-                {/* Card Body: Details & Gauge */}
-                <div className="p-5 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                  
-                  {/* Gauge Progress */}
-                  <div className="flex flex-col items-center justify-center py-2 sm:py-0">
-                    <OrdenProcesoGauge
-                      hechos={orden.hechos}
-                      bbPedidos={orden.bbPedidos}
-                      size={110}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setOrdenCumplimientoAEditar(orden)}
-                      className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#00603C] hover:text-white bg-emerald-50 hover:bg-[#00603C] px-3 py-1 rounded-xl border border-emerald-200 transition-all cursor-pointer shadow-2xs group"
-                      title="Editar manualmente el porcentaje de cumplimiento y bolsas vinculadas"
-                    >
-                      <Sliders className="w-3.5 h-3.5 text-[#00603C] group-hover:text-amber-300 transition-colors" />
-                      <span>Editar Avance</span>
-                    </button>
-                  </div>
+                {/* Grid of Cards for this Client */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {grupo.ordenes.map(orden => {
+                    const linkedLotes = lotes.filter(l => l.ordenProcesoId === orden.id);
+                    const isExpanded = expandedOrdenId === orden.id;
 
-                  {/* Order Specs */}
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <span className="text-slate-400 font-medium">Cliente:</span>
-                      <div className="font-bold text-slate-900 text-sm truncate">{orden.cliente || 'San Diego Semilla'}</div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-slate-400 font-medium">Especie:</span>
-                        <div className="font-semibold text-slate-800">{orden.especie || 'Soja'}</div>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Variedad:</span>
-                        <div className="font-bold text-slate-900">{orden.variedad}</div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-slate-400 font-medium">Tipo de Lote:</span>
-                        <div className="font-semibold text-slate-800">{orden.producto}</div>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Categoría:</span>
-                        <div className="font-semibold text-slate-800">{orden.categoria}</div>
-                      </div>
-                    </div>
-
-                    {orden.tipoOrden === 'MOVIMIENTO' && orden.productos && orden.productos.length > 0 && (
-                      <div className="mt-1">
-                        <span className="text-slate-400 font-medium text-[11px] block mb-1">Productos Aplicados:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {orden.productos.map((prod, pIdx) => {
-                            const tiposStr = prod.tipos && prod.tipos.length > 0
-                              ? prod.tipos.map(t => t === 'Otro' && prod.tipoOtro ? prod.tipoOtro : t).join(', ')
-                              : '';
-                            return (
-                              <span key={pIdx} className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md">
-                                {prod.principioActivo || 'Sin PA'} {tiposStr ? `(${tiposStr})` : ''}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-2">
-                      {orden.tipoOrden === 'MOVIMIENTO' && (
-                        <div>
-                          <span className="text-slate-400 font-medium">Tratamiento:</span>
-                          <div className="font-semibold text-slate-700 truncate">{orden.tratamiento || 'N/I'}</div>
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-slate-400 font-medium">Envase Destino:</span>
-                        <div className="font-semibold text-slate-800 truncate">{orden.envaseDestino || 'N/I'}</div>
-                      </div>
-                    </div>
-
-                    {orden.observaciones && (
-                      <div className="pt-1 text-[11px] text-slate-500 italic line-clamp-2">
-                        "{orden.observaciones}"
-                      </div>
-                    )}
-
-                    {/* Necesidad de Kilos Aproximados y Cobertura de Origen */}
-                    {(() => {
-                      const targetKg = (orden.bbPedidos || 0) * getKgPorEnvase(orden.envaseDestino || '');
-                      const isMov = orden.tipoOrden === 'MOVIMIENTO';
-                      const totalExtraido = isMov
-                        ? (orden.lotesOrigen || []).reduce((acc, item) => acc + (item.kgExtraidos || 0), 0)
-                        : 0;
-                      const porcentaje = targetKg > 0 ? Math.min(100, Math.round((totalExtraido / targetKg) * 100)) : 0;
-
-                      return (
-                        <div className="mt-2 p-2 bg-slate-100/90 rounded-xl border border-slate-200 text-[11px] space-y-1">
-                          <div className="flex items-center justify-between font-bold text-slate-800">
-                            <span>Demanda de Kilos:</span>
-                            <span className="font-mono text-emerald-800">{targetKg.toLocaleString('es-AR')} kg</span>
-                          </div>
-                          {isMov && (
-                            <>
-                              <div className="flex items-center justify-between text-[10px] text-slate-600">
-                                <span>Lotes Origen ({orden.lotesOrigen?.length || 0}):</span>
-                                <span className={`font-semibold ${porcentaje >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                  {totalExtraido.toLocaleString('es-AR')} kg ({porcentaje}%)
+                    return (
+                      <div
+                        key={orden.id}
+                        className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all duration-200 flex flex-col overflow-hidden group"
+                      >
+                        {/* Card Header */}
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              {orden.tipoOrden === 'PRODUCCION' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <Factory className="w-3 h-3" />
+                                  PRODUCCIÓN
                                 </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
+                                  <Truck className="w-3 h-3" />
+                                  MOVIMIENTO
+                                </span>
+                              )}
+
+                              {orden.tipoMovimiento && (
+                                <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-200 text-slate-700 rounded-md">
+                                  {orden.tipoMovimiento}
+                                </span>
+                              )}
+                            </div>
+
+                            <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                              N° {orden.numeroOrden}
+                              {orden.numeroOrdenMovimiento && (
+                                <span className="text-xs font-mono font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                                  {orden.numeroOrdenMovimiento}
+                                </span>
+                              )}
+                            </h3>
+                          </div>
+
+                          {/* Status Dropdown */}
+                          <select
+                            value={orden.estado}
+                            onChange={(e) => onUpdateEstadoOrden(orden.id, e.target.value as EstadoOrdenProceso)}
+                            className={`text-xs font-black px-2.5 py-1 rounded-lg border shadow-2xs transition-colors cursor-pointer ${
+                              orden.estado === 'TERMINADO'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                                : orden.estado === 'EN CURSO'
+                                ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                                : 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                            }`}
+                          >
+                            <option value="SIN INICIAR">🔴 SIN INICIAR</option>
+                            <option value="EN CURSO">🟡 EN CURSO</option>
+                            <option value="TERMINADO">🟢 TERMINADO</option>
+                          </select>
+                        </div>
+
+                        {/* Card Body: Details & Gauge */}
+                        <div className="p-5 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                          
+                          {/* Gauge Progress */}
+                          <div className="flex flex-col items-center justify-center py-2 sm:py-0">
+                            <OrdenProcesoGauge
+                              hechos={orden.hechos}
+                              bbPedidos={orden.bbPedidos}
+                              size={110}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setOrdenCumplimientoAEditar(orden)}
+                              className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#00603C] hover:text-white bg-emerald-50 hover:bg-[#00603C] px-3 py-1 rounded-xl border border-emerald-200 transition-all cursor-pointer shadow-2xs group"
+                              title="Editar manualmente el porcentaje de cumplimiento y bolsas vinculadas"
+                            >
+                              <Sliders className="w-3.5 h-3.5 text-[#00603C] group-hover:text-amber-300 transition-colors" />
+                              <span>Editar Avance</span>
+                            </button>
+                          </div>
+
+                          {/* Order Specs */}
+                          <div className="space-y-2 text-xs">
+                            <div>
+                              <span className="text-slate-400 font-medium">Cliente:</span>
+                              <div className="font-bold text-slate-900 text-sm truncate">{orden.cliente || 'San Diego Semilla'}</div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-slate-400 font-medium">Especie:</span>
+                                <div className="font-semibold text-slate-800">{orden.especie || 'Soja'}</div>
                               </div>
-                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full transition-all ${porcentaje >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                  style={{ width: `${porcentaje}%` }}
-                                />
+                              <div>
+                                <span className="text-slate-400 font-medium">Variedad:</span>
+                                <div className="font-bold text-slate-900">{orden.variedad}</div>
                               </div>
-                            </>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-slate-400 font-medium">Tipo de Lote:</span>
+                                <div className="font-semibold text-slate-800">{orden.producto}</div>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 font-medium">Categoría:</span>
+                                <div className="font-semibold text-slate-800">{orden.categoria}</div>
+                              </div>
+                            </div>
+
+                            {orden.tipoOrden === 'MOVIMIENTO' && orden.productos && orden.productos.length > 0 && (
+                              <div className="mt-1">
+                                <span className="text-slate-400 font-medium text-[11px] block mb-1">Productos Aplicados:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {orden.productos.map((prod, pIdx) => {
+                                    const tiposStr = prod.tipos && prod.tipos.length > 0
+                                      ? prod.tipos.map(t => t === 'Otro' && prod.tipoOtro ? prod.tipoOtro : t).join(', ')
+                                      : '';
+                                    return (
+                                      <span key={pIdx} className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md">
+                                        {prod.principioActivo || 'Sin PA'} {tiposStr ? `(${tiposStr})` : ''}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2">
+                              {orden.tipoOrden === 'MOVIMIENTO' && (
+                                <div>
+                                  <span className="text-slate-400 font-medium">Tratamiento:</span>
+                                  <div className="font-semibold text-slate-700 truncate">{orden.tratamiento || 'N/I'}</div>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-slate-400 font-medium">Envase Destino:</span>
+                                <div className="font-semibold text-slate-800 truncate">{orden.envaseDestino || 'N/I'}</div>
+                              </div>
+                            </div>
+
+                            {orden.observaciones && (
+                              <div className="pt-1 text-[11px] text-slate-500 italic line-clamp-2">
+                                "{orden.observaciones}"
+                              </div>
+                            )}
+
+                            {/* Necesidad de Kilos Aproximados y Cobertura de Origen */}
+                            {(() => {
+                              const targetKg = (orden.bbPedidos || 0) * getKgPorEnvase(orden.envaseDestino || '');
+                              const isMov = orden.tipoOrden === 'MOVIMIENTO';
+                              const totalExtraido = isMov
+                                ? (orden.lotesOrigen || []).reduce((acc, item) => acc + (item.kgExtraidos || 0), 0)
+                                : 0;
+                              const porcentaje = targetKg > 0 ? Math.min(100, Math.round((totalExtraido / targetKg) * 100)) : 0;
+
+                              return (
+                                <div className="mt-2 p-2 bg-slate-100/90 rounded-xl border border-slate-200 text-[11px] space-y-1">
+                                  <div className="flex items-center justify-between font-bold text-slate-800">
+                                    <span>Demanda de Kilos:</span>
+                                    <span className="font-mono text-emerald-800">{targetKg.toLocaleString('es-AR')} kg</span>
+                                  </div>
+                                  {isMov && (
+                                    <>
+                                      <div className="flex items-center justify-between text-[10px] text-slate-600">
+                                        <span>Lotes Origen ({orden.lotesOrigen?.length || 0}):</span>
+                                        <span className={`font-semibold ${porcentaje >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                          {totalExtraido.toLocaleString('es-AR')} kg ({porcentaje}%)
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full transition-all ${porcentaje >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                          style={{ width: `${porcentaje}%` }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                        </div>
+
+                        {/* Linked Lots Traceability Section */}
+                        <div className="bg-slate-50 border-t border-slate-100 px-5 py-3 text-xs">
+                          <div className="flex items-center justify-between">
+                            <button
+                              onClick={() => toggleExpand(orden.id)}
+                              className="flex items-center gap-1.5 font-bold text-slate-700 hover:text-emerald-700 transition-colors"
+                            >
+                              <Package className="w-3.5 h-3.5 text-emerald-600" />
+                              Lotes Vinculados ({linkedLotes.length})
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleOpenModalEdit(orden)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors"
+                                title="Editar Orden"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`¿Confirma eliminar la Orden de Proceso N° ${orden.numeroOrden}?`)) {
+                                    onDeleteOrden(orden.id);
+                                  }
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Eliminar Orden"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Accordion Content for Lots & Origin */}
+                          {isExpanded && (
+                            <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-3 animate-in fade-in duration-150">
+                              
+                              {/* Breakdown of Origin (Silos or Lotes) */}
+                              {orden.tipoOrden === 'MOVIMIENTO' && orden.lotesOrigen && orden.lotesOrigen.length > 0 && (
+                                <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 text-[11px]">
+                                  <div className="font-bold text-blue-900 mb-1 flex items-center gap-1">
+                                    <Truck className="w-3.5 h-3.5 text-blue-700" />
+                                    Lotes de Origen Extraídos ({orden.lotesOrigen.length}/5):
+                                  </div>
+                                  <div className="space-y-1">
+                                    {orden.lotesOrigen.map((item, idx) => (
+                                      <div key={idx} className="flex items-center justify-between bg-white px-2 py-1 rounded-lg border border-blue-100 text-[10px]">
+                                        <span className="font-mono font-bold text-slate-800">Lote #{item.loteNro} ({item.variedad})</span>
+                                        <span className="font-bold text-blue-700">{item.kgExtraidos?.toLocaleString('es-AR')} kg ({item.cantidadBolsas} BB)</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div>
+                                <div className="text-[11px] font-bold text-slate-700 mb-1">
+                                  Lotes Creados / Producidos Vinculados ({linkedLotes.length}):
+                                </div>
+                                {linkedLotes.length === 0 ? (
+                                  <div className="text-slate-400 italic text-[11px] text-center py-2 bg-white rounded-xl border border-dashed border-slate-200">
+                                    No hay lotes de destino dados de alta vinculados a esta orden.
+                                  </div>
+                                ) : (
+                                  linkedLotes.map(lote => (
+                                    <div
+                                      key={lote.id}
+                                      onClick={() => onSelectLote && onSelectLote(lote)}
+                                      className="p-2.5 bg-white rounded-xl border border-slate-200/80 hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between mb-1"
+                                    >
+                                      <div>
+                                        <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                          <span>Lote N° {lote.loteNro}</span>
+                                          <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded font-normal">
+                                            {lote.cliente}
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 mt-0.5">
+                                          {lote.stockBolsas} BB ({lote.stockKg.toLocaleString()} kg) • Ala {lote.ala || '-'}{lote.sector || ''}
+                                        </div>
+                                      </div>
+                                      <span className="text-[10px] font-semibold text-emerald-700 hover:underline">Ver detalle →</span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+
+                              {onNavigateToAltaLote && (
+                                <button
+                                  onClick={onNavigateToAltaLote}
+                                  className="w-full mt-1 py-1.5 text-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                                >
+                                  + Dar de Alta Lote vinculado
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
-                      );
-                    })()}
-                  </div>
 
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Flat Grid of Cards */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredOrdenes.map(orden => {
+              const linkedLotes = lotes.filter(l => l.ordenProcesoId === orden.id);
+              const isExpanded = expandedOrdenId === orden.id;
 
-                {/* Linked Lots Traceability Section */}
-                <div className="bg-slate-50 border-t border-slate-100 px-5 py-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => toggleExpand(orden.id)}
-                      className="flex items-center gap-1.5 font-bold text-slate-700 hover:text-emerald-700 transition-colors"
-                    >
-                      <Package className="w-3.5 h-3.5 text-emerald-600" />
-                      Lotes Vinculados ({linkedLotes.length})
-                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenModalEdit(orden)}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors"
-                        title="Editar Orden"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Confirma eliminar la Orden de Proceso N° ${orden.numeroOrden}?`)) {
-                            onDeleteOrden(orden.id);
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Eliminar Orden"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Accordion Content for Lots & Origin */}
-                  {isExpanded && (
-                    <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-3 animate-in fade-in duration-150">
-                      
-                      {/* Breakdown of Origin (Silos or Lotes) */}
-                      {orden.tipoOrden === 'MOVIMIENTO' && orden.lotesOrigen && orden.lotesOrigen.length > 0 && (
-                        <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 text-[11px]">
-                          <div className="font-bold text-blue-900 mb-1 flex items-center gap-1">
-                            <Truck className="w-3.5 h-3.5 text-blue-700" />
-                            Lotes de Origen Extraídos ({orden.lotesOrigen.length}/5):
-                          </div>
-                          <div className="space-y-1">
-                            {orden.lotesOrigen.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between bg-white px-2 py-1 rounded-lg border border-blue-100 text-[10px]">
-                                <span className="font-mono font-bold text-slate-800">Lote #{item.loteNro} ({item.variedad})</span>
-                                <span className="font-bold text-blue-700">{item.kgExtraidos?.toLocaleString('es-AR')} kg ({item.cantidadBolsas} BB)</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-
-
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-700 mb-1">
-                          Lotes Creados / Producidos Vinculados ({linkedLotes.length}):
-                        </div>
-                        {linkedLotes.length === 0 ? (
-                          <div className="text-slate-400 italic text-[11px] text-center py-2 bg-white rounded-xl border border-dashed border-slate-200">
-                            No hay lotes de destino dados de alta vinculados a esta orden.
-                          </div>
+              return (
+                <div
+                  key={orden.id}
+                  className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all duration-200 flex flex-col overflow-hidden group"
+                >
+                  {/* Card Header */}
+                  <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        {orden.tipoOrden === 'PRODUCCION' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <Factory className="w-3 h-3" />
+                            PRODUCCIÓN
+                          </span>
                         ) : (
-                          linkedLotes.map(lote => (
-                            <div
-                              key={lote.id}
-                              onClick={() => onSelectLote && onSelectLote(lote)}
-                              className="p-2.5 bg-white rounded-xl border border-slate-200/80 hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between mb-1"
-                            >
-                              <div>
-                                <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                                  <span>Lote N° {lote.loteNro}</span>
-                                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded font-normal">
-                                    {lote.cliente}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-slate-500 mt-0.5">
-                                  {lote.stockBolsas} BB ({lote.stockKg.toLocaleString()} kg) • Ala {lote.ala || '-'}{lote.sector || ''}
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-semibold text-emerald-700 hover:underline">Ver detalle →</span>
-                            </div>
-                          ))
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
+                            <Truck className="w-3 h-3" />
+                            MOVIMIENTO
+                          </span>
+                        )}
+
+                        {orden.tipoMovimiento && (
+                          <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-200 text-slate-700 rounded-md">
+                            {orden.tipoMovimiento}
+                          </span>
                         )}
                       </div>
 
-                      {onNavigateToAltaLote && (
-                        <button
-                          onClick={onNavigateToAltaLote}
-                          className="w-full mt-1 py-1.5 text-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
-                        >
-                          + Dar de Alta Lote vinculado
-                        </button>
-                      )}
+                      <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        N° {orden.numeroOrden}
+                        {orden.numeroOrdenMovimiento && (
+                          <span className="text-xs font-mono font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                            {orden.numeroOrdenMovimiento}
+                          </span>
+                        )}
+                      </h3>
                     </div>
-                  )}
-                </div>
 
-              </div>
-            );
-          })}
-        </div>
+                    {/* Status Dropdown */}
+                    <select
+                      value={orden.estado}
+                      onChange={(e) => onUpdateEstadoOrden(orden.id, e.target.value as EstadoOrdenProceso)}
+                      className={`text-xs font-black px-2.5 py-1 rounded-lg border shadow-2xs transition-colors cursor-pointer ${
+                        orden.estado === 'TERMINADO'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                          : orden.estado === 'EN CURSO'
+                          ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                          : 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                      }`}
+                    >
+                      <option value="SIN INICIAR">🔴 SIN INICIAR</option>
+                      <option value="EN CURSO">🟡 EN CURSO</option>
+                      <option value="TERMINADO">🟢 TERMINADO</option>
+                    </select>
+                  </div>
+
+                  {/* Card Body: Details & Gauge */}
+                  <div className="p-5 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    
+                    {/* Gauge Progress */}
+                    <div className="flex flex-col items-center justify-center py-2 sm:py-0">
+                      <OrdenProcesoGauge
+                        hechos={orden.hechos}
+                        bbPedidos={orden.bbPedidos}
+                        size={110}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setOrdenCumplimientoAEditar(orden)}
+                        className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#00603C] hover:text-white bg-emerald-50 hover:bg-[#00603C] px-3 py-1 rounded-xl border border-emerald-200 transition-all cursor-pointer shadow-2xs group"
+                        title="Editar manualmente el porcentaje de cumplimiento y bolsas vinculadas"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-[#00603C] group-hover:text-amber-300 transition-colors" />
+                        <span>Editar Avance</span>
+                      </button>
+                    </div>
+
+                    {/* Order Specs */}
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <span className="text-slate-400 font-medium">Cliente:</span>
+                        <div className="font-bold text-slate-900 text-sm truncate">{orden.cliente || 'San Diego Semilla'}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-400 font-medium">Especie:</span>
+                          <div className="font-semibold text-slate-800">{orden.especie || 'Soja'}</div>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium">Variedad:</span>
+                          <div className="font-bold text-slate-900">{orden.variedad}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-400 font-medium">Tipo de Lote:</span>
+                          <div className="font-semibold text-slate-800">{orden.producto}</div>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium">Categoría:</span>
+                          <div className="font-semibold text-slate-800">{orden.categoria}</div>
+                        </div>
+                      </div>
+
+                      {orden.tipoOrden === 'MOVIMIENTO' && orden.productos && orden.productos.length > 0 && (
+                        <div className="mt-1">
+                          <span className="text-slate-400 font-medium text-[11px] block mb-1">Productos Aplicados:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {orden.productos.map((prod, pIdx) => {
+                              const tiposStr = prod.tipos && prod.tipos.length > 0
+                                ? prod.tipos.map(t => t === 'Otro' && prod.tipoOtro ? prod.tipoOtro : t).join(', ')
+                                : '';
+                              return (
+                                <span key={pIdx} className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md">
+                                  {prod.principioActivo || 'Sin PA'} {tiposStr ? `(${tiposStr})` : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {orden.tipoOrden === 'MOVIMIENTO' && (
+                          <div>
+                            <span className="text-slate-400 font-medium">Tratamiento:</span>
+                            <div className="font-semibold text-slate-700 truncate">{orden.tratamiento || 'N/I'}</div>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-slate-400 font-medium">Envase Destino:</span>
+                          <div className="font-semibold text-slate-800 truncate">{orden.envaseDestino || 'N/I'}</div>
+                        </div>
+                      </div>
+
+                      {orden.observaciones && (
+                        <div className="pt-1 text-[11px] text-slate-500 italic line-clamp-2">
+                          "{orden.observaciones}"
+                        </div>
+                      )}
+
+                      {/* Necesidad de Kilos Aproximados y Cobertura de Origen */}
+                      {(() => {
+                        const targetKg = (orden.bbPedidos || 0) * getKgPorEnvase(orden.envaseDestino || '');
+                        const isMov = orden.tipoOrden === 'MOVIMIENTO';
+                        const totalExtraido = isMov
+                          ? (orden.lotesOrigen || []).reduce((acc, item) => acc + (item.kgExtraidos || 0), 0)
+                          : 0;
+                        const porcentaje = targetKg > 0 ? Math.min(100, Math.round((totalExtraido / targetKg) * 100)) : 0;
+
+                        return (
+                          <div className="mt-2 p-2 bg-slate-100/90 rounded-xl border border-slate-200 text-[11px] space-y-1">
+                            <div className="flex items-center justify-between font-bold text-slate-800">
+                              <span>Demanda de Kilos:</span>
+                              <span className="font-mono text-emerald-800">{targetKg.toLocaleString('es-AR')} kg</span>
+                            </div>
+                            {isMov && (
+                              <>
+                                <div className="flex items-center justify-between text-[10px] text-slate-600">
+                                  <span>Lotes Origen ({orden.lotesOrigen?.length || 0}):</span>
+                                  <span className={`font-semibold ${porcentaje >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                    {totalExtraido.toLocaleString('es-AR')} kg ({porcentaje}%)
+                                  </span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all ${porcentaje >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                    style={{ width: `${porcentaje}%` }}
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                  </div>
+
+                  {/* Linked Lots Traceability Section */}
+                  <div className="bg-slate-50 border-t border-slate-100 px-5 py-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => toggleExpand(orden.id)}
+                        className="flex items-center gap-1.5 font-bold text-slate-700 hover:text-emerald-700 transition-colors"
+                      >
+                        <Package className="w-3.5 h-3.5 text-emerald-600" />
+                        Lotes Vinculados ({linkedLotes.length})
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenModalEdit(orden)}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors"
+                          title="Editar Orden"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`¿Confirma eliminar la Orden de Proceso N° ${orden.numeroOrden}?`)) {
+                              onDeleteOrden(orden.id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Eliminar Orden"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Accordion Content for Lots & Origin */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-3 animate-in fade-in duration-150">
+                        
+                        {/* Breakdown of Origin (Silos or Lotes) */}
+                        {orden.tipoOrden === 'MOVIMIENTO' && orden.lotesOrigen && orden.lotesOrigen.length > 0 && (
+                          <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/60 text-[11px]">
+                            <div className="font-bold text-blue-900 mb-1 flex items-center gap-1">
+                              <Truck className="w-3.5 h-3.5 text-blue-700" />
+                              Lotes de Origen Extraídos ({orden.lotesOrigen.length}/5):
+                            </div>
+                            <div className="space-y-1">
+                              {orden.lotesOrigen.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between bg-white px-2 py-1 rounded-lg border border-blue-100 text-[10px]">
+                                  <span className="font-mono font-bold text-slate-800">Lote #{item.loteNro} ({item.variedad})</span>
+                                  <span className="font-bold text-blue-700">{item.kgExtraidos?.toLocaleString('es-AR')} kg ({item.cantidadBolsas} BB)</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-700 mb-1">
+                            Lotes Creados / Producidos Vinculados ({linkedLotes.length}):
+                          </div>
+                          {linkedLotes.length === 0 ? (
+                            <div className="text-slate-400 italic text-[11px] text-center py-2 bg-white rounded-xl border border-dashed border-slate-200">
+                              No hay lotes de destino dados de alta vinculados a esta orden.
+                            </div>
+                          ) : (
+                            linkedLotes.map(lote => (
+                              <div
+                                key={lote.id}
+                                onClick={() => onSelectLote && onSelectLote(lote)}
+                                className="p-2.5 bg-white rounded-xl border border-slate-200/80 hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between mb-1"
+                              >
+                                <div>
+                                  <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                    <span>Lote N° {lote.loteNro}</span>
+                                    <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded font-normal">
+                                      {lote.cliente}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 mt-0.5">
+                                    {lote.stockBolsas} BB ({lote.stockKg.toLocaleString()} kg) • Ala {lote.ala || '-'}{lote.sector || ''}
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-semibold text-emerald-700 hover:underline">Ver detalle →</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {onNavigateToAltaLote && (
+                          <button
+                            onClick={onNavigateToAltaLote}
+                            className="w-full mt-1 py-1.5 text-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                          >
+                            + Dar de Alta Lote vinculado
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : viewMode === 'table' ? (
         /* Table View */
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -784,116 +1165,253 @@ export const OrdenesProcesoView: React.FC<OrdenesProcesoViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
-                {filteredOrdenes.map(orden => {
-                  const linkedLotes = lotes.filter(l => l.ordenProcesoId === orden.id);
-                  const pct = orden.bbPedidos > 0 ? Math.round((orden.hechos / orden.bbPedidos) * 100) : 0;
-
-                  return (
-                    <tr key={orden.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900 text-sm">
-                        {orden.numeroOrden}
-                        {orden.numeroOrdenMovimiento && (
-                          <div className="text-[10px] text-blue-700 font-normal">
-                            {orden.numeroOrdenMovimiento}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {orden.tipoOrden === 'PRODUCCION' ? (
-                          <span className="px-2 py-0.5 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 rounded">PRODUCCIÓN</span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-[10px] font-extrabold bg-blue-100 text-blue-800 rounded">MOVIMIENTO</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900">{orden.cliente || 'San Diego Semilla'}</div>
-                        <div className="text-[10px] text-slate-500 font-medium">{orden.especie || 'Soja'}</div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900">{orden.variedad}</div>
-                        <div className="text-[10px] text-slate-500 font-semibold">Tipo: {orden.producto}</div>
-                        {orden.tipoOrden === 'MOVIMIENTO' && orden.productos && orden.productos.length > 0 && (
-                          <div className="flex flex-wrap gap-0.5 mt-1 max-w-[180px]">
-                            {orden.productos.map((prod, pIdx) => (
-                              <span key={pIdx} className="px-1 py-0.2 text-[9px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded">
-                                {prod.principioActivo || 'PA'}
+                {agruparPorCliente ? (
+                  groupedByCliente.map(grupo => (
+                    <React.Fragment key={grupo.cliente}>
+                      {/* Client Group Separator Row */}
+                      <tr className="bg-slate-100/90 border-y border-slate-200 font-bold text-slate-800">
+                        <td colSpan={10} className="py-2.5 px-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-emerald-800" />
+                              <span className="font-extrabold text-slate-900 text-sm">{grupo.cliente}</span>
+                              <span className="px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold">
+                                {grupo.ordenes.length} {grupo.ordenes.length === 1 ? 'orden' : 'órdenes'}
                               </span>
-                            ))}
+                            </div>
+                            <div className="text-xs text-slate-600 font-medium flex items-center gap-3">
+                              <span>Total BB: <strong className="text-slate-900">{grupo.hechosBB} / {grupo.totalBB}</strong> ({grupo.totalBB > 0 ? Math.round((grupo.hechosBB / grupo.totalBB) * 100) : 0}%)</span>
+                              <span className="text-emerald-700">🟢 {grupo.terminadas}</span>
+                              <span className="text-amber-700">🟡 {grupo.enCurso}</span>
+                              <span className="text-rose-700">🔴 {grupo.sinIniciar}</span>
+                            </div>
                           </div>
-                        )}
-                      </td>
+                        </td>
+                      </tr>
+                      {grupo.ordenes.map(orden => {
+                        const linkedLotes = lotes.filter(l => l.ordenProcesoId === orden.id);
+                        const pct = orden.bbPedidos > 0 ? Math.round((orden.hechos / orden.bbPedidos) * 100) : 0;
 
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-800">{orden.categoria}</div>
-                        {orden.tipoOrden === 'MOVIMIENTO' && (
-                          <div className="text-[10px] text-slate-500">{orden.tratamiento || 'N/I'}</div>
-                        )}
-                      </td>
+                        return (
+                          <tr key={orden.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900 text-sm">
+                              {orden.numeroOrden}
+                              {orden.numeroOrdenMovimiento && (
+                                <div className="text-[10px] text-blue-700 font-normal">
+                                  {orden.numeroOrdenMovimiento}
+                                </div>
+                              )}
+                            </td>
 
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded border border-slate-200 whitespace-nowrap">
-                          {orden.envaseDestino || 'N/I'}
-                        </span>
-                      </td>
+                            <td className="py-3 px-4">
+                              {orden.tipoOrden === 'PRODUCCION' ? (
+                                <span className="px-2 py-0.5 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 rounded">PRODUCCIÓN</span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-[10px] font-extrabold bg-blue-100 text-blue-800 rounded">MOVIMIENTO</span>
+                              )}
+                            </td>
 
-                      <td className="py-3 px-4 text-center">
-                        <div className="font-black text-sm text-slate-900">{pct}%</div>
-                        <div className="text-[10px] text-slate-500">{orden.hechos} / {orden.bbPedidos} BB</div>
-                        <button
-                          type="button"
-                          onClick={() => setOrdenCumplimientoAEditar(orden)}
-                          className="mt-1 text-[10px] font-bold text-[#00603C] hover:text-emerald-900 hover:underline inline-flex items-center gap-1 cursor-pointer bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
-                          title="Editar cumplimiento de objetivos y bolsas vinculadas"
-                        >
-                          <Sliders className="w-2.5 h-2.5 text-[#00603C]" />
-                          <span>Editar</span>
-                        </button>
-                      </td>
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-900">{orden.cliente || 'San Diego Semilla'}</div>
+                              <div className="text-[10px] text-slate-500 font-medium">{orden.especie || 'Soja'}</div>
+                            </td>
 
-                      <td className="py-3 px-4">
-                        <select
-                          value={orden.estado}
-                          onChange={(e) => onUpdateEstadoOrden(orden.id, e.target.value as EstadoOrdenProceso)}
-                          className="text-[11px] font-bold px-2 py-0.5 rounded border cursor-pointer"
-                        >
-                          <option value="SIN INICIAR">🔴 SIN INICIAR</option>
-                          <option value="EN CURSO">🟡 EN CURSO</option>
-                          <option value="TERMINADO">🟢 TERMINADO</option>
-                        </select>
-                      </td>
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-900">{orden.variedad}</div>
+                              <div className="text-[10px] text-slate-500 font-semibold">Tipo: {orden.producto}</div>
+                              {orden.tipoOrden === 'MOVIMIENTO' && orden.productos && orden.productos.length > 0 && (
+                                <div className="flex flex-wrap gap-0.5 mt-1 max-w-[180px]">
+                                  {orden.productos.map((prod, pIdx) => (
+                                    <span key={pIdx} className="px-1 py-0.2 text-[9px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded">
+                                      {prod.principioActivo || 'PA'}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
 
-                      <td className="py-3 px-4 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
-                          {linkedLotes.length}
-                        </span>
-                      </td>
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-slate-800">{orden.categoria}</div>
+                              {orden.tipoOrden === 'MOVIMIENTO' && (
+                                <div className="text-[10px] text-slate-500">{orden.tratamiento || 'N/I'}</div>
+                              )}
+                            </td>
 
-                      <td className="py-3 px-4 text-right space-x-1">
-                        <button
-                          onClick={() => handleOpenModalEdit(orden)}
-                          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg"
-                          title="Editar"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`¿Confirma eliminar la Orden N° ${orden.numeroOrden}?`)) {
-                              onDeleteOrden(orden.id);
-                            }
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded border border-slate-200 whitespace-nowrap">
+                                {orden.envaseDestino || 'N/I'}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4 text-center">
+                              <div className="font-black text-sm text-slate-900">{pct}%</div>
+                              <div className="text-[10px] text-slate-500">{orden.hechos} / {orden.bbPedidos} BB</div>
+                              <button
+                                type="button"
+                                onClick={() => setOrdenCumplimientoAEditar(orden)}
+                                className="mt-1 text-[10px] font-bold text-[#00603C] hover:text-emerald-900 hover:underline inline-flex items-center gap-1 cursor-pointer bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                                title="Editar cumplimiento de objetivos y bolsas vinculadas"
+                              >
+                                <Sliders className="w-2.5 h-2.5 text-[#00603C]" />
+                                <span>Editar</span>
+                              </button>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <select
+                                value={orden.estado}
+                                onChange={(e) => onUpdateEstadoOrden(orden.id, e.target.value as EstadoOrdenProceso)}
+                                className="text-[11px] font-bold px-2 py-0.5 rounded border cursor-pointer"
+                              >
+                                <option value="SIN INICIAR">🔴 SIN INICIAR</option>
+                                <option value="EN CURSO">🟡 EN CURSO</option>
+                                <option value="TERMINADO">🟢 TERMINADO</option>
+                              </select>
+                            </td>
+
+                            <td className="py-3 px-4 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                                {linkedLotes.length}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4 text-right space-x-1">
+                              <button
+                                onClick={() => handleOpenModalEdit(orden)}
+                                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg"
+                                title="Editar"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`¿Confirma eliminar la Orden N° ${orden.numeroOrden}?`)) {
+                                    onDeleteOrden(orden.id);
+                                  }
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  filteredOrdenes.map(orden => {
+                    const linkedLotes = lotes.filter(l => l.ordenProcesoId === orden.id);
+                    const pct = orden.bbPedidos > 0 ? Math.round((orden.hechos / orden.bbPedidos) * 100) : 0;
+
+                    return (
+                      <tr key={orden.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-900 text-sm">
+                          {orden.numeroOrden}
+                          {orden.numeroOrdenMovimiento && (
+                            <div className="text-[10px] text-blue-700 font-normal">
+                              {orden.numeroOrdenMovimiento}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          {orden.tipoOrden === 'PRODUCCION' ? (
+                            <span className="px-2 py-0.5 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 rounded">PRODUCCIÓN</span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-[10px] font-extrabold bg-blue-100 text-blue-800 rounded">MOVIMIENTO</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{orden.cliente || 'San Diego Semilla'}</div>
+                          <div className="text-[10px] text-slate-500 font-medium">{orden.especie || 'Soja'}</div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{orden.variedad}</div>
+                          <div className="text-[10px] text-slate-500 font-semibold">Tipo: {orden.producto}</div>
+                          {orden.tipoOrden === 'MOVIMIENTO' && orden.productos && orden.productos.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-1 max-w-[180px]">
+                              {orden.productos.map((prod, pIdx) => (
+                                <span key={pIdx} className="px-1 py-0.2 text-[9px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded">
+                                  {prod.principioActivo || 'PA'}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-slate-800">{orden.categoria}</div>
+                          {orden.tipoOrden === 'MOVIMIENTO' && (
+                            <div className="text-[10px] text-slate-500">{orden.tratamiento || 'N/I'}</div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded border border-slate-200 whitespace-nowrap">
+                            {orden.envaseDestino || 'N/I'}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 text-center">
+                          <div className="font-black text-sm text-slate-900">{pct}%</div>
+                          <div className="text-[10px] text-slate-500">{orden.hechos} / {orden.bbPedidos} BB</div>
+                          <button
+                            type="button"
+                            onClick={() => setOrdenCumplimientoAEditar(orden)}
+                            className="mt-1 text-[10px] font-bold text-[#00603C] hover:text-emerald-900 hover:underline inline-flex items-center gap-1 cursor-pointer bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200"
+                            title="Editar cumplimiento de objetivos y bolsas vinculadas"
+                          >
+                            <Sliders className="w-2.5 h-2.5 text-[#00603C]" />
+                            <span>Editar</span>
+                          </button>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <select
+                            value={orden.estado}
+                            onChange={(e) => onUpdateEstadoOrden(orden.id, e.target.value as EstadoOrdenProceso)}
+                            className="text-[11px] font-bold px-2 py-0.5 rounded border cursor-pointer"
+                          >
+                            <option value="SIN INICIAR">🔴 SIN INICIAR</option>
+                            <option value="EN CURSO">🟡 EN CURSO</option>
+                            <option value="TERMINADO">🟢 TERMINADO</option>
+                          </select>
+                        </td>
+
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                            {linkedLotes.length}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-4 text-right space-x-1">
+                          <button
+                            onClick={() => handleOpenModalEdit(orden)}
+                            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg"
+                            title="Editar"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Confirma eliminar la Orden N° ${orden.numeroOrden}?`)) {
+                                onDeleteOrden(orden.id);
+                              }
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
